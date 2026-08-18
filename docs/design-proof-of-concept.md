@@ -86,6 +86,23 @@ The likely package contents are the parser, the rules engine, and a board
 renderer general enough for both consumers — which is to say the renderer
 divergences are the ones worth documenting most carefully.
 
+### Rules decisions
+
+Two choices in `rules.ts` that are not obvious from the code:
+
+**Simple ko, not superko.** A ko ban is set only after a move that captured
+exactly one stone with a lone stone of its own, and it lasts one turn. This
+is deliberately the weaker rule: positional superko would let us reject
+repeated whole-board positions, but it also risks rejecting a move that a
+real game record contains, and stranding a user mid-game is a worse failure
+than permitting an exotic repetition the record never reaches.
+
+**Records are replayed, not judged.** `play()` enforces legality and is what
+user guesses go through; `playRecorded()` permits what the file contains,
+including multi-stone suicide, which a few rulesets allow. Legality is a
+question about the user's guess, not about the record — a record we refuse
+to replay is a game the user cannot study.
+
 ## 3. Testing
 
 Tests cover the **rules engine** and the **session logic**. Both are places
