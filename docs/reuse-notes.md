@@ -38,6 +38,41 @@ holds inside this project.
 under both. Vite resolves them fine, so kifu can adopt the same convention
 without its loader — this difference should be reconciled, not preserved.
 
+### goban.ts: renders a position, not a tree
+
+**kifu:** `renderGoban(trees, container, opts)` takes parsed game trees,
+replays them internally, and crops to a viewport calculated from where the
+stones are, with tick marks implying board beyond the crop.
+
+**lituus:** `renderGoban(position, container, opts)` takes a `Position` from
+the rules engine and always draws the whole board. No viewport, no cropping,
+no tick marks. Adds per-intersection click targets and a marker overlay
+(`actual` / `guess` / `hit`).
+
+**Why:** cropping is right for sharing a diagram, where the interesting part
+is a corner. It is wrong for a study session: a player reads a position
+against the whole board, and a viewport recomputed each move would shift
+under them as the game spreads. Taking a position rather than a tree also
+keeps the renderer ignorant of SGF, which is what makes it reusable.
+
+**At extraction:** the shared renderer should take a position and treat the
+viewport as an option, with kifu passing a computed crop and lituus passing
+none. The grid, star points, stone drawing, and coordinate labels are
+already common and should move over close to unchanged.
+
+### goban.ts: no stone jitter
+
+**kifu:** offsets each stone by up to half a pixel, deterministically seeded
+by its coordinates, for a hand-placed look.
+
+**lituus:** stones sit exactly on their intersections.
+
+**Why:** markers are drawn on the same points as stones, and a marker that
+does not line up with the stone it refers to looks like a bug. The charm is
+not worth the ambiguity when the whole task is reading precise points.
+
+**At extraction:** keep it an option, defaulting to off.
+
 ### Vite config: no dev middleware
 
 **kifu:** a custom Vite plugin serves `dev/` HTML tools and `fixtures/` under
