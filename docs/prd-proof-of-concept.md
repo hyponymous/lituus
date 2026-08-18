@@ -351,6 +351,11 @@ PoC settles by fiat, and the reasoning for the fiat is worth keeping.
   valuable addition on this list.
 - **Board markup.** Render `TR`/`SQ`/`CR`/`MA` and friends, which commonly
   accompany commented records.
+- **Respect the declared ruleset (`RU`).** Rulesets differ on suicide, on ko
+  versus superko, and on scoring. The PoC applies one rule set to every
+  record — permissive when replaying, simple ko when judging a guess — which
+  is close enough that a normal game never notices. Reading `RU` would make
+  legality exactly right for the record in hand.
 
 ### 8.6 AI scoring
 
