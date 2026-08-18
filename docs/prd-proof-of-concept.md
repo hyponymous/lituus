@@ -1,4 +1,4 @@
-# go-predict — Product Requirements: Proof of Concept
+# lituus — Product Requirements: Proof of Concept
 
 Scope is the initial proof of concept only. Later phases — AI scoring,
 predict-vs-AI, sharing — get their own PRDs; §7 here is a sketch, not a spec.
@@ -8,7 +8,7 @@ predict-vs-AI, sharing — get their own PRDs; §7 here is a sketch, not a spec.
 
 ## 1. Summary
 
-`go-predict` is a static site for studying Go (weiqi/baduk) game records by
+`lituus` is a static site for studying Go (weiqi/baduk) game records by
 prediction. The user loads an SGF, picks a color, and steps through the game.
 At each of that color's moves the board pauses and the user guesses where the
 move was played. The site reveals the answer, scores the guess, and moves on.
