@@ -52,6 +52,13 @@ export interface GobanOptions {
    * having to diff the board. Everything else is drawn static.
    */
   readonly animate?: readonly number[];
+  /**
+   * Hold those stones back for a beat before they appear. Used when revealing
+   * a miss: the played move puts a stone on the board, so letting it land
+   * immediately would answer the question before the user has read their own
+   * guess. The stylesheet owns the length of the beat.
+   */
+  readonly animateLate?: boolean;
 }
 
 /**
@@ -152,7 +159,12 @@ function drawCoordinates(svg: SVGElement, pos: Position): void {
   }
 }
 
-function drawStones(svg: SVGElement, pos: Position, fresh: ReadonlySet<number>): void {
+function drawStones(
+  svg: SVGElement,
+  pos: Position,
+  fresh: ReadonlySet<number>,
+  late: boolean,
+): void {
   const radius: number = CELL * STONE_SCALE;
 
   for (let row = 0; row < pos.rows; row++) {
@@ -170,7 +182,9 @@ function drawStones(svg: SVGElement, pos: Position, fresh: ReadonlySet<number>):
         attrs.stroke = WHITE_EDGE;
         attrs['stroke-width'] = 0.8;
       }
-      if (fresh.has(toIndex(pos, row, col))) attrs.class = 'stone-new';
+      if (fresh.has(toIndex(pos, row, col))) {
+        attrs.class = late ? 'stone-new stone-late' : 'stone-new';
+      }
       svg.appendChild(svgEl('circle', attrs));
     }
   }
@@ -205,7 +219,7 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
       stroke: GUESS_MARK,
       'stroke-width': 2.5,
       'stroke-linecap': 'round',
-      class: 'mark',
+      class: 'mark mark-guess',
     };
     svg.appendChild(svgEl('line', { x1: x - size, y1: y - size, x2: x + size, y2: y + size, ...stroke }));
     svg.appendChild(svgEl('line', { x1: x - size, y1: y + size, x2: x + size, y2: y - size, ...stroke }));
@@ -220,7 +234,7 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
       fill: 'none',
       stroke: RING_COLORS[marker.kind],
       'stroke-width': 2.5,
-      class: 'mark',
+      class: `mark mark-${marker.kind}`,
     }),
   );
 }
@@ -263,7 +277,7 @@ export function renderGoban(pos: Position, container: HTMLElement, opts: GobanOp
   drawGrid(svg, pos);
   drawHoshi(svg, pos);
   if (opts.showCoordinates !== false) drawCoordinates(svg, pos);
-  drawStones(svg, pos, new Set(opts.animate ?? []));
+  drawStones(svg, pos, new Set(opts.animate ?? []), opts.animateLate === true);
 
   for (const marker of opts.markers ?? []) drawMarker(svg, pos, marker);
   if (opts.onPoint) drawHitTargets(svg, pos, opts.onPoint);

@@ -124,9 +124,15 @@ At each prompted move:
 2. The user **clicks an intersection** to commit a guess. There is no
    confirmation step — the click is the answer. Clicking is only permitted on
    legal points (empty, not suicide, not ko).
-3. The site **reveals** the played move immediately:
-   - The guess and the actual move are both marked, visually distinct.
-   - A hit is stated plainly; a miss shows both points.
+3. The site **reveals** the answer, staged by outcome:
+   - A hit resolves at once, marked with a slight overshoot.
+   - A miss marks the guess first and holds the played move — stone and
+     marker both — back for a beat, so the user reads where they went before
+     the answer arrives, possibly across the board. Revealing the stone
+     immediately would answer the question before the eye had found the
+     guess.
+   - The asymmetry is the point: right feels fast, wrong feels slow. It is
+     a small reward and a smaller punishment, and it costs nothing to give.
 4. The session **advances on its own** after a short pause, playing out any
    intervening opponent moves before the next prompt. A miss holds longer
    than a hit: a hit only has to be registered, while a miss has two points

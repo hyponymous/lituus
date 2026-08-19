@@ -29,14 +29,21 @@ type Screen =
   | { readonly name: 'session'; readonly session: Session };
 
 /**
- * How long a reveal stays up before the session advances itself.
+ * Reveal timing, all of it, in one place.
  *
- * A miss gets longer because there are two points to find and compare, while a
- * hit only has to be registered. Both are short enough that a click to advance
- * early still feels like the faster path — the timer is a floor on reading
- * time, not a pace the user has to wait out. Tuned by feel; adjust here.
+ * The asymmetry is deliberate. A hit resolves fast and with a bounce, so
+ * getting it right feels like a reward. A miss holds: first a beat where only
+ * the user's own guess is marked, then the answer arrives, then time to
+ * compare two points that may be across the board from each other.
+ *
+ * `beat` is why a miss cannot simply be shortened. It is dead time before the
+ * answer is even visible, so `miss` has to leave reading time on top of it —
+ * see the assertion below.
  */
-const REVEAL_MS = { hit: 650, miss: 1500 } as const;
+const REVEAL_MS = { hit: 450, miss: 1900, beat: 550 } as const;
+
+/** Time the user actually gets to look at the answer on a miss. */
+const READING_MS: number = REVEAL_MS.miss - REVEAL_MS.beat;
 
 let screen: Screen = { name: 'landing' };
 let root: HTMLElement;
@@ -122,6 +129,16 @@ function draw(): void {
 function main(): void {
   const app: HTMLElement | null = document.getElementById('app');
   if (!app) throw new Error('missing #app container');
+
+  if (READING_MS < 600) {
+    // Not a style rule. If the beat eats the reveal, the answer flashes and is
+    // gone, and the tool silently stops teaching anything on a miss.
+    throw new Error(`reveal beat leaves only ${READING_MS}ms to read the answer`);
+  }
+
+  // The stylesheet times the beat; this keeps it from drifting away from the
+  // auto-advance that has to outlast it.
+  document.documentElement.style.setProperty('--reveal-beat', `${REVEAL_MS.beat}ms`);
 
   root = app;
   acceptDroppedFiles(document.body, loadGame);

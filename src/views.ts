@@ -217,9 +217,14 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
   const board: HTMLElement = el('div', { class: 'board' });
   const revealing: boolean = session.phase === 'reveal';
 
+  const missed: boolean = revealing && session.lastGuess?.hit === false;
+
   renderGoban(session.position, board, {
     markers: sessionMarkers(session),
     animate: sessionAnimate(session),
+    // On a miss the played stone waits with its marker, so the user reads
+    // their own guess before the answer lands somewhere else on the board.
+    animateLate: missed,
     showCoordinates: true,
     onPoint: (index: number): void => {
       // During a reveal any click advances, which keeps the whole loop on the

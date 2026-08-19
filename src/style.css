@@ -148,7 +148,18 @@ button.primary {
 
 /* Movement draws the eye, so only what changed is allowed to move: the stone
    just played, and the marks belonging to a reveal. `transform-box: fill-box`
-   is what makes a scale in SVG pivot on the shape rather than the canvas. */
+   is what makes a scale in SVG pivot on the shape rather than the canvas.
+
+   The reveal is deliberately asymmetric. A hit lands fast and overshoots, so
+   being right feels like a reward. A miss holds everything but the user's own
+   guess back by --reveal-beat, so the red cross is read first and the answer
+   arrives after it — which also stops the board answering the question before
+   the eye has found the guess. main.ts sets --reveal-beat and guarantees the
+   auto-advance outlasts it. */
+:root {
+  --reveal-beat: 550ms;
+}
+
 @keyframes stone-drop {
   from {
     opacity: 0;
@@ -171,6 +182,22 @@ button.primary {
   }
 }
 
+/* Overshoot, then settle. Reserved for a hit. */
+@keyframes mark-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.22);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .board .stone-new,
 .board .mark {
   transform-box: fill-box;
@@ -181,8 +208,23 @@ button.primary {
   animation: stone-drop 140ms ease-out;
 }
 
-.board .mark {
-  animation: mark-in 180ms cubic-bezier(0.2, 1.4, 0.5, 1);
+/* `backwards` holds the from-state during the delay; without it the stone is
+   drawn at full opacity and the beat reveals nothing. */
+.board .stone-late {
+  animation-delay: var(--reveal-beat);
+  animation-fill-mode: backwards;
+}
+
+.board .mark-guess {
+  animation: mark-in 150ms ease-out;
+}
+
+.board .mark-hit {
+  animation: mark-pop 260ms ease-out;
+}
+
+.board .mark-actual {
+  animation: mark-in 200ms ease-out var(--reveal-beat) backwards;
 }
 
 /* The last-move dot is orientation, not an event; animating it every prompt
@@ -195,6 +237,13 @@ button.primary {
   .board .stone-new,
   .board .mark {
     animation: none;
+  }
+
+  /* The beat is pacing, not decoration, so it survives — but as a plain hold
+     rather than motion. Without this the answer appears instantly on a miss. */
+  .board .stone-late,
+  .board .mark-actual {
+    animation: mark-in 1ms linear var(--reveal-beat) backwards;
   }
 }
 
