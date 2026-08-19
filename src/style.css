@@ -3,6 +3,10 @@
   --fg: #201d18;
   --muted: #6b6559;
   --line: #c9c0ae;
+  --panel: #ffffff;
+  --accent: #7a5c2e;
+  --hit: #2f6b3a;
+  --miss: #8f3a2f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -11,6 +15,10 @@
     --fg: #ece7dc;
     --muted: #9a9284;
     --line: #45403a;
+    --panel: #24211d;
+    --accent: #c9a86a;
+    --hit: #7fbf8c;
+    --miss: #d98b7d;
   }
 }
 
@@ -20,32 +28,178 @@
 
 body {
   margin: 0;
-  padding: 2rem 1rem;
+  padding: 2rem 1rem 4rem;
   background: var(--bg);
   color: var(--fg);
   font: 16px/1.5 system-ui, sans-serif;
 }
 
+body.dropping {
+  outline: 3px dashed var(--accent);
+  outline-offset: -1rem;
+}
+
+.masthead,
 #app {
-  max-width: 48rem;
+  max-width: 44rem;
   margin: 0 auto;
+}
+
+.masthead {
+  margin-bottom: 2rem;
 }
 
 h1 {
   font-size: 1.5rem;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+  margin: 0 0 0.75rem;
 }
 
 p {
+  margin: 0 0 0.75rem;
+}
+
+.masthead p,
+.muted {
   color: var(--muted);
+}
+
+/* ── Landing ─────────────────────────────────────────────────────────────── */
+
+.sgf-input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--fg);
+  font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  resize: vertical;
+}
+
+.error {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--miss);
+  background: var(--panel);
+  color: var(--miss);
+}
+
+/* ── Controls ────────────────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.primary {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Setup ───────────────────────────────────────────────────────────────── */
+
+.meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.meta dt {
+  color: var(--muted);
+}
+
+.meta dd {
   margin: 0;
 }
 
+.note {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+/* ── Session ─────────────────────────────────────────────────────────────── */
+
 .board {
   max-width: 32rem;
-  margin: 1.5rem 0 0.75rem;
+  margin: 0 0 0.75rem;
 }
 
 .readout {
+  min-height: 1.5em;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Summary ─────────────────────────────────────────────────────────────── */
+
+.headline {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+table {
+  width: 100%;
+  margin: 0 0 1.5rem;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+th,
+td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* The wrapper scrolls, not the table: a table set to display:block loses its
+   column alignment, since the cells stop sharing a layout context. */
+.scroll {
+  max-height: 24rem;
+  margin-bottom: 1.5rem;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--line);
+}
+
+.scroll table {
+  margin-bottom: 0;
+}
+
+.scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+}
+
+.moves tr.hit td:last-child {
+  color: var(--hit);
+}
+
+.moves tr.miss td:last-child {
+  color: var(--miss);
 }

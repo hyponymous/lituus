@@ -1,58 +1,105 @@
-// Application entry point. Wiring only — the views own their own markup.
-//
-// Until the views exist this renders a scratch board so the renderer can be
-// looked at in a browser.
-import { renderGoban, pointName, type Marker } from './goban.ts';
-import { BLACK, WHITE, createPosition, isLegal, play, type Position } from './rules.ts';
+/**
+ * Application entry point: holds which screen is showing and re-renders on
+ * every change. The views are pure functions of their props, so there is no
+ * incremental update path to get wrong — a state change redraws the screen.
+ */
 
-function demoPosition(): Position {
-  let pos: Position = createPosition(19, 19);
-  const opening: [number, number, 1 | -1][] = [
-    [3, 3, BLACK],
-    [15, 15, WHITE],
-    [3, 15, BLACK],
-    [15, 3, WHITE],
-    [2, 5, BLACK],
-    [16, 13, WHITE],
-  ];
-  for (const [row, col, color] of opening) {
-    pos = play(pos, row * pos.cols + col, color).position;
+import { parse, type GameTree } from './sgf-parser.ts';
+import { GameError, readGame, type Game } from './game.ts';
+import {
+  advance,
+  endSession,
+  guess,
+  startSession,
+  type Session,
+} from './session.ts';
+import { summarize } from './summary.ts';
+import {
+  acceptDroppedFiles,
+  renderLanding,
+  renderSession,
+  renderSetup,
+  renderSummary,
+} from './views.ts';
+import type { Color } from './rules.ts';
+
+type Screen =
+  | { readonly name: 'landing'; readonly error?: string }
+  | { readonly name: 'setup'; readonly game: Game }
+  | { readonly name: 'session'; readonly session: Session };
+
+let screen: Screen = { name: 'landing' };
+let root: HTMLElement;
+
+function show(next: Screen): void {
+  screen = next;
+  draw();
+}
+
+/**
+ * Turn SGF text into a game, or into a message the user can act on. Parse
+ * errors carry line and column from the parser; game errors explain what about
+ * the record cannot be studied. Either way the user stays on the landing view.
+ */
+function loadGame(sgf: string): void {
+  if (sgf.trim() === '') {
+    show({ name: 'landing', error: 'Paste a game record first, or drop an .sgf file.' });
+    return;
   }
-  return pos;
+
+  try {
+    const trees: GameTree[] = parse(sgf);
+    show({ name: 'setup', game: readGame(trees) });
+  } catch (error: unknown) {
+    const detail: string = error instanceof Error ? error.message : String(error);
+    const prefix: string =
+      error instanceof GameError ? '' : "That doesn't look like a valid SGF file. ";
+    show({ name: 'landing', error: `${prefix}${detail}` });
+  }
+}
+
+function drawSession(session: Session): void {
+  // A finished session goes straight to its summary; nothing further to play.
+  if (session.phase === 'done') {
+    renderSummary(root, { summary: summarize(session), onRestart: () => show({ name: 'landing' }) });
+    return;
+  }
+
+  renderSession(root, {
+    session,
+    onGuess: (index: number): void => show({ name: 'session', session: guess(session, index) }),
+    onAdvance: (): void => show({ name: 'session', session: advance(session) }),
+    onEnd: (): void => show({ name: 'session', session: endSession(session) }),
+  });
+}
+
+function draw(): void {
+  switch (screen.name) {
+    case 'landing':
+      renderLanding(root, { error: screen.error, onLoad: loadGame });
+      return;
+    case 'setup': {
+      const { game } = screen;
+      renderSetup(root, {
+        game,
+        onStart: (color: Color): void =>
+          show({ name: 'session', session: startSession(game, color) }),
+        onBack: (): void => show({ name: 'landing' }),
+      });
+      return;
+    }
+    case 'session':
+      drawSession(screen.session);
+      return;
+  }
 }
 
 function main(): void {
   const app: HTMLElement | null = document.getElementById('app');
   if (!app) throw new Error('missing #app container');
 
-  const board: HTMLElement = document.createElement('div');
-  board.className = 'board';
-  app.appendChild(board);
-
-  const readout: HTMLElement = document.createElement('p');
-  readout.className = 'readout';
-  readout.textContent = 'Click an intersection.';
-  app.appendChild(readout);
-
-  const pos: Position = demoPosition();
-  const markers: Marker[] = [];
-
-  const draw = (): void => {
-    renderGoban(pos, board, {
-      markers,
-      onPoint: (index: number): void => {
-        markers.length = 0;
-        if (isLegal(pos, index, BLACK)) {
-          markers.push({ index, kind: 'guess' });
-          readout.textContent = `${pointName(pos, index)} — legal for Black`;
-        } else {
-          readout.textContent = `${pointName(pos, index)} — not playable`;
-        }
-        draw();
-      },
-    });
-  };
-
+  root = app;
+  acceptDroppedFiles(document.body, loadGame);
   draw();
 }
 
