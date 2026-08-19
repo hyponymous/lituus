@@ -7,90 +7,21 @@
  * header of the .final.txt fixture). Agreement between two implementations
  * written from different starting points is worth far more than either
  * agreeing with itself.
+ *
+ * The replay runs through src/game.ts deliberately. A corpus check with its
+ * own private replay would keep passing while the code the app actually runs
+ * broke underneath it.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { parse, type GameTree, type Props } from '../src/sgf-parser.ts';
-import {
-  BLACK,
-  WHITE,
-  createPosition,
-  moveError,
-  playRecorded,
-  stoneAt,
-  toIndex,
-  type Color,
-  type MoveError,
-  type Position,
-} from '../src/rules.ts';
+import { parse } from '../src/sgf-parser.ts';
+import { readGame, type Game } from '../src/game.ts';
+import { BLACK, WHITE, moveError, stoneAt, toIndex, type MoveError, type Position } from '../src/rules.ts';
 
 const FIXTURES: string = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
-
-interface Replay {
-  position: Position;
-  moves: number;
-  /** Record moves our own legality rules would have refused. */
-  rejected: { moveNumber: number; reason: MoveError }[];
-}
-
-function boardSize(root: Props): [number, number] {
-  const sz: string = root.SZ?.[0] ?? '19';
-  if (sz.includes(':')) {
-    const [cols, rows] = sz.split(':').map(Number);
-    return [cols, rows];
-  }
-  return [Number(sz), Number(sz)];
-}
-
-/** SGF point ('qd') to a board index, or null for a pass. */
-function pointIndex(pos: Position, value: string): number | null {
-  if (value === '' || value === 'tt') return null;
-  const col: number = value.charCodeAt(0) - 97;
-  const row: number = value.charCodeAt(1) - 97;
-  if (col < 0 || col >= pos.cols || row < 0 || row >= pos.rows) return null;
-  return toIndex(pos, row, col);
-}
-
-function applySetup(pos: Position, props: Props): Position {
-  const stones = Int8Array.from(pos.stones);
-  for (const [prop, value] of [['AB', BLACK], ['AW', WHITE], ['AE', 0]] as const) {
-    for (const point of props[prop] ?? []) {
-      const index: number | null = pointIndex(pos, point);
-      if (index !== null) stones[index] = value;
-    }
-  }
-  return { cols: pos.cols, rows: pos.rows, stones, koPoint: pos.koPoint };
-}
-
-/** Replay the main line: every node, then the first variation, recursively. */
-function replayMainLine(tree: GameTree, state: Replay): Replay {
-  let { position, moves } = state;
-
-  for (const node of tree.nodes) {
-    position = applySetup(position, node.props);
-
-    for (const [prop, color] of [['B', BLACK], ['W', WHITE]] as const) {
-      const value: string | undefined = node.props[prop]?.[0];
-      if (value === undefined) continue;
-
-      moves++;
-      const index: number | null = pointIndex(position, value);
-      if (index === null) continue; // a pass
-
-      const error: MoveError | null = moveError(position, index, color as Color);
-      if (error) state.rejected.push({ moveNumber: moves, reason: error });
-
-      position = playRecorded(position, index, color as Color).position;
-    }
-  }
-
-  const next: GameTree | undefined = tree.variations[0];
-  const carried: Replay = { ...state, position, moves };
-  return next ? replayMainLine(next, carried) : carried;
-}
 
 function render(pos: Position): string[] {
   const lines: string[] = [];
@@ -111,31 +42,50 @@ function readSnapshot(name: string): string[] {
     .filter((line) => line.length > 0 && !line.startsWith('#'));
 }
 
-function replayFixture(name: string): Replay {
-  const trees: GameTree[] = parse(readFileSync(join(FIXTURES, `${name}.sgf`), 'utf8'));
-  const [cols, rows] = boardSize(trees[0].nodes[0].props);
-  return replayMainLine(trees[0], {
-    position: createPosition(cols, rows),
-    moves: 0,
-    rejected: [],
-  });
+function loadFixture(name: string): Game {
+  return readGame(parse(readFileSync(join(FIXTURES, `${name}.sgf`), 'utf8')));
+}
+
+/** Record moves our own legality rules would have refused, if any. */
+function rejectedMoves(game: Game): { number: number; reason: MoveError }[] {
+  const rejected: { number: number; reason: MoveError }[] = [];
+  for (const move of game.moves) {
+    if (move.index === null) continue;
+    const reason: MoveError | null = moveError(move.before, move.index, move.color);
+    if (reason) rejected.push({ number: move.number, reason });
+  }
+  return rejected;
+}
+
+function finalPosition(game: Game): Position {
+  const last = game.moves.at(-1);
+  return last ? last.after : game.initial;
 }
 
 // ── Ke Jie vs Ichiriki Ryo, 10th Ing Cup semi-final game 3 ───────────────────
 
 test('replaying a pro game agrees with kifu, move for move', () => {
-  const replay: Replay = replayFixture('2024-07-09d');
-  assert.deepEqual(render(replay.position), readSnapshot('2024-07-09d.final.txt'));
+  const game: Game = loadFixture('2024-07-09d');
+  assert.deepEqual(render(finalPosition(game)), readSnapshot('2024-07-09d.final.txt'));
 });
 
 test('the record plays out to a plausible length', () => {
-  const replay: Replay = replayFixture('2024-07-09d');
-  assert.ok(replay.moves > 100, `expected a full game, replayed ${replay.moves} moves`);
+  const game: Game = loadFixture('2024-07-09d');
+  assert.ok(game.moves.length > 100, `expected a full game, replayed ${game.moves.length} moves`);
 });
 
 test('our legality rules refuse nothing the record actually plays', () => {
   // The real check on ko and suicide: a rule strict enough to reject a move a
   // professional played is a rule that would strand a user mid-game.
-  const replay: Replay = replayFixture('2024-07-09d');
-  assert.deepEqual(replay.rejected, []);
+  assert.deepEqual(rejectedMoves(loadFixture('2024-07-09d')), []);
+});
+
+test('the record alternates colors, starting with Black', () => {
+  const game: Game = loadFixture('2024-07-09d');
+  const colors: number[] = game.moves.map((move) => move.color);
+  assert.equal(colors[0], BLACK);
+  assert.deepEqual(
+    colors.filter((_, i) => i % 2 === 1).every((c) => c === WHITE),
+    true,
+  );
 });
