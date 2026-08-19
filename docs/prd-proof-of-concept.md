@@ -127,14 +127,16 @@ At each prompted move:
 3. The site **reveals** the played move immediately:
    - The guess and the actual move are both marked, visually distinct.
    - A hit is stated plainly; a miss shows both points.
-4. The user **advances** — by clicking an advance control, or by clicking
-   anywhere on the board — and any intervening opponent moves are played out
-   before the next prompt.
+4. The session **advances on its own** after a short pause, playing out any
+   intervening opponent moves before the next prompt. A miss holds longer
+   than a hit: a hit only has to be registered, while a miss has two points
+   to find and compare. Clicking the board, or a skip control, advances
+   immediately for readers faster than the pause.
 
-The loop is mouse-driven end to end. Guessing is inherently a pointing task,
-and adding a keyboard path for advancing alone would make the user shuttle
-between mouse and keyboard on every move. Keyboard operation is deferred
-(§8.1).
+The loop is mouse-driven end to end, and automatic advancing leaves it a
+single action per move: pointing at the board. Keyboard operation is deferred
+(§8.1), and has less to offer than it did — with no advance step left to
+serve, a keyboard path now means coordinate entry or nothing.
 
 ### 4.5 Navigation
 

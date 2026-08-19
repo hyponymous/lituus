@@ -182,8 +182,8 @@ function sessionStatus(session: Session): string {
   if (session.phase === 'reveal' && session.lastGuess) {
     const verdict: string = session.lastGuess.hit
       ? 'Correct.'
-      : 'Not this time — the move was played elsewhere.';
-    return `${verdict} ${running}. Click the board or press Next to continue.`;
+      : 'Not this time — the played move is circled.';
+    return `${verdict} ${running}.`;
   }
   if (session.move) {
     return `Move ${session.move.number}. Where does ${colorName(session.color)} play? (${running})`;
@@ -207,8 +207,9 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
     },
   });
 
+  // The reveal advances on its own; Skip is for readers faster than the timer.
   const controls: Child[] = [
-    ...(revealing ? [button('Next', props.onAdvance, { class: 'primary' })] : []),
+    ...(revealing ? [button('Skip', props.onAdvance)] : []),
     button('End session', props.onEnd),
   ];
 
