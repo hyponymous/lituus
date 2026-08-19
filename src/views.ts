@@ -9,8 +9,15 @@
  */
 
 import { renderGoban, type Marker } from './goban.ts';
-import { describe, type Game, type GameMeta } from './game.ts';
-import { canGuess, countPrompts, score, type Score, type Session } from './session.ts';
+import { describe, type Game, type GameMeta, type GameMove } from './game.ts';
+import {
+  canGuess,
+  countPrompts,
+  lastPlayed,
+  score,
+  type Score,
+  type Session,
+} from './session.ts';
 import { percent, toJSON, toText, type Summary } from './summary.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
@@ -166,13 +173,27 @@ export interface SessionProps {
 
 function sessionMarkers(session: Session): Marker[] {
   const made = session.lastGuess;
-  if (session.phase !== 'reveal' || !made) return [];
+
+  if (session.phase !== 'reveal' || !made) {
+    // Waiting on a guess: show where the opponent just replied, the way a real
+    // board shows it by the stone you watched them place. Without it the user
+    // has to diff the position against the one they saw a moment ago.
+    const previous: GameMove | null = lastPlayed(session);
+    return previous?.index != null ? [{ index: previous.index, kind: 'last' }] : [];
+  }
+
   return made.hit
     ? [{ index: made.actual, kind: 'hit' }]
     : [
         { index: made.actual, kind: 'actual' },
         { index: made.guess, kind: 'guess' },
       ];
+}
+
+/** The stone that just appeared, so the renderer can animate it in. */
+function sessionAnimate(session: Session): number[] {
+  const played: GameMove | null = lastPlayed(session);
+  return played?.index != null ? [played.index] : [];
 }
 
 function sessionStatus(session: Session): string {
@@ -198,6 +219,7 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
 
   renderGoban(session.position, board, {
     markers: sessionMarkers(session),
+    animate: sessionAnimate(session),
     showCoordinates: true,
     onPoint: (index: number): void => {
       // During a reveal any click advances, which keeps the whole loop on the

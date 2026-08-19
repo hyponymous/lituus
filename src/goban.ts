@@ -30,7 +30,11 @@ const ACTUAL_MARK = '#1e6fd9';
 const GUESS_MARK = '#d94f4f';
 const HIT_MARK = '#1faa5f';
 
-export type MarkerKind = 'actual' | 'guess' | 'hit';
+/**
+ * `last` marks the stone most recently played, as a board would by memory.
+ * The others belong to the reveal: where the move went, where you guessed.
+ */
+export type MarkerKind = 'actual' | 'guess' | 'hit' | 'last';
 
 export interface Marker {
   readonly index: number;
@@ -42,6 +46,12 @@ export interface GobanOptions {
   /** Called with the board index of the intersection clicked. */
   readonly onPoint?: (index: number) => void;
   readonly showCoordinates?: boolean;
+  /**
+   * Board indices whose stones are newly placed. They get a class the
+   * stylesheet animates, so the eye is drawn to what changed rather than
+   * having to diff the board. Everything else is drawn static.
+   */
+  readonly animate?: readonly number[];
 }
 
 /**
@@ -142,7 +152,7 @@ function drawCoordinates(svg: SVGElement, pos: Position): void {
   }
 }
 
-function drawStones(svg: SVGElement, pos: Position): void {
+function drawStones(svg: SVGElement, pos: Position, fresh: ReadonlySet<number>): void {
   const radius: number = CELL * STONE_SCALE;
 
   for (let row = 0; row < pos.rows; row++) {
@@ -160,14 +170,14 @@ function drawStones(svg: SVGElement, pos: Position): void {
         attrs.stroke = WHITE_EDGE;
         attrs['stroke-width'] = 0.8;
       }
+      if (fresh.has(toIndex(pos, row, col))) attrs.class = 'stone-new';
       svg.appendChild(svgEl('circle', attrs));
     }
   }
 }
 
-const MARK_COLORS: Record<MarkerKind, string> = {
+const RING_COLORS: Record<'actual' | 'hit', string> = {
   actual: ACTUAL_MARK,
-  guess: GUESS_MARK,
   hit: HIT_MARK,
 };
 
@@ -176,19 +186,42 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
   const x: number = centerX(col);
   const y: number = centerY(row);
   const size: number = CELL * 0.26;
-  const color: string = MARK_COLORS[marker.kind];
+
+  if (marker.kind === 'last') {
+    // A dot on the stone itself, in the opposite color so it reads on either.
+    // Smaller and quieter than the reveal marks: it is orientation, not an
+    // answer, and it must not compete with them for attention.
+    const fill: string = stoneAt(pos, marker.index) === BLACK ? WHITE_STONE : BLACK_STONE;
+    svg.appendChild(
+      svgEl('circle', { cx: x, cy: y, r: CELL * 0.13, fill, class: 'mark mark-last' }),
+    );
+    return;
+  }
 
   if (marker.kind === 'guess') {
     // A cross, which reads clearly on an empty intersection where a ring
     // could be mistaken for a stone.
-    const stroke = { stroke: color, 'stroke-width': 2.5, 'stroke-linecap': 'round' };
+    const stroke = {
+      stroke: GUESS_MARK,
+      'stroke-width': 2.5,
+      'stroke-linecap': 'round',
+      class: 'mark',
+    };
     svg.appendChild(svgEl('line', { x1: x - size, y1: y - size, x2: x + size, y2: y + size, ...stroke }));
     svg.appendChild(svgEl('line', { x1: x - size, y1: y + size, x2: x + size, y2: y - size, ...stroke }));
     return;
   }
 
   svg.appendChild(
-    svgEl('circle', { cx: x, cy: y, r: size, fill: 'none', stroke: color, 'stroke-width': 2.5 }),
+    svgEl('circle', {
+      cx: x,
+      cy: y,
+      r: size,
+      fill: 'none',
+      stroke: RING_COLORS[marker.kind],
+      'stroke-width': 2.5,
+      class: 'mark',
+    }),
   );
 }
 
@@ -230,7 +263,7 @@ export function renderGoban(pos: Position, container: HTMLElement, opts: GobanOp
   drawGrid(svg, pos);
   drawHoshi(svg, pos);
   if (opts.showCoordinates !== false) drawCoordinates(svg, pos);
-  drawStones(svg, pos);
+  drawStones(svg, pos, new Set(opts.animate ?? []));
 
   for (const marker of opts.markers ?? []) drawMarker(svg, pos, marker);
   if (opts.onPoint) drawHitTargets(svg, pos, opts.onPoint);

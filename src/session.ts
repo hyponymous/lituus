@@ -90,6 +90,16 @@ export function startSession(game: Game, color: Color): Session {
   });
 }
 
+/**
+ * The move whose stone is the newest on the board right now — the opponent's
+ * reply while a prompt waits, the revealed move during a reveal. Null before
+ * anything has been played.
+ */
+export function lastPlayed(session: Session): GameMove | null {
+  const at: number = session.phase === 'reveal' ? session.cursor : session.cursor - 1;
+  return session.game.moves[at] ?? null;
+}
+
 /** Whether the user may click this point — the reveal must not be pre-empted. */
 export function canGuess(session: Session, index: number): boolean {
   return session.phase === 'prompt' && isLegal(session.position, index, session.color);

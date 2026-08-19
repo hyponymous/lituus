@@ -36,7 +36,7 @@ type Screen =
  * early still feels like the faster path — the timer is a floor on reading
  * time, not a pace the user has to wait out. Tuned by feel; adjust here.
  */
-const REVEAL_MS = { hit: 900, miss: 2100 } as const;
+const REVEAL_MS = { hit: 650, miss: 1500 } as const;
 
 let screen: Screen = { name: 'landing' };
 let root: HTMLElement;

@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from '../src/sgf-parser.ts';
-import { pointIndex, readGame, type Game } from '../src/game.ts';
+import { pointIndex, readGame, type Game, type GameMove } from '../src/game.ts';
 import {
   SessionError,
   advance,
@@ -17,6 +17,7 @@ import {
   countPrompts,
   endSession,
   guess,
+  lastPlayed,
   score,
   startSession,
   type Score,
@@ -165,6 +166,50 @@ test('the cursor only ever moves forward', () => {
   assert.equal(session.phase, 'done', 'the session should have run out of moves');
   assert.deepEqual(seen, [...seen].sort((a, b) => a - b));
   assert.equal(new Set(seen).size, seen.length, 'no move is offered twice');
+});
+
+// ── The last move played ─────────────────────────────────────────────────────
+
+test('nothing has been played at the very first prompt', () => {
+  assert.equal(lastPlayed(startSession(load(SIMPLE), BLACK)), null);
+});
+
+test('a White session opens with Black\'s first move as the last played', () => {
+  const session: Session = startSession(load(SIMPLE), WHITE);
+  assert.equal(lastPlayed(session)?.number, 1);
+  assert.equal(lastPlayed(session)?.color, BLACK);
+});
+
+test('handicap stones are setup, not a move, so nothing is marked at move 1', () => {
+  const game: Game = load('(;SZ[19]HA[2]AB[dd][pp];W[qq];B[cc])');
+  assert.equal(lastPlayed(startSession(game, WHITE)), null);
+});
+
+test('during a reveal the last played move is the one revealed', () => {
+  const start: Session = startSession(load(SIMPLE), BLACK);
+  const revealed: Session = guess(start, point(start.position, 'dd'));
+
+  assert.equal(revealed.phase, 'reveal');
+  assert.equal(lastPlayed(revealed)?.number, 1);
+});
+
+test('at the next prompt it is the opponent\'s reply, not your own move', () => {
+  const start: Session = startSession(load(SIMPLE), BLACK);
+  const next: Session = advance(guess(start, point(start.position, 'dd')));
+  const previous: GameMove | null = lastPlayed(next);
+
+  assert.equal(previous?.number, 2, 'White replied at move 2');
+  assert.equal(previous?.color, WHITE);
+});
+
+test('a pass leaves the last played move null rather than a phantom point', () => {
+  // White passes at move 2, so there is no stone to mark at Black's next turn.
+  const game: Game = load('(;SZ[19];B[dd];W[];B[cc])');
+  const start: Session = startSession(game, BLACK);
+  const next: Session = advance(guess(start, point(start.position, 'dd')));
+
+  assert.equal(lastPlayed(next)?.number, 2);
+  assert.equal(lastPlayed(next)?.index, null, 'a pass has no point to mark');
 });
 
 // ── Passes ───────────────────────────────────────────────────────────────────

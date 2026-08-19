@@ -46,8 +46,10 @@ stones are, with tick marks implying board beyond the crop.
 
 **lituus:** `renderGoban(position, container, opts)` takes a `Position` from
 the rules engine and always draws the whole board. No viewport, no cropping,
-no tick marks. Adds per-intersection click targets and a marker overlay
-(`actual` / `guess` / `hit`).
+no tick marks. Adds per-intersection click targets, a marker overlay
+(`actual` / `guess` / `hit` for a reveal, `last` for the stone most recently
+played), and an `animate` option naming the indices whose stones are new, so
+the stylesheet can move only what changed.
 
 **Why:** cropping is right for sharing a diagram, where the interesting part
 is a corner. It is wrong for a study session: a player reads a position
@@ -58,7 +60,11 @@ keeps the renderer ignorant of SGF, which is what makes it reusable.
 **At extraction:** the shared renderer should take a position and treat the
 viewport as an option, with kifu passing a computed crop and lituus passing
 none. The grid, star points, stone drawing, and coordinate labels are
-already common and should move over close to unchanged.
+already common and should move over close to unchanged. The `last` marker is
+worth sharing — a static diagram wants to show the move it is about — while
+`actual` / `guess` / `hit` are specific to a prediction session and could stay
+here. Animation belongs to the consumer's stylesheet either way: the renderer
+only labels what is new and takes no view on whether it should move.
 
 ### goban.ts: no stone jitter
 
