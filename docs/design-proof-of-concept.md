@@ -119,6 +119,15 @@ Two kinds of rules test:
   disagreement is a bug in one of the two implementations, and finding out
   which is time well spent either way.
 
+  kifu is a separate repository, so the test compares against a committed
+  snapshot (`*.final.txt`) rather than importing it — a local checkout path
+  must not appear in tracked code. To add a record: drop the `.sgf` in
+  `test/fixtures/`, then generate its snapshot by parsing the file with
+  kifu's `sgf-parser.ts`, replaying it into an `Int8Array` with kifu's
+  `replayMain(board, cols, rows, tree)`, and writing the board out as `b`,
+  `w`, and `.` rows under a header naming the source. Never regenerate a
+  snapshot to make a failing test pass — the disagreement is the finding.
+
 Session tests cover scoring, advancing, handicap starts, and game end.
 
 ## 4. Deployment
