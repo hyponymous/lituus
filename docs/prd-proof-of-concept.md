@@ -13,8 +13,18 @@ prediction. The user loads an SGF, picks a color, and steps through the game.
 At each of that color's moves the board pauses and the user guesses where the
 move was played. The site reveals the answer, scores the guess, and moves on.
 
-The premise: passively replaying a pro game teaches much less than committing
-to a guess first. Being wrong — and noticing *how* wrong — is the lesson.
+The premise: passively replaying a game teaches much less than committing to a
+guess first. The commitment is what does the work, not the accuracy. Attempting
+an answer and missing improves retention over not attempting at all — the
+[pretesting effect](https://learninglab.uchicago.edu/Pre-Testing_files/RichlandKornellKao.pdf),
+where the benefit holds even after correct guesses are excluded from the
+analysis. And errors made with high confidence are the ones most likely to be
+corrected, because the surprise commands attention
+([hypercorrection](https://link.springer.com/article/10.3758/s13423-011-0173-y)).
+
+This is the reasoning behind §5's binary scoring. If closeness were what
+mattered, refusing to grade it would be a real cost; since the attempt is what
+matters, exact match gives up nothing the tool needs.
 
 Two modes are envisioned. Only the first is in scope for the PoC:
 
