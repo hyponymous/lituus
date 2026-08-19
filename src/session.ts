@@ -1,0 +1,182 @@
+/**
+ * Session: the prediction loop over one game, for one color.
+ *
+ * A session is an immutable value and every transition returns a new one, so
+ * the views can render from a single object and never hold stale derived
+ * state. Navigation is strictly forward by construction: the cursor only
+ * increases, and no transition reveals a move that has already been scored.
+ *
+ * The opponent's moves need no playing out here. The game model already
+ * carries the position before every move, so the position before the user's
+ * next prompt is the position with all intervening moves applied.
+ */
+
+import { promptableMoves, type Game, type GameMove } from './game.ts';
+import { isLegal, type Color, type Position } from './rules.ts';
+
+/**
+ * `prompt` — waiting for a guess. `reveal` — the answer is showing, waiting to
+ * advance. `done` — the game ran out, or the user ended the session.
+ */
+export type Phase = 'prompt' | 'reveal' | 'done';
+
+export interface Guess {
+  /** Move number in the game record, 1-based, as shown to the user. */
+  readonly moveNumber: number;
+  /** Where the move was actually played. */
+  readonly actual: number;
+  /** Where the user guessed. */
+  readonly guess: number;
+  readonly hit: boolean;
+}
+
+export interface Session {
+  readonly game: Game;
+  readonly color: Color;
+  readonly phase: Phase;
+  /** The position to display: before the move in `prompt`, after it in `reveal`. */
+  readonly position: Position;
+  /** The move being predicted, or just revealed. Null once done. */
+  readonly move: GameMove | null;
+  /** The guess just made, for the reveal. Null in any other phase. */
+  readonly lastGuess: Guess | null;
+  readonly guesses: readonly Guess[];
+  /** Index into `game.moves` of `move`, or the record's length once done. */
+  readonly cursor: number;
+}
+
+/** Raised when a transition is asked for that the current phase does not allow. */
+export class SessionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SessionError';
+  }
+}
+
+/** The next move of this color that can be predicted — passes are not prompts. */
+function nextPrompt(game: Game, color: Color, from: number): number {
+  for (let i = from; i < game.moves.length; i++) {
+    const move: GameMove = game.moves[i];
+    if (move.color === color && move.index !== null) return i;
+  }
+  return game.moves.length;
+}
+
+/** The position once the record is exhausted: the board as the game left it. */
+function finalPosition(game: Game): Position {
+  return game.moves.at(-1)?.after ?? game.initial;
+}
+
+/** Settle a session onto the prompt at `cursor`, or onto `done` if there is none. */
+function at(session: Omit<Session, 'phase' | 'position' | 'move' | 'lastGuess'>): Session {
+  const { game, cursor } = session;
+  const move: GameMove | undefined = game.moves[cursor];
+
+  return move
+    ? { ...session, phase: 'prompt', position: move.before, move, lastGuess: null }
+    : { ...session, phase: 'done', position: finalPosition(game), move: null, lastGuess: null };
+}
+
+/**
+ * Begin a session. Starts at the first move of `color` worth predicting, which
+ * in a handicap game is the first move after the placed stones.
+ */
+export function startSession(game: Game, color: Color): Session {
+  return at({
+    game,
+    color,
+    guesses: [],
+    cursor: nextPrompt(game, color, 0),
+  });
+}
+
+/** Whether the user may click this point — the reveal must not be pre-empted. */
+export function canGuess(session: Session, index: number): boolean {
+  return session.phase === 'prompt' && isLegal(session.position, index, session.color);
+}
+
+/**
+ * Commit a guess and reveal the answer. There is no confirmation step: the
+ * click is the answer, and it is scored on exact match against the played move.
+ */
+export function guess(session: Session, index: number): Session {
+  if (session.phase !== 'prompt' || !session.move) {
+    throw new SessionError(`Cannot guess while ${session.phase}.`);
+  }
+  if (!canGuess(session, index)) {
+    throw new SessionError('That point is not a legal move.');
+  }
+
+  const move: GameMove = session.move;
+  if (move.index === null) {
+    throw new SessionError('A pass should never have been prompted.');
+  }
+
+  const made: Guess = {
+    moveNumber: move.number,
+    actual: move.index,
+    guess: index,
+    hit: index === move.index,
+  };
+
+  return {
+    ...session,
+    phase: 'reveal',
+    position: move.after,
+    lastGuess: made,
+    guesses: [...session.guesses, made],
+  };
+}
+
+/** Move past the revealed answer to the next prompt, or to the end of the game. */
+export function advance(session: Session): Session {
+  if (session.phase !== 'reveal') {
+    throw new SessionError(`Cannot advance while ${session.phase}.`);
+  }
+  return at({
+    game: session.game,
+    color: session.color,
+    guesses: session.guesses,
+    cursor: nextPrompt(session.game, session.color, session.cursor + 1),
+  });
+}
+
+/**
+ * End the session early. The guesses made so far stand — the user abandoned
+ * the game, they did not get those moves wrong.
+ */
+export function endSession(session: Session): Session {
+  return {
+    ...session,
+    phase: 'done',
+    position: session.position,
+    move: null,
+    lastGuess: null,
+  };
+}
+
+export interface Score {
+  readonly hits: number;
+  readonly guessed: number;
+  /** Prompts in the whole game, so a session ended early reads as incomplete. */
+  readonly total: number;
+  /** Hits over guesses made, in [0, 1]. Zero when nothing has been guessed. */
+  readonly rate: number;
+}
+
+export function score(session: Session): Score {
+  const hits: number = session.guesses.filter((made) => made.hit).length;
+  const guessed: number = session.guesses.length;
+
+  return {
+    hits,
+    guessed,
+    total: countPrompts(session.game, session.color),
+    rate: guessed > 0 ? hits / guessed : 0,
+  };
+}
+
+/** How many moves a session for this color will ask about, all told. */
+export function countPrompts(game: Game, color: Color): number {
+  return promptableMoves(game, color).length;
+}
