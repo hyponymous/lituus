@@ -1,7 +1,11 @@
 # lituus — Engineering Design: Proof of Concept
 
-**Status:** draft
-**Last updated:** 2026-08-17
+**Status:** closed · built and deployed
+**Last updated:** 2026-08-20
+
+Closed alongside [the PoC PRD](prd-proof-of-concept.md). Later phases get
+their own design docs; `docs/reuse-notes.md` stays live, since divergence from
+kifu keeps accumulating.
 
 How the proof of concept described in
 [the PoC PRD](prd-proof-of-concept.md) gets built. Scope here is

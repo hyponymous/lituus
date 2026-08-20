@@ -3,8 +3,14 @@
 Scope is the initial proof of concept only. Later phases — AI scoring,
 predict-vs-AI, sharing — get their own PRDs; §7 here is a sketch, not a spec.
 
-**Status:** draft · proof of concept
-**Last updated:** 2026-08-17
+**Status:** closed · built and deployed
+**Last updated:** 2026-08-20
+
+This document is closed. It describes the proof of concept as it was built,
+and is kept as a record of what was decided and why. Later work gets its own
+PRD rather than edits here — including anything that reverses a decision made
+below, since a document edited in perpetuity stops being evidence of what was
+believed at the time. §8 catalogues what was deliberately left out.
 
 ## 1. Summary
 
