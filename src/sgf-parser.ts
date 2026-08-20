@@ -1,8 +1,9 @@
 /**
  * SGF (Smart Game Format) recursive-descent parser.
  *
- * Vendored from kifu (https://github.com/hyponymous/kifu), src/sgf-parser.ts.
- * Unmodified apart from this header. Record any divergence in
+ * Vendored from kifu (https://github.com/hyponymous/kifu), src/sgf-parser.ts,
+ * which is MIT-licensed to the same copyright holder as this project; see
+ * LICENSE. Unmodified apart from this header. Record any divergence in
  * docs/reuse-notes.md.
  *
  * Usage:

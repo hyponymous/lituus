@@ -1,6 +1,7 @@
 {
   "name": "lituus",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

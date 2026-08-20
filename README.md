@@ -115,3 +115,7 @@ implementation, but could use more testing against unusual edge cases.
 A *lituus* is the curved staff a Roman augur carried, used to mark out the
 field of sky they watched for signs. Reading a board for what comes next is
 much the same job.
+
+## License
+
+[MIT](LICENSE). The vendored SGF parser comes from kifu under the same terms.
