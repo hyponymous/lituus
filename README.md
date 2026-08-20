@@ -10,13 +10,14 @@ scores you, and moves on.
 
 **Live:** https://hyponymous.github.io/lituus/
 
-> **Status: in development.** The SGF parser, rules engine, board renderer, and
-> session logic are built and tested. The interface is not, so the deployed
-> page is still a placeholder.
+> **Status: in development, but the loop works.** Load a record, pick a side,
+> predict move by move, read the summary. Still to come: a layout pass, reveal
+> timings tuned against a full game, something better than a desktop-only
+> pointing interface, and the AI scoring the PRD sketches.
 
-<!-- Screenshots go here once the session view exists: the prompt, and a
-     reveal showing a miss with both points marked. Deliberately omitted
-     until they can show the real thing — a broken image is worse than none. -->
+<!-- Screenshots go here: the prompt, and a reveal showing a miss with both
+     points marked. Deliberately omitted until they can show the real thing —
+     a broken image is worse than none. -->
 
 ## Why predict moves?
 
