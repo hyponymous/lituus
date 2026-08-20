@@ -19,6 +19,7 @@ import {
   percent,
   phaseOf,
   summarize,
+  tenukiAgreement,
   toJSON,
   toText,
   type Summary,
@@ -174,6 +175,104 @@ test('a phase the game never reached reports zero rather than dividing by zero',
 test('all three phases are always present, in order', () => {
   const summary: Summary = summarize(playSession(load(SIMPLE), BLACK, new Set()));
   assert.deepEqual(summary.phases.map((p) => p.phase), ['opening', 'middle', 'endgame']);
+});
+
+// ── Tenuki ───────────────────────────────────────────────────────────────────
+
+/**
+ * Black plays dd; White answers at fc (3 away, local); Black is prompted at
+ * move 3. The reference point for move 3 is White's fc.
+ */
+const LOCAL_REPLY = '(;SZ[19];B[dd];W[fc];B[df];W[qq])';
+
+test('the first move has nothing to measure against', () => {
+  const game: Game = load(SIMPLE);
+  const start: Session = startSession(game, BLACK);
+  const summary: Summary = summarize(endSession(guess(start, point(start.position, 'pd'))));
+
+  assert.equal(summary.tenuki.unscored, 1);
+  assert.equal(tenukiAgreement(summary.tenuki).scored, 0);
+  assert.equal(summary.rows[0].actualAway, null);
+});
+
+test('answering near the opponent s move counts as local for both', () => {
+  // Move 3 is df, two points from White's fc. Guess dg, also close.
+  const game: Game = load(LOCAL_REPLY);
+  let session: Session = startSession(game, BLACK);
+  session = advance(guess(session, session.move?.index ?? 0)); // move 1, unscored
+  const summary: Summary = summarize(endSession(guess(session, point(session.position, 'dg'))));
+
+  assert.equal(summary.tenuki.bothLocal, 1);
+  assert.equal(summary.tenuki.stayedHome, 0);
+});
+
+test('the player leaving while you stay home is counted apart', () => {
+  // Move 3 (cc) is 3 from White's pp? No - build it explicitly:
+  // B dd, W pp (far), B cc. Reference for move 3 is pp; cc is far from pp,
+  // so the player played away. A guess next to pp would be staying home.
+  const game: Game = load(SIMPLE);
+  let session: Session = startSession(game, BLACK);
+  session = advance(guess(session, session.move?.index ?? 0));
+  const summary: Summary = summarize(endSession(guess(session, point(session.position, 'pn'))));
+
+  assert.equal(summary.tenuki.stayedHome, 1, 'pn sits beside pp; cc is across the board');
+  assert.equal(summary.tenuki.bothAway, 0);
+});
+
+test('both leaving for the same corner counts as the same area', () => {
+  const game: Game = load(SIMPLE);
+  let session: Session = startSession(game, BLACK);
+  session = advance(guess(session, session.move?.index ?? 0));
+  // Actual move 3 is cc; guess dc is one point away, both far from pp.
+  const summary: Summary = summarize(endSession(guess(session, point(session.position, 'dc'))));
+
+  assert.equal(summary.tenuki.bothAway, 1);
+  assert.equal(summary.tenuki.sameArea, 1);
+});
+
+test('both leaving for opposite corners is agreement without the same area', () => {
+  const game: Game = load(SIMPLE);
+  let session: Session = startSession(game, BLACK);
+  session = advance(guess(session, session.move?.index ?? 0));
+  // Actual is cc (top left); guess cq (bottom left) is far from both pp and cc.
+  const summary: Summary = summarize(endSession(guess(session, point(session.position, 'cq'))));
+
+  assert.equal(summary.tenuki.bothAway, 1, 'both played away from pp');
+  assert.equal(summary.tenuki.sameArea, 0, 'but to different corners');
+});
+
+test('agreement counts the diagonal of the matrix, not the totals', () => {
+  const tenuki = {
+    bothAway: 4,
+    stayedHome: 29,
+    bothLocal: 40,
+    leftEarly: 4,
+    unscored: 1,
+    sameArea: 2,
+  };
+  assert.deepEqual(tenukiAgreement(tenuki), { agreed: 44, scored: 77 });
+});
+
+test('the text export reports the matrix when anything was scored', () => {
+  const game: Game = load(SIMPLE);
+  let session: Session = startSession(game, BLACK);
+  session = advance(guess(session, session.move?.index ?? 0));
+  const text: string = toText(summarize(endSession(guess(session, point(session.position, 'dc')))));
+
+  assert.match(text, /Local or away: agreed on 1 of 1/);
+  assert.match(text, /to the same area\s+1/);
+});
+
+test('the JSON export carries the matrix and the per-move flags', () => {
+  const game: Game = load(SIMPLE);
+  let session: Session = startSession(game, BLACK);
+  session = advance(guess(session, session.move?.index ?? 0));
+  const parsed = JSON.parse(toJSON(summarize(endSession(guess(session, point(session.position, 'dc'))))));
+
+  assert.equal(parsed.tenuki.bothAway, 1);
+  assert.equal(parsed.tenuki.sameArea, 1);
+  assert.equal(parsed.moves[0].playedAway, null, 'move 1 had no reference');
+  assert.equal(parsed.moves[1].playedAway, true);
 });
 
 // ── Exports ──────────────────────────────────────────────────────────────────

@@ -87,7 +87,11 @@ function loadGame(sgf: string): void {
 function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
-    renderSummary(root, { summary: summarize(session), onRestart: () => show({ name: 'landing' }) });
+    renderSummary(root, {
+      summary: summarize(session),
+      session,
+      onRestart: () => show({ name: 'landing' }),
+    });
     return;
   }
 

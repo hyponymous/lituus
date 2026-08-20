@@ -72,6 +72,13 @@ export interface Game {
    * a collection reduced to its first game, variations left untraversed.
    */
   readonly notes: readonly string[];
+  /**
+   * The tree this game was read from, kept verbatim. Exporting an annotated
+   * record has to serialize from here rather than from the fields above:
+   * commentary, markup, and any property lituus does not understand are all
+   * absent from the model but are most of what makes a record worth studying.
+   */
+  readonly source: GameTree;
 }
 
 const DEFAULT_SIZE = 19;
@@ -157,7 +164,7 @@ function readMeta(root: Props): GameMeta {
 }
 
 /** The main line as a flat node list: every node, then the first variation. */
-function mainLine(tree: GameTree): Props[] {
+export function mainLine(tree: GameTree): Props[] {
   const props: Props[] = [];
   for (let node: GameTree | undefined = tree; node; node = node.variations[0]) {
     for (const { props: p } of node.nodes) props.push(p);
@@ -232,7 +239,7 @@ export function readGame(trees: readonly GameTree[]): Game {
     throw new GameError('The record has no moves to study.');
   }
 
-  return { cols, rows, initial: initial ?? position, moves, meta, notes };
+  return { cols, rows, initial: initial ?? position, moves, meta, notes, source: tree };
 }
 
 /** Moves the given color is asked to predict — every move of theirs but a pass. */

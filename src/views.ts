@@ -18,7 +18,8 @@ import {
   type Score,
   type Session,
 } from './session.ts';
-import { percent, toJSON, toText, type Summary } from './summary.ts';
+import { percent, tenukiAgreement, toJSON, toText, type Summary } from './summary.ts';
+import { annotatedFilename, annotatedSgf } from './annotate.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
 type Attrs = Record<string, string>;
@@ -253,7 +254,57 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
 
 export interface SummaryProps {
   readonly summary: Summary;
+  /** The session the summary came from, for the annotated export. */
+  readonly session: Session;
   readonly onRestart: () => void;
+}
+
+/**
+ * Hand the user a file. Revoking on the next frame rather than immediately
+ * gives the browser time to start the download; revoking too early cancels it.
+ */
+function download(name: string, text: string, type: string): void {
+  const url: string = URL.createObjectURL(new Blob([text], { type }));
+  const link = el('a', { href: url, download: name, style: 'display:none' }) as HTMLAnchorElement;
+
+  // The link goes into the document before it is clicked. A detached anchor
+  // works in some browsers and silently does nothing in others, and a download
+  // that fails without an error is the worst version of this bug.
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** Your local-or-away calls against the player's, as a 2x2 with its diagonal named. */
+function tenukiTable(summary: Summary): HTMLElement {
+  const { tenuki } = summary;
+  const { agreed, scored } = tenukiAgreement(tenuki);
+
+  const row = (label: string, count: number, note?: string): HTMLElement =>
+    el('tr', {}, [
+      el('td', {}, [label]),
+      el('td', {}, [String(count)]),
+      el('td', { class: 'muted' }, [note ?? '']),
+    ]);
+
+  return el('section', {}, [
+    el('h3', {}, ['Local or away']),
+    el('p', { class: 'muted' }, [
+      `You made the same call as the player on ${agreed} of ${scored} moves ` +
+        `(${percent(scored > 0 ? agreed / scored : 0)}). Missing the exact point is ` +
+        'expected; the decision to answer or leave is the habit worth seeing.',
+    ]),
+    el('table', { class: 'stats' }, [
+      el('tbody', {}, [
+        row('You both played away', tenuki.bothAway,
+          tenuki.bothAway > 0 ? `${tenuki.sameArea} to the same area` : ''),
+        row('They left, you answered', tenuki.stayedHome),
+        row('You both answered locally', tenuki.bothLocal),
+        row('They answered, you left', tenuki.leftEarly),
+      ]),
+    ]),
+  ]);
 }
 
 function phaseTable(summary: Summary): HTMLElement {
@@ -338,11 +389,20 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
   }
 
   if (result.guessed > 0) {
-    parts.push(phaseTable(summary), el('div', { class: 'scroll' }, [moveTable(summary)]));
+    parts.push(phaseTable(summary));
+    if (tenukiAgreement(summary.tenuki).scored > 0) parts.push(tenukiTable(summary));
+    parts.push(el('div', { class: 'scroll' }, [moveTable(summary)]));
   }
 
   parts.push(
     el('div', { class: 'actions' }, [
+      button('Download annotated SGF', () =>
+        download(
+          annotatedFilename(summary),
+          annotatedSgf(props.session, summary),
+          'application/x-go-sgf',
+        ),
+      ),
       copyButton('Copy as text', () => toText(summary)),
       copyButton('Copy as JSON', () => toJSON(summary)),
       button('Study another game', props.onRestart, { class: 'primary' }),
