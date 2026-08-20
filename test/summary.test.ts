@@ -16,6 +16,7 @@ import {
   type Session,
 } from '../src/session.ts';
 import {
+  TENUKI_RADIUS,
   percent,
   phaseOf,
   summarize,
@@ -239,6 +240,48 @@ test('both leaving for opposite corners is agreement without the same area', () 
 
   assert.equal(summary.tenuki.bothAway, 1, 'both played away from pp');
   assert.equal(summary.tenuki.sameArea, 0, 'but to different corners');
+});
+
+/**
+ * A White session where move 1 sits at the given point and move 2 is the one
+ * predicted, so the reference for the prediction is move 1. Offsets are
+ * derived from TENUKI_RADIUS rather than written as literals: a test that
+ * hard-codes the boundary stops testing the boundary the moment the constant
+ * moves, and does it silently.
+ */
+function boardPoint(row: number, col: number): string {
+  return String.fromCharCode(97 + col) + String.fromCharCode(97 + row);
+}
+
+function radiusFixture(): { game: Game; local: string; away: string } {
+  // Anchored near the left edge so the fixture still fits as the radius grows.
+  const row = 9;
+  const col = 1;
+  assert.ok(col + TENUKI_RADIUS + 1 < 19, 'the fixture needs room on the board');
+
+  return {
+    game: load(`(;SZ[19];B[${boardPoint(row, col)}];W[${boardPoint(row, col + 2)}])`),
+    local: boardPoint(row, col + TENUKI_RADIUS),
+    away: boardPoint(row, col + TENUKI_RADIUS + 1),
+  };
+}
+
+test('a guess exactly TENUKI_RADIUS away still counts as local', () => {
+  const { game, local } = radiusFixture();
+  const start: Session = startSession(game, WHITE);
+  const summary: Summary = summarize(endSession(guess(start, point(start.position, local))));
+
+  assert.equal(summary.rows[0].guessAway, false, `${local} is exactly ${TENUKI_RADIUS} away`);
+  assert.equal(summary.tenuki.bothLocal, 1);
+});
+
+test('one point beyond TENUKI_RADIUS counts as playing away', () => {
+  const { game, away } = radiusFixture();
+  const start: Session = startSession(game, WHITE);
+  const summary: Summary = summarize(endSession(guess(start, point(start.position, away))));
+
+  assert.equal(summary.rows[0].guessAway, true, `${away} is one past ${TENUKI_RADIUS}`);
+  assert.equal(summary.tenuki.leftEarly, 1, 'the played move answered locally');
 });
 
 test('agreement counts the diagonal of the matrix, not the totals', () => {

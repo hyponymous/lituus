@@ -51,7 +51,7 @@ export interface PhaseResult {
  * answer to it, measured as a Chebyshev distance so a diagonal counts the same
  * as a straight line.
  */
-const TENUKI_RADIUS = 6;
+export const TENUKI_RADIUS = 6;
 
 /** Whether `to` is far enough from `from` to count as playing elsewhere. */
 function isAway(pos: Position, from: number, to: number): boolean {
