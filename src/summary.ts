@@ -49,12 +49,9 @@ export interface PhaseResult {
 /**
  * How far a move can sit from the opponent's last one and still count as an
  * answer to it, measured as a Chebyshev distance so a diagonal counts the same
- * as a straight line. Four is a judgement call: it catches the usual local
- * exchanges and calls anything further a decision to play elsewhere. A fight
- * that spans more than four lines will be scored as tenuki, which is the known
- * cost of a single threshold.
+ * as a straight line.
  */
-const TENUKI_RADIUS = 4;
+const TENUKI_RADIUS = 6;
 
 /** Whether `to` is far enough from `from` to count as playing elsewhere. */
 function isAway(pos: Position, from: number, to: number): boolean {
