@@ -104,6 +104,9 @@ implementation, but could use more testing against unusual edge cases.
   proof of concept does. §8 catalogues deliberately deferred features.
 - [`docs/design-proof-of-concept.md`](docs/design-proof-of-concept.md) — how it
   gets built: layering, reuse, testing, deployment, risks.
+- [`docs/prd-move-selection.md`](docs/prd-move-selection.md) — draft, not
+  started: which moves a session asks about, once it stops asking about all of
+  them.
 - [`docs/reuse-notes.md`](docs/reuse-notes.md) — divergences from
   [kifu](https://github.com/hyponymous/kifu), a sibling project for sharing
   static SGF diagrams. lituus borrows its SGF parser and adapts its board
