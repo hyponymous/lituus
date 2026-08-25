@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lituus engine benchmark</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
+  h1 { font-size: 1.2rem; }
+  .ok { color: #137333; font-weight: 600; }
+  .bad { color: #b3261e; font-weight: 600; }
+  .controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; margin: 1rem 0; }
+  label { display: flex; flex-direction: column; gap: .2rem; font-size: .8rem; }
+  select, button { font: inherit; padding: .5rem; min-height: 2.75rem; }
+  button { flex: 1 1 12rem; }
+  pre { background: light-dark(#f4f4f5, #1c1c1f); padding: .75rem; border-radius: .4rem;
+        overflow-x: auto; font-size: .75rem; }
+  .status { font-weight: 600; }
+</style>
+<div id="app"></div>
+<script type="module" src="/src/lituus-mobile.ts"></script>
