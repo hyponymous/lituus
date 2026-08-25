@@ -57,6 +57,21 @@ let root: HTMLElement;
 /** A scheduled auto-advance, cleared on any state change so it cannot fire late. */
 let pending: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * When the prompt now on screen was drawn, and which one it is.
+ *
+ * `performance.now()` rather than `Date.now()`: it is monotonic, so a clock
+ * adjustment mid-session cannot produce a negative time. The cursor is kept
+ * alongside it because a redraw of the same prompt must not restart the
+ * clock — only moving to a new question does.
+ *
+ * Nothing stops this while the tab is hidden or the user walks away, so a
+ * single guess can be arbitrarily long. That is why the summary leads with a
+ * median rather than a mean.
+ */
+let promptedAt: number | null = null;
+let promptedCursor: number | null = null;
+
 function show(next: Screen): void {
   // Every transition cancels a pending advance. Without this, ending a session
   // during a reveal would leave a timer that advances a session already over.
@@ -107,8 +122,7 @@ function loadGame(sgf: string): void {
 function devProps(): DevProps {
   return {
     onBack: (): void => show({ name: 'landing' }),
-    onReplay: (game: Game, color: Color): void =>
-      show({ name: 'session', session: startSession(game, color) }),
+    onReplay: (game: Game, color: Color): void => show(startAt(game, color)),
   };
 }
 
@@ -117,14 +131,31 @@ function looksLikeResult(text: string): boolean {
   return text.trimStart().startsWith('{');
 }
 
+/**
+ * Begin a session, with the prompt clock reset.
+ *
+ * The reset is the point of this existing. A fresh session can land on the
+ * same cursor the previous one ended on — a replay of the same color usually
+ * does — and without clearing it, the first guess of the new run would be
+ * timed from a prompt the user answered minutes ago.
+ */
+function startAt(game: Game, color: Color): Screen {
+  promptedCursor = null;
+  return { name: 'session', session: startSession(game, color) };
+}
+
+/** Milliseconds the current prompt has been up, or null if it was not timed. */
+function elapsed(): number | null {
+  return promptedAt === null ? null : Math.round(performance.now() - promptedAt);
+}
+
 function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
     renderSummary(root, {
       summary: summarize(session),
       session,
-      onReplay: (color: Color): void =>
-        show({ name: 'session', session: startSession(session.game, color) }),
+      onReplay: (color: Color): void => show(startAt(session.game, color)),
       onRestart: () => show({ name: 'landing' }),
     });
     return;
@@ -132,9 +163,15 @@ function drawSession(session: Session): void {
 
   const next = (): void => show({ name: 'session', session: advance(session) });
 
+  if (session.phase === 'prompt' && session.cursor !== promptedCursor) {
+    promptedCursor = session.cursor;
+    promptedAt = performance.now();
+  }
+
   renderSession(root, {
     session,
-    onGuess: (index: number): void => show({ name: 'session', session: guess(session, index) }),
+    onGuess: (index: number): void =>
+      show({ name: 'session', session: guess(session, index, elapsed()) }),
     onAdvance: next,
     onEnd: (): void => show({ name: 'session', session: endSession(session) }),
   });
@@ -158,8 +195,7 @@ function draw(): void {
       const { game } = screen;
       renderSetup(root, {
         game,
-        onStart: (color: Color): void =>
-          show({ name: 'session', session: startSession(game, color) }),
+        onStart: (color: Color): void => show(startAt(game, color)),
         onBack: (): void => show({ name: 'landing' }),
       });
       return;

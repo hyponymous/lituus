@@ -107,7 +107,11 @@ function restoreGuess(game: Game, color: Color, entry: unknown, at: number): Gue
     );
   }
 
-  return { moveNumber, actual: move.index, guess, hit };
+  // Absent in exports from before timing, and null is the honest answer for
+  // those — not zero, which would read as an instant guess.
+  const elapsedMs: number | null = typeof row.ms === 'number' ? row.ms : null;
+
+  return { moveNumber, actual: move.index, guess, hit, elapsedMs };
 }
 
 /**

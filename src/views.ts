@@ -21,6 +21,7 @@ import {
   type Session,
 } from './session.ts';
 import {
+  duration,
   longestStreak,
   percent,
   tenukiAgreement,
@@ -403,6 +404,19 @@ function streakNote(summary: Summary): string {
 }
 
 /**
+ * How long it took, as a median.
+ *
+ * The median and not the total: the total is mostly a statement about how
+ * long you sat there, while the median says how long a move took to answer,
+ * which is the thing that changes as you get better. The rest is in the
+ * exports for anyone who wants it.
+ */
+function timingNote(summary: Summary): string {
+  const { timing } = summary;
+  return timing === null ? '' : ` · ${duration(timing.medianMs)} a move`;
+}
+
+/**
  * Phase rates as bars. Three numbers are exactly the case where a table makes
  * the reader do the comparing: the point is which phase is weakest, and a bar
  * answers that before the labels are read. The counts stay, since a rate over
@@ -606,7 +620,8 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
           ],
     });
 
-    const where = `Move ${row.moveNumber} (${at + 1} of ${summary.rows.length})`;
+    const took: string = row.elapsedMs === null ? '' : ` (${duration(row.elapsedMs)})`;
+    const where = `Move ${row.moveNumber} (${at + 1} of ${summary.rows.length})${took}`;
     caption.textContent = made.hit
       ? `${where} — you played ${row.actual}, and so did they.`
       : `${where} — you played ${row.guess}; ${colorName(summary.color)} played ${row.actual}.`;
@@ -742,7 +757,11 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
     // in five is the headline number, and "of how many" is the qualifier.
     parts.push(
       el('p', { class: 'headline' }, [percent(result.rate)]),
-      el('p', { class: 'subhead' }, [`${result.hits} of ${result.guessed} correct`, streakNote(summary)]),
+      el('p', { class: 'subhead' }, [
+        `${result.hits} of ${result.guessed} correct`,
+        streakNote(summary),
+        timingNote(summary),
+      ]),
     );
   } else {
     parts.push(el('p', { class: 'headline' }, ['No moves predicted.']));

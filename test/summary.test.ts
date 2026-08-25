@@ -18,6 +18,7 @@ import {
 import {
   STREAK_MIN,
   TENUKI_RADIUS,
+  duration,
   longestStreak,
   percent,
   phaseOf,
@@ -181,12 +182,6 @@ test('all three phases are always present, in order', () => {
   assert.deepEqual(summary.phases.map((p) => p.phase), ['opening', 'middle', 'endgame']);
 });
 
-// ── Tenuki ───────────────────────────────────────────────────────────────────
-
-/**
- * Black plays dd; White answers at fc (3 away, local); Black is prompted at
- * move 3. The reference point for move 3 is White's fc.
- */
 // ── Streaks ──────────────────────────────────────────────────────────────────
 
 /** Black's prompts in `longGame` are the odd move numbers, in order. */
@@ -279,6 +274,109 @@ test('the exports carry the streaks', () => {
   ]);
 });
 
+// ── Timing ───────────────────────────────────────────────────────────────────
+
+/** Play `times.length` prompts, spending each listed number of ms on one. */
+function timedSession(game: Game, times: readonly (number | null)[]): Session {
+  let session: Session = startSession(game, BLACK);
+  for (const ms of times) {
+    if (session.phase !== 'prompt' || session.move?.index == null) break;
+    session = advance(guess(session, session.move.index, ms));
+  }
+  return session;
+}
+
+test('an untimed session reports no timing at all, rather than zeros', () => {
+  const summary: Summary = summarize(playSession(load(SIMPLE), BLACK, new Set([1, 3])));
+  assert.equal(summary.timing, null);
+});
+
+test('timings summarize to a total, a median, and both ends', () => {
+  const summary: Summary = summarize(timedSession(longGame(20), [3000, 1000, 5000]));
+
+  assert.equal(summary.timing?.timed, 3);
+  assert.equal(summary.timing?.totalMs, 9000);
+  assert.equal(summary.timing?.medianMs, 3000);
+  assert.equal(summary.timing?.fastestMs, 1000);
+  assert.equal(summary.timing?.slowestMs, 5000);
+});
+
+test('an even number of timings takes the mean of the middle pair', () => {
+  const summary: Summary = summarize(timedSession(longGame(20), [1000, 2000, 3000, 6000]));
+  assert.equal(summary.timing?.medianMs, 2500);
+});
+
+test('one very slow guess moves the slowest but not the median', () => {
+  // The reason the median leads: nothing stops the clock when a user walks
+  // away, and a mean would be all lunch break and no measurement.
+  const summary: Summary = summarize(timedSession(longGame(20), [2000, 2000, 2000, 3_600_000]));
+
+  assert.equal(summary.timing?.medianMs, 2000);
+  assert.equal(summary.timing?.slowestMs, 3_600_000);
+});
+
+test('unmeasured guesses are left out rather than counted as instant', () => {
+  const summary: Summary = summarize(timedSession(longGame(20), [4000, null, 6000]));
+
+  assert.equal(summary.timing?.timed, 2);
+  assert.equal(summary.timing?.totalMs, 10000);
+  assert.equal(summary.rows[1].elapsedMs, null);
+});
+
+test('each row carries the time its own guess took', () => {
+  const summary: Summary = summarize(timedSession(longGame(20), [1500, 2500]));
+  assert.deepEqual(summary.rows.map((row) => row.elapsedMs), [1500, 2500]);
+});
+
+test('durations read as seconds under a minute, keeping one decimal', () => {
+  assert.equal(duration(0), '0.0s');
+  assert.equal(duration(1400), '1.4s');
+  assert.equal(duration(59_900), '59.9s');
+});
+
+test('durations past a minute switch to minutes, and past an hour to hours', () => {
+  assert.equal(duration(60_000), '1m 00s');
+  assert.equal(duration(125_000), '2m 05s');
+  assert.equal(duration(3_600_000), '1h 00m');
+  assert.equal(duration(5_460_000), '1h 31m');
+});
+
+test('the text export reports the timings when there are any', () => {
+  const summary: Summary = summarize(timedSession(longGame(20), [2000, 4000, 9000]));
+  assert.match(toText(summary), /Time: 15\.0s over 3 moves, median 4\.0s/);
+});
+
+test('the text export says nothing about time when nothing was timed', () => {
+  const summary: Summary = summarize(playSession(load(SIMPLE), BLACK, new Set([1])));
+  assert.doesNotMatch(toText(summary), /Time:/);
+});
+
+test('the JSON export carries the timings and the per-move times', () => {
+  const summary: Summary = summarize(timedSession(longGame(20), [2000, 4000]));
+  const json = JSON.parse(toJSON(summary)) as {
+    timing: { timed: number; medianMs: number };
+    moves: { ms: number | null }[];
+  };
+
+  assert.equal(json.timing.timed, 2);
+  assert.equal(json.timing.medianMs, 3000);
+  assert.deepEqual(json.moves.map((move) => move.ms), [2000, 4000]);
+});
+
+test('the JSON export carries a null timing rather than omitting it', () => {
+  const summary: Summary = summarize(playSession(load(SIMPLE), BLACK, new Set([1])));
+  const json = JSON.parse(toJSON(summary)) as Record<string, unknown>;
+
+  assert.ok('timing' in json, 'the field is present');
+  assert.equal(json.timing, null);
+});
+
+// ── Tenuki ───────────────────────────────────────────────────────────────────
+
+/**
+ * Black plays dd; White answers at fc (3 away, local); Black is prompted at
+ * move 3. The reference point for move 3 is White's fc.
+ */
 const LOCAL_REPLY = '(;SZ[19];B[dd];W[fc];B[df];W[qq])';
 
 test('the first move has nothing to measure against', () => {

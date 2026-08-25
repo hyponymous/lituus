@@ -81,6 +81,8 @@ export interface SummaryRow {
   readonly actualAway: boolean | null;
   /** Did your guess go elsewhere? Null on the same terms. */
   readonly guessAway: boolean | null;
+  /** How long this one took, or null if it was never measured. */
+  readonly elapsedMs: number | null;
 }
 
 /**
@@ -123,6 +125,24 @@ export interface Streak {
   readonly lastMove: number;
 }
 
+/**
+ * How long the predictions took.
+ *
+ * The median leads rather than the mean, and that is not a stylistic
+ * preference. Nothing stops the clock when the user looks away, so a single
+ * answer given after lunch is an hour long and drags a mean past uselessness.
+ * The median survives it; `slowestMs` is where that guess shows up, which is
+ * the honest place for it.
+ */
+export interface Timing {
+  /** Predictions that were actually measured. */
+  readonly timed: number;
+  readonly totalMs: number;
+  readonly medianMs: number;
+  readonly fastestMs: number;
+  readonly slowestMs: number;
+}
+
 export interface Summary {
   readonly game: string;
   readonly color: Color;
@@ -132,6 +152,8 @@ export interface Summary {
   readonly rows: readonly SummaryRow[];
   /** Runs of consecutive hits, in the order they were played. */
   readonly streaks: readonly Streak[];
+  /** How long it took, or null when nothing was measured. */
+  readonly timing: Timing | null;
   /** True when the user stopped before the record ran out. */
   readonly abandoned: boolean;
   /**
@@ -229,6 +251,47 @@ export function longestStreak(summary: Summary): Streak | null {
   return best;
 }
 
+/**
+ * Timings over the predictions that carry one. Null when none do — a session
+ * from before timing existed reports nothing rather than a row of zeros,
+ * which would read as "instant" instead of "unknown".
+ */
+function timingOf(guesses: readonly Guess[]): Timing | null {
+  const times: number[] = guesses
+    .map((made) => made.elapsedMs)
+    .filter((ms): ms is number => ms !== null)
+    .sort((a, b) => a - b);
+
+  if (times.length === 0) return null;
+
+  const middle: number = Math.floor(times.length / 2);
+  const medianMs: number =
+    times.length % 2 === 0 ? Math.round((times[middle - 1] + times[middle]) / 2) : times[middle];
+
+  return {
+    timed: times.length,
+    totalMs: times.reduce((sum, ms) => sum + ms, 0),
+    medianMs,
+    fastestMs: times[0],
+    slowestMs: times[times.length - 1],
+  };
+}
+
+/**
+ * A duration for reading, not for arithmetic. Sub-minute times keep one
+ * decimal, because the difference between 1.4s and 2.1s is the interesting
+ * part of this measurement and rounding to whole seconds erases it.
+ */
+export function duration(ms: number): string {
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+
+  const total: number = Math.round(ms / 1000);
+  const minutes: number = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes}m ${String(total % 60).padStart(2, '0')}s`;
+
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
+}
+
 function phaseResults(game: Game, rows: readonly SummaryRow[]): PhaseResult[] {
   return PHASES.map((phase) => {
     const inPhase: readonly SummaryRow[] = rows.filter((row) => row.phase === phase);
@@ -252,6 +315,7 @@ export function summarize(session: Session): Summary {
       hit: made.hit,
       actualAway: from === null ? null : isAway(board, from, made.actual),
       guessAway: from === null ? null : isAway(board, from, made.guess),
+      elapsedMs: made.elapsedMs,
     };
   });
 
@@ -263,6 +327,7 @@ export function summarize(session: Session): Summary {
     tenuki: tenukiResult(board, game, session.guesses),
     rows,
     streaks: streaksOf(rows),
+    timing: timingOf(session.guesses),
     abandoned: session.guesses.length < countPrompts(game, color),
     sgf: serialize([game.source]),
   };
@@ -295,6 +360,16 @@ export function toJSON(summary: Summary): string {
         sameArea: summary.tenuki.sameArea,
         unscored: summary.tenuki.unscored,
       },
+      timing:
+        summary.timing === null
+          ? null
+          : {
+              timed: summary.timing.timed,
+              totalMs: summary.timing.totalMs,
+              medianMs: summary.timing.medianMs,
+              fastestMs: summary.timing.fastestMs,
+              slowestMs: summary.timing.slowestMs,
+            },
       streaks: summary.streaks.map((streak) => ({
         length: streak.length,
         firstMove: streak.firstMove,
@@ -314,6 +389,7 @@ export function toJSON(summary: Summary): string {
         hit: row.hit,
         playedAway: row.actualAway,
         youPlayedAway: row.guessAway,
+        ms: row.elapsedMs,
       })),
       // Last, and much the largest field: the record itself, so the result is
       // self-contained. Everything a reader wants is above it.
@@ -336,6 +412,15 @@ export function toText(summary: Summary): string {
 
   if (summary.abandoned) {
     lines.push(`Ended early: ${result.guessed} of ${result.total} moves predicted.`);
+  }
+
+  const { timing } = summary;
+  if (timing) {
+    lines.push(
+      `Time: ${duration(timing.totalMs)} over ${timing.timed} moves, ` +
+        `median ${duration(timing.medianMs)} ` +
+        `(fastest ${duration(timing.fastestMs)}, slowest ${duration(timing.slowestMs)})`,
+    );
   }
 
   const best: Streak | null = longestStreak(summary);

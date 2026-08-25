@@ -140,6 +140,33 @@ test('a move belonging to the other color is rejected', () => {
   assert.throws(() => restoreSession(JSON.stringify(bad)), /does not belong to the color/);
 });
 
+test('per-guess times survive the round trip', () => {
+  const game: Game = readGame(parse(GAME));
+  let played: Session = startSession(game, BLACK);
+  const times = [1500, 4200, 900];
+  for (const ms of times) {
+    if (played.phase !== 'prompt' || played.move?.index == null) break;
+    played = advance(guess(played, played.move.index, ms));
+  }
+
+  const restored: Session = restoreSession(toJSON(summarize(played)));
+  assert.deepEqual(restored.guesses.map((made) => made.elapsedMs), times);
+});
+
+test('a result from before timing restores with no times rather than zeros', () => {
+  const played: Session = play(GAME, BLACK, new Set([1]));
+  const older = JSON.parse(toJSON(summarize(played))) as {
+    timing: unknown;
+    moves: Record<string, unknown>[];
+  };
+  delete (older as Record<string, unknown>).timing;
+  for (const row of older.moves) delete row.ms;
+
+  const restored: Session = restoreSession(JSON.stringify(older));
+  assert.ok(restored.guesses.every((made) => made.elapsedMs === null));
+  assert.equal(summarize(restored).timing, null);
+});
+
 // ── Drift ────────────────────────────────────────────────────────────────────
 
 test('a result that still computes the same way reports no drift', () => {
@@ -256,6 +283,14 @@ test('an export made before the sgf field carried anything still diffs cleanly',
  * and the harness already reports that case as drift when you look at it.
  */
 const SAVED: string = readFileSync('test/fixtures/result.json', 'utf8');
+
+test('the saved result is an untimed session, and says so rather than guessing', () => {
+  // It was played before timing existed. Null is the honest answer.
+  const summary: Summary = summarize(restoreSession(SAVED));
+
+  assert.equal(summary.timing, null);
+  assert.ok(summary.rows.every((row) => row.elapsedMs === null));
+});
 
 test('the saved result restores to a full session', () => {
   const session: Session = restoreSession(SAVED);

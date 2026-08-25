@@ -7,8 +7,8 @@
  * already knows how to explore. No per-move commentary is written: "you played
  * here and it was wrong" is precisely what the variation already says, and
  * repeating it as text would be noise. Comments are reserved for what the
- * structure cannot carry: the session summary at the root today, and time
- * taken or engine evaluation once those exist.
+ * structure cannot carry: the session summary at the root, which now includes
+ * how long the predictions took, and engine evaluation once that exists.
  *
  * The original tree is rebuilt in place rather than regenerated from the game
  * model, so commentary, markup, the record's own variations, and properties

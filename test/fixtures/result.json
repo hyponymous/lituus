@@ -14,6 +14,7 @@
     "sameArea": 9,
     "unscored": 0
   },
+  "timing": null,
   "streaks": [
     {
       "length": 4,
@@ -84,7 +85,8 @@
       "actual": "D16",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 4,
@@ -93,7 +95,8 @@
       "actual": "C4",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 6,
@@ -102,7 +105,8 @@
       "actual": "R5",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 8,
@@ -111,7 +115,8 @@
       "actual": "P5",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 10,
@@ -120,7 +125,8 @@
       "actual": "M4",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 12,
@@ -129,7 +135,8 @@
       "actual": "P6",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 14,
@@ -138,7 +145,8 @@
       "actual": "R3",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 16,
@@ -147,7 +155,8 @@
       "actual": "S3",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 18,
@@ -156,7 +165,8 @@
       "actual": "R6",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 20,
@@ -165,7 +175,8 @@
       "actual": "J3",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 22,
@@ -174,7 +185,8 @@
       "actual": "E4",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 24,
@@ -183,7 +195,8 @@
       "actual": "E5",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 26,
@@ -192,7 +205,8 @@
       "actual": "C5",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 28,
@@ -201,7 +215,8 @@
       "actual": "P3",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 30,
@@ -210,7 +225,8 @@
       "actual": "P2",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 32,
@@ -219,7 +235,8 @@
       "actual": "Q2",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 34,
@@ -228,7 +245,8 @@
       "actual": "E8",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 36,
@@ -237,7 +255,8 @@
       "actual": "O7",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 38,
@@ -246,7 +265,8 @@
       "actual": "G2",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 40,
@@ -255,7 +275,8 @@
       "actual": "K5",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 42,
@@ -264,7 +285,8 @@
       "actual": "N7",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 44,
@@ -273,7 +295,8 @@
       "actual": "K6",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 46,
@@ -282,7 +305,8 @@
       "actual": "J7",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 48,
@@ -291,7 +315,8 @@
       "actual": "O6",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 50,
@@ -300,7 +325,8 @@
       "actual": "H6",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 52,
@@ -309,7 +335,8 @@
       "actual": "J2",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 54,
@@ -318,7 +345,8 @@
       "actual": "K4",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 56,
@@ -327,7 +355,8 @@
       "actual": "M3",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 58,
@@ -336,7 +365,8 @@
       "actual": "N2",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 60,
@@ -345,7 +375,8 @@
       "actual": "L4",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 62,
@@ -354,7 +385,8 @@
       "actual": "N3",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 64,
@@ -363,7 +395,8 @@
       "actual": "M1",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 66,
@@ -372,7 +405,8 @@
       "actual": "F6",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 68,
@@ -381,7 +415,8 @@
       "actual": "C13",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 70,
@@ -390,7 +425,8 @@
       "actual": "G7",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 72,
@@ -399,7 +435,8 @@
       "actual": "H9",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 74,
@@ -408,7 +445,8 @@
       "actual": "D17",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 76,
@@ -417,7 +455,8 @@
       "actual": "C15",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 78,
@@ -426,7 +465,8 @@
       "actual": "B14",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 80,
@@ -435,7 +475,8 @@
       "actual": "C14",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 82,
@@ -444,7 +485,8 @@
       "actual": "E18",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 84,
@@ -453,7 +495,8 @@
       "actual": "F17",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 86,
@@ -462,7 +505,8 @@
       "actual": "F16",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 88,
@@ -471,7 +515,8 @@
       "actual": "G14",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 90,
@@ -480,7 +525,8 @@
       "actual": "O16",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 92,
@@ -489,7 +535,8 @@
       "actual": "O17",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 94,
@@ -498,7 +545,8 @@
       "actual": "O13",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 96,
@@ -507,7 +555,8 @@
       "actual": "Q15",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 98,
@@ -516,7 +565,8 @@
       "actual": "Q13",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 100,
@@ -525,7 +575,8 @@
       "actual": "M14",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 102,
@@ -534,7 +585,8 @@
       "actual": "O15",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 104,
@@ -543,7 +595,8 @@
       "actual": "N14",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 106,
@@ -552,7 +605,8 @@
       "actual": "L13",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 108,
@@ -561,7 +615,8 @@
       "actual": "M12",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 110,
@@ -570,7 +625,8 @@
       "actual": "K12",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 112,
@@ -579,7 +635,8 @@
       "actual": "K11",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 114,
@@ -588,7 +645,8 @@
       "actual": "D19",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 116,
@@ -597,7 +655,8 @@
       "actual": "C18",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 118,
@@ -606,7 +665,8 @@
       "actual": "G6",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 120,
@@ -615,7 +675,8 @@
       "actual": "D12",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 122,
@@ -624,7 +685,8 @@
       "actual": "F12",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 124,
@@ -633,7 +695,8 @@
       "actual": "E12",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 126,
@@ -642,7 +705,8 @@
       "actual": "E9",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 128,
@@ -651,7 +715,8 @@
       "actual": "F9",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 130,
@@ -660,7 +725,8 @@
       "actual": "O18",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 132,
@@ -669,7 +735,8 @@
       "actual": "R12",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 134,
@@ -678,7 +745,8 @@
       "actual": "R14",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 136,
@@ -687,7 +755,8 @@
       "actual": "S14",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 138,
@@ -696,7 +765,8 @@
       "actual": "O12",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 140,
@@ -705,7 +775,8 @@
       "actual": "F19",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 142,
@@ -714,7 +785,8 @@
       "actual": "Q4",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 144,
@@ -723,7 +795,8 @@
       "actual": "Q3",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 146,
@@ -732,7 +805,8 @@
       "actual": "O1",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 148,
@@ -741,7 +815,8 @@
       "actual": "H13",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 150,
@@ -750,7 +825,8 @@
       "actual": "T16",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 152,
@@ -759,7 +835,8 @@
       "actual": "O1",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 154,
@@ -768,7 +845,8 @@
       "actual": "H15",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 156,
@@ -777,7 +855,8 @@
       "actual": "G17",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 158,
@@ -786,7 +865,8 @@
       "actual": "F15",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 160,
@@ -795,7 +875,8 @@
       "actual": "D19",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 162,
@@ -804,7 +885,8 @@
       "actual": "L18",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 164,
@@ -813,7 +895,8 @@
       "actual": "J18",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 166,
@@ -822,7 +905,8 @@
       "actual": "H14",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 168,
@@ -831,7 +915,8 @@
       "actual": "M18",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 170,
@@ -840,7 +925,8 @@
       "actual": "G18",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 172,
@@ -849,7 +935,8 @@
       "actual": "D19",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 174,
@@ -858,7 +945,8 @@
       "actual": "K18",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 176,
@@ -867,7 +955,8 @@
       "actual": "F13",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 178,
@@ -876,7 +965,8 @@
       "actual": "D19",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 180,
@@ -885,7 +975,8 @@
       "actual": "C18",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 182,
@@ -894,7 +985,8 @@
       "actual": "B19",
       "hit": true,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 184,
@@ -903,7 +995,8 @@
       "actual": "M6",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 186,
@@ -912,7 +1005,8 @@
       "actual": "B5",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 188,
@@ -921,7 +1015,8 @@
       "actual": "N17",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 190,
@@ -930,7 +1025,8 @@
       "actual": "O9",
       "hit": false,
       "playedAway": true,
-      "youPlayedAway": true
+      "youPlayedAway": true,
+      "ms": null
     },
     {
       "move": 192,
@@ -939,7 +1035,8 @@
       "actual": "J13",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 194,
@@ -948,7 +1045,8 @@
       "actual": "M11",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 196,
@@ -957,7 +1055,8 @@
       "actual": "L9",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 198,
@@ -966,7 +1065,8 @@
       "actual": "N5",
       "hit": true,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     },
     {
       "move": 200,
@@ -975,7 +1075,8 @@
       "actual": "N8",
       "hit": false,
       "playedAway": false,
-      "youPlayedAway": false
+      "youPlayedAway": false,
+      "ms": null
     }
   ],
   "sgf": "(;GM[1]FF[4]SZ[19]CA[utf-8]AP[SmartGo One:3.1.6]GN[2024-07-09d]PW[Ichiriki Ryo]WR[9d]PB[Ke Jie]BR[9d]EV[10th Ing Cup]RO[Semi-final, Game 3]DT[2024-07-09]PC[Courtyard Mansion, Cicheng Old Town, Ningbo City, Zhejiang Prov.]KM[8]RE[W+R]RU[Ing Goe];B[qd];W[dd];B[pq];W[cp];B[oc];W[qo];B[pm];W[oo];B[np];W[lp];B[no];W[on];B[mn];W[qq];B[qr];W[rq];B[om];W[qn];B[eq];W[iq];B[dn];W[ep];B[fp];W[eo];B[dq];W[co];B[cq];W[oq];B[nq];W[or];B[op];W[pr];B[cl];W[el];B[ci];W[nm];B[hp];W[gr];B[fq];W[jo];B[fm];W[mm];B[kn];W[jn];B[jm];W[im];B[jl];W[nn];B[hq];W[hn];B[jq];W[ir];B[ip];W[jp];B[kq];W[lq];B[lr];W[mr];B[kr];W[kp];B[nr];W[mq];B[hr];W[ls];B[is];W[fn];B[qi];W[cg];B[em];W[gm];B[fl];W[hk];B[cc];W[dc];B[cd];W[ce];B[be];W[bf];B[de];W[cf];B[db];W[eb];B[bb];W[fc];B[ee];W[fd];B[id];W[gf];B[oi];W[nd];B[lc];W[nc];B[ob];W[ng];B[le];W[pe];B[qe];W[pg];B[mh];W[lf];B[me];W[ne];B[qg];W[mf];B[kf];W[kg];B[jf];W[lh];B[jg];W[jh];B[ih];W[ji];B[eg];W[da];B[ca];W[cb];B[go];W[gn];B[db];W[dh];B[ea];W[fh];B[di];W[eh];B[mj];W[ek];B[cn];W[fk];B[bh];W[nb];B[lk];W[qh];B[ph];W[qf];B[rh];W[rf];B[rb];W[nh];B[qm];W[fa];B[os];W[pp];B[ps];W[pq];B[ms];W[ns];B[gg];W[hg];B[ms];W[sd];B[rd];W[ns];B[ge];W[he];B[gd];W[gc];B[hd];W[fe];B[ms];W[da];B[ns];W[kb];B[hc];W[ib];B[ff];W[hf];B[hb];W[lb];B[ea];W[gb];B[ha];W[da];B[jc];W[jb];B[ea];W[fg];B[ef];W[da];B[kd];W[cb];B[md];W[ba];B[rn];W[ln];B[bq];W[bo];B[bn];W[mc];B[kc];W[nk];B[ok];W[ig];B[ij];W[li];B[mk];W[kk];B[lm];W[mo];B[jk];W[ml])"

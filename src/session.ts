@@ -28,6 +28,16 @@ export interface Guess {
   /** Where the user guessed. */
   readonly guess: number;
   readonly hit: boolean;
+  /**
+   * How long the prompt was on screen before the click, in milliseconds, or
+   * null when nothing measured it — a test, or a session restored from an
+   * export that predates timing.
+   *
+   * Measured by the caller rather than here. A session is a value and every
+   * transition is pure; reading a clock inside one would make replaying the
+   * same guesses produce different sessions.
+   */
+  readonly elapsedMs: number | null;
 }
 
 export interface Session {
@@ -108,8 +118,12 @@ export function canGuess(session: Session, index: number): boolean {
 /**
  * Commit a guess and reveal the answer. There is no confirmation step: the
  * click is the answer, and it is scored on exact match against the played move.
+ *
+ * `elapsedMs` is how long the user had the prompt in front of them. It is
+ * passed in because only the caller drawing the screen knows when the prompt
+ * appeared, and because a pure transition cannot read a clock.
  */
-export function guess(session: Session, index: number): Session {
+export function guess(session: Session, index: number, elapsedMs: number | null = null): Session {
   if (session.phase !== 'prompt' || !session.move) {
     throw new SessionError(`Cannot guess while ${session.phase}.`);
   }
@@ -127,6 +141,7 @@ export function guess(session: Session, index: number): Session {
     actual: move.index,
     guess: index,
     hit: index === move.index,
+    elapsedMs,
   };
 
   return {
