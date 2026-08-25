@@ -95,6 +95,23 @@ Source lives in `src/`, which is also the Vite root; tests and SGF fixtures in
 SVG and reports clicks), `game` (a record read as one playable game), and
 `session` (the prompt → reveal → advance loop and its scoring).
 
+### Rendering a saved result
+
+Reaching the summary screen honestly means predicting a whole game, which is a
+slow way to look at a change to it. Under `npm run dev`, `#dev` opens a harness
+that takes the JSON from a summary's **Copy as JSON** — paste it, or drop the
+`.json` file anywhere on the page — and renders the real summary screen from
+it. The game record travels inside the export, so one blob is enough.
+
+It rebuilds the session and lets `summarize` recompute everything, rather than
+reading the numbers back, so what you see is what a live session would produce.
+It then diffs a fresh export against the pasted one and reports any field that
+no longer agrees, which makes a saved result a regression test for every number
+on the page. Keep a couple of interesting ones around.
+
+The harness lives in `src/dev.ts` and is reached only under
+`import.meta.env.DEV`, so `npm run build` drops it.
+
 The rules engine has been checked on real games against an independent
 implementation, but could use more testing against unusual edge cases.
 

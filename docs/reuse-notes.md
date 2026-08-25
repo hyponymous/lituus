@@ -91,6 +91,22 @@ the middleware back if and when they do; it is unrelated to any shared code.
 
 **At extraction:** not applicable — build config is per-project.
 
+### Masthead: the tagline is screen-dependent
+
+**kifu:** header is static — wordmark, tagline, repo link — because the whole
+app is one screen and the tagline never has to get out of the way.
+
+**lituus:** the same three parts and the same GitHub mark, but the tagline
+shows only on the landing screen. `main.ts` stamps `data-screen` on the body
+and the stylesheet hides it elsewhere.
+
+**Why:** lituus has four screens and the tagline answers a question the user
+only has on the way in. Once a session is running, it is a line of text
+between the reader and the board.
+
+**At extraction:** the markup and the GitHub mark could be shared; the
+visibility rule could not, and belongs to whichever app has screens.
+
 ## Candidate package contents
 
 - `sgf-parser` — the strongest candidate. Pure, no DOM, already stable.

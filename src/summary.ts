@@ -8,6 +8,7 @@
  */
 
 import { pointName } from './goban.ts';
+import { serialize } from './sgf-writer.ts';
 import { describe, type Game } from './game.ts';
 import { countPrompts, score, type Guess, type Score, type Session } from './session.ts';
 import { BLACK, toRowCol, type Color, type Position } from './rules.ts';
@@ -106,6 +107,22 @@ export interface Tenuki {
   readonly sameArea: number;
 }
 
+/**
+ * Shortest run of correct predictions worth naming. Two in a row happens by
+ * accident often enough that reporting it would bury the runs that don't.
+ */
+export const STREAK_MIN = 3;
+
+/** A run of consecutive correct predictions, at least STREAK_MIN long. */
+export interface Streak {
+  /** Index into `rows` of the run's first prediction. */
+  readonly start: number;
+  readonly length: number;
+  /** Move numbers at either end of the run, for display. */
+  readonly firstMove: number;
+  readonly lastMove: number;
+}
+
 export interface Summary {
   readonly game: string;
   readonly color: Color;
@@ -113,8 +130,19 @@ export interface Summary {
   readonly phases: readonly PhaseResult[];
   readonly tenuki: Tenuki;
   readonly rows: readonly SummaryRow[];
+  /** Runs of consecutive hits, in the order they were played. */
+  readonly streaks: readonly Streak[];
   /** True when the user stopped before the record ran out. */
   readonly abandoned: boolean;
+  /**
+   * The record the session was played on, serialized back to SGF.
+   *
+   * Carried so an exported result stands on its own. Every other field is a
+   * number or a point name, and none of them can draw a board: without the
+   * record, a result can be read but not looked at. The JSON export is the
+   * only consumer today; anything that reopens a past session will want it.
+   */
+  readonly sgf: string;
 }
 
 function rateOf(hits: number, guessed: number): number {
@@ -165,6 +193,42 @@ export function tenukiAgreement(tenuki: Tenuki): { agreed: number; scored: numbe
   return { agreed, scored: agreed + tenuki.stayedHome + tenuki.leftEarly };
 }
 
+/**
+ * Runs of consecutive hits. Consecutive means consecutive *prompts*, not
+ * consecutive move numbers: the opponent's reply always sits between two of
+ * them, so the gap is the normal case rather than a break in the run.
+ */
+function streaksOf(rows: readonly SummaryRow[]): Streak[] {
+  const streaks: Streak[] = [];
+  let start = 0;
+
+  // One past the end, with a miss implied there, so a run reaching the last
+  // prediction is closed by the same code that closes every other one.
+  for (let i = 0; i <= rows.length; i++) {
+    if (rows[i]?.hit) continue;
+    const length: number = i - start;
+    if (length >= STREAK_MIN) {
+      streaks.push({
+        start,
+        length,
+        firstMove: rows[start].moveNumber,
+        lastMove: rows[i - 1].moveNumber,
+      });
+    }
+    start = i + 1;
+  }
+  return streaks;
+}
+
+/** The best run, or null if nothing reached STREAK_MIN. Ties go to the earliest. */
+export function longestStreak(summary: Summary): Streak | null {
+  let best: Streak | null = null;
+  for (const streak of summary.streaks) {
+    if (!best || streak.length > best.length) best = streak;
+  }
+  return best;
+}
+
 function phaseResults(game: Game, rows: readonly SummaryRow[]): PhaseResult[] {
   return PHASES.map((phase) => {
     const inPhase: readonly SummaryRow[] = rows.filter((row) => row.phase === phase);
@@ -198,7 +262,9 @@ export function summarize(session: Session): Summary {
     phases: phaseResults(game, rows),
     tenuki: tenukiResult(board, game, session.guesses),
     rows,
+    streaks: streaksOf(rows),
     abandoned: session.guesses.length < countPrompts(game, color),
+    sgf: serialize([game.source]),
   };
 }
 
@@ -229,6 +295,11 @@ export function toJSON(summary: Summary): string {
         sameArea: summary.tenuki.sameArea,
         unscored: summary.tenuki.unscored,
       },
+      streaks: summary.streaks.map((streak) => ({
+        length: streak.length,
+        firstMove: streak.firstMove,
+        lastMove: streak.lastMove,
+      })),
       phases: summary.phases.map((result) => ({
         phase: result.phase,
         predicted: result.guessed,
@@ -244,6 +315,9 @@ export function toJSON(summary: Summary): string {
         playedAway: row.actualAway,
         youPlayedAway: row.guessAway,
       })),
+      // Last, and much the largest field: the record itself, so the result is
+      // self-contained. Everything a reader wants is above it.
+      sgf: summary.sgf,
     },
     null,
     2,
@@ -262,6 +336,11 @@ export function toText(summary: Summary): string {
 
   if (summary.abandoned) {
     lines.push(`Ended early: ${result.guessed} of ${result.total} moves predicted.`);
+  }
+
+  const best: Streak | null = longestStreak(summary);
+  if (best) {
+    lines.push(`Longest streak: ${best.length} in a row (moves ${best.firstMove}–${best.lastMove})`);
   }
 
   lines.push('', 'By phase:');

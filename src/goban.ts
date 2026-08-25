@@ -93,6 +93,21 @@ export function pointName(pos: Position, index: number): string {
   return `${COL_LETTERS[col] ?? '?'}${pos.rows - row}`;
 }
 
+/**
+ * The inverse of `pointName`: "Q16" back to a board index, null if that is not
+ * a point on this board. Kept beside its inverse so the two cannot drift apart
+ * — a round trip through the two is the only thing that reads an exported
+ * result back in.
+ */
+export function pointFromName(pos: Position, name: string): number | null {
+  const col: number = COL_LETTERS.indexOf(name.slice(0, 1).toUpperCase());
+  const row: number = pos.rows - Number(name.slice(1));
+
+  if (col < 0 || col >= pos.cols) return null;
+  if (!Number.isInteger(row) || row < 0 || row >= pos.rows) return null;
+  return toIndex(pos, row, col);
+}
+
 function svgEl(tag: string, attrs: Record<string, string | number>): SVGElement {
   const el: SVGElement = document.createElementNS('http://www.w3.org/2000/svg', tag);
   for (const [key, value] of Object.entries(attrs)) el.setAttribute(key, String(value));

@@ -21,12 +21,18 @@ import {
   renderSetup,
   renderSummary,
 } from './views.ts';
+import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
 import type { Color } from './rules.ts';
 
 type Screen =
   | { readonly name: 'landing'; readonly error?: string }
   | { readonly name: 'setup'; readonly game: Game }
-  | { readonly name: 'session'; readonly session: Session };
+  | { readonly name: 'session'; readonly session: Session }
+  /**
+   * The dev harness. Only ever reached under `import.meta.env.DEV`. `result`
+   * is a saved result to render straight away, as a drop supplies.
+   */
+  | { readonly name: 'dev'; readonly result?: string };
 
 /**
  * Reveal timing, all of it, in one place.
@@ -73,6 +79,16 @@ function loadGame(sgf: string): void {
     return;
   }
 
+  if (looksLikeResult(sgf)) {
+    // Saying "expected '(' at line 1" to someone holding an exported result is
+    // technically true and no help at all.
+    show({
+      name: 'landing',
+      error: 'That looks like an exported result, not a game record. Load the .sgf it was played on.',
+    });
+    return;
+  }
+
   try {
     const trees: GameTree[] = parse(sgf);
     show({ name: 'setup', game: readGame(trees) });
@@ -84,12 +100,31 @@ function loadGame(sgf: string): void {
   }
 }
 
+/**
+ * The dev screen's callbacks. It renders the real summary view, so it has to
+ * be able to do everything that view offers — starting a session included.
+ */
+function devProps(): DevProps {
+  return {
+    onBack: (): void => show({ name: 'landing' }),
+    onReplay: (game: Game, color: Color): void =>
+      show({ name: 'session', session: startSession(game, color) }),
+  };
+}
+
+/** A saved result rather than a game record — the exports are JSON objects. */
+function looksLikeResult(text: string): boolean {
+  return text.trimStart().startsWith('{');
+}
+
 function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
     renderSummary(root, {
       summary: summarize(session),
       session,
+      onReplay: (color: Color): void =>
+        show({ name: 'session', session: startSession(session.game, color) }),
       onRestart: () => show({ name: 'landing' }),
     });
     return;
@@ -110,6 +145,11 @@ function drawSession(session: Session): void {
 }
 
 function draw(): void {
+  // The masthead lives outside #app and is not a view's to redraw, so the
+  // screen name goes on the body and the stylesheet does the rest: the tagline
+  // introduces the tool on the landing screen and gets out of the way after.
+  document.body.dataset.screen = screen.name;
+
   switch (screen.name) {
     case 'landing':
       renderLanding(root, { error: screen.error, onLoad: loadGame });
@@ -127,7 +167,31 @@ function draw(): void {
     case 'session':
       drawSession(screen.session);
       return;
+    case 'dev': {
+      // Guarded rather than merely unreachable: this is what lets the bundler
+      // drop dev.ts and everything it pulls in from the production build.
+      const { result } = screen;
+      if (import.meta.env.DEV) renderDev(root, devProps(), result);
+      return;
+    }
   }
+}
+
+/**
+ * Route a dropped file by what is in it, rather than by which screen happens
+ * to be showing. A record opens with '(' and a saved result with '{', so there
+ * is nothing to disambiguate.
+ *
+ * Routing on the screen instead was wrong in the way that matters: dropping a
+ * result anywhere but #dev fed it to the SGF parser, and the user got a
+ * complaint about column 1 instead of the screen they asked for.
+ */
+function loadDropped(text: string): void {
+  if (import.meta.env.DEV && looksLikeResult(text)) {
+    show({ name: 'dev', result: text });
+    return;
+  }
+  loadGame(text);
 }
 
 function main(): void {
@@ -145,7 +209,17 @@ function main(): void {
   document.documentElement.style.setProperty('--reveal-beat', `${REVEAL_MS.beat}ms`);
 
   root = app;
-  acceptDroppedFiles(document.body, loadGame);
+  acceptDroppedFiles(document.body, loadDropped);
+
+  if (import.meta.env.DEV) {
+    // Typing the fragment is the whole entry point — no link in the UI, so
+    // nothing about the dev harness has to be hidden on the way to production.
+    if (location.hash === DEV_HASH) screen = { name: 'dev' };
+    window.addEventListener('hashchange', (): void => {
+      if (location.hash === DEV_HASH) show({ name: 'dev' });
+    });
+  }
+
   draw();
 }
 

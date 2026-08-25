@@ -16,13 +16,16 @@ import {
   type Session,
 } from '../src/session.ts';
 import {
+  STREAK_MIN,
   TENUKI_RADIUS,
+  longestStreak,
   percent,
   phaseOf,
   summarize,
   tenukiAgreement,
   toJSON,
   toText,
+  type Streak,
   type Summary,
   type SummaryRow,
 } from '../src/summary.ts';
@@ -184,6 +187,98 @@ test('all three phases are always present, in order', () => {
  * Black plays dd; White answers at fc (3 away, local); Black is prompted at
  * move 3. The reference point for move 3 is White's fc.
  */
+// ── Streaks ──────────────────────────────────────────────────────────────────
+
+/** Black's prompts in `longGame` are the odd move numbers, in order. */
+function blackMoves(from: number, count: number): number[] {
+  return Array.from({ length: count }, (_, i) => from + i * 2);
+}
+
+test('a run shorter than STREAK_MIN is not reported as a streak', () => {
+  const game: Game = longGame(40);
+  const hits: number[] = blackMoves(1, STREAK_MIN - 1);
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(hits)));
+
+  assert.equal(summary.score.hits, hits.length);
+  assert.deepEqual(summary.streaks, []);
+});
+
+test('consecutive correct predictions make a streak, named by move number', () => {
+  const game: Game = longGame(40);
+  const hits: number[] = blackMoves(1, STREAK_MIN);
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(hits)));
+
+  assert.equal(summary.streaks.length, 1);
+  assert.deepEqual(summary.streaks[0], {
+    start: 0,
+    length: STREAK_MIN,
+    firstMove: hits[0],
+    lastMove: hits.at(-1),
+  });
+});
+
+test('consecutive means consecutive prompts, not consecutive move numbers', () => {
+  // Black's prompts are two apart in the record; the opponent's reply between
+  // them must not read as a break in the run.
+  const game: Game = longGame(40);
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(blackMoves(1, 4))));
+
+  assert.equal(summary.streaks.length, 1);
+  assert.equal(summary.streaks[0].length, 4);
+});
+
+test('a miss between two runs splits them', () => {
+  const game: Game = longGame(40);
+  const hits: number[] = [...blackMoves(1, 3), ...blackMoves(9, 3)];
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(hits)));
+
+  assert.deepEqual(
+    summary.streaks.map((streak) => [streak.firstMove, streak.lastMove]),
+    [
+      [1, 5],
+      [9, 13],
+    ],
+  );
+});
+
+test('a run reaching the last prediction is still closed', () => {
+  const game: Game = longGame(12);
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(blackMoves(7, 3))));
+
+  assert.equal(summary.streaks.length, 1);
+  assert.deepEqual(summary.streaks[0], { start: 3, length: 3, firstMove: 7, lastMove: 11 });
+});
+
+test('the longest streak wins, and a tie goes to the earlier run', () => {
+  const game: Game = longGame(40);
+  const hits: number[] = [...blackMoves(1, 3), ...blackMoves(9, 3)];
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(hits)));
+  const best: Streak | null = longestStreak(summary);
+
+  assert.equal(best?.firstMove, 1);
+
+  const longer: Summary = summarize(
+    playSession(game, BLACK, new Set([...blackMoves(1, 3), ...blackMoves(9, 5)])),
+  );
+  assert.equal(longestStreak(longer)?.firstMove, 9);
+  assert.equal(longestStreak(longer)?.length, 5);
+});
+
+test('a session with no streak has no longest one', () => {
+  const summary: Summary = summarize(playSession(longGame(40), BLACK, new Set([1, 5])));
+  assert.equal(longestStreak(summary), null);
+});
+
+test('the exports carry the streaks', () => {
+  const game: Game = longGame(40);
+  const summary: Summary = summarize(playSession(game, BLACK, new Set(blackMoves(3, 4))));
+
+  assert.match(toText(summary), /Longest streak: 4 in a row \(moves 3–9\)/);
+  assert.deepEqual(JSON.parse(toJSON(summary)).streaks, [
+    { length: 4, firstMove: 3, lastMove: 9 },
+  ]);
+});
+
 const LOCAL_REPLY = '(;SZ[19];B[dd];W[fc];B[df];W[qq])';
 
 test('the first move has nothing to measure against', () => {

@@ -63,7 +63,7 @@ function nextPrompt(game: Game, color: Color, from: number): number {
 }
 
 /** The position once the record is exhausted: the board as the game left it. */
-function finalPosition(game: Game): Position {
+export function finalPosition(game: Game): Position {
   return game.moves.at(-1)?.after ?? game.initial;
 }
 

@@ -45,13 +45,67 @@ body.dropping {
   margin: 0 auto;
 }
 
+/* ── Masthead ────────────────────────────────────────────────────────────── */
+
 .masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
   margin-bottom: 2rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
 }
 
 h1 {
   font-size: 1.5rem;
-  margin: 0 0 0.25rem;
+  margin: 0;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: inherit;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.wordmark img {
+  width: 20px;
+  height: 20px;
+}
+
+.wordmark:hover {
+  color: var(--accent);
+}
+
+/* The tagline says what the tool is, which is only a question on the way in.
+   After that it is a line of text between the user and the board. main.ts
+   stamps the screen name on the body; the rule is here so no view owns it. */
+.tagline {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+body:not([data-screen='landing']) .tagline {
+  display: none;
+}
+
+.repo-link {
+  display: flex;
+  margin-left: auto;
+  color: var(--muted);
+  align-self: center;
+}
+
+.repo-link:hover {
+  color: var(--fg);
+}
+
+.repo-link svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
 }
 
 h2 {
@@ -86,6 +140,16 @@ p {
   border-left: 3px solid var(--miss);
   background: var(--panel);
   color: var(--miss);
+}
+
+/* The dev harness's drift report (src/dev.ts). Wraps rather than scrolling —
+   each line is one finding, and a long path is still worth reading whole.
+   Unlike the script, this cannot be stripped from the production build; it is
+   a few dozen bytes, and keeping it here beats a second stylesheet. */
+.drift {
+  margin: 0.5rem 0 0;
+  white-space: pre-wrap;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ── Controls ────────────────────────────────────────────────────────────── */
@@ -252,6 +316,42 @@ button.primary {
   font-variant-numeric: tabular-nums;
 }
 
+/* Quiet by design. It answers "how much is left" for anyone who looks, and is
+   not supposed to pull the eye away from the board while a prompt is open. */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 32rem;
+  margin: 0 0 0.5rem;
+}
+
+.progress-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease-out;
+}
+
+.progress-count {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill {
+    transition: none;
+  }
+}
+
 /* ── Summary ─────────────────────────────────────────────────────────────── */
 
 h3 {
@@ -264,52 +364,184 @@ section .muted {
 }
 
 .headline {
-  font-size: 1.4rem;
+  margin-bottom: 0.1rem;
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.subhead {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* ── Review board and hit/miss strip ─────────────────────────────────────── */
+
+.review {
+  max-width: 32rem;
+  margin: 0 0 0.5rem;
+}
+
+.review .board {
+  margin-bottom: 0.4rem;
+}
+
+.caption {
+  min-height: 1.5em;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* Sits between the board and the strip: the board says where you are, these
+   move you, the strip says where that is in the session. */
+.nav {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 0.5rem;
+}
+
+.nav-button {
+  min-width: 2.5rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.nav-button:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.4;
+}
+
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  max-width: 32rem;
+  margin: 0 0 1.5rem;
+}
+
+/* Cells are buttons, so they have to shed every button style they inherit. */
+.strip .cell {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+.strip .cell.hit {
+  background: var(--hit);
+}
+
+.strip .cell.miss {
+  background: var(--miss);
+  opacity: 0.4;
+}
+
+.strip .cell:hover,
+.strip .cell:focus-visible {
+  border-color: var(--fg);
+}
+
+.strip .cell.selected {
+  border-color: var(--fg);
+  outline: 1px solid var(--fg);
+}
+
+/* ── Local-or-away matrix ────────────────────────────────────────────────── */
+
+/* Sized to its contents, not to the page: a 2x2 stretched full width puts its
+   four numbers so far apart that the diagonal stops reading as a diagonal.
+   This is the only table left on the page, so it carries its own styling
+   rather than overriding a generic one nothing else uses. */
+.matrix {
+  width: auto;
+  margin: 0 0 1.5rem;
+  border-collapse: collapse;
+}
+
+.matrix th {
+  color: var(--muted);
+  font-size: 0.85rem;
   font-weight: 600;
 }
 
-table {
-  width: 100%;
-  margin: 0 0 1.5rem;
-  border-collapse: collapse;
+.matrix thead th {
+  text-align: center;
+}
+
+.matrix tbody th {
+  padding-right: 0.75rem;
+  text-align: right;
+}
+
+.matrix td {
+  min-width: 7.5rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  text-align: center;
+}
+
+/* The empty corner is spacing, not a cell. */
+.matrix thead td {
+  border: none;
+}
+
+/* The diagonal — where you and the player made the same call. Tinted rather
+   than outlined, so the pair reads as one shape across the gap between them. */
+.matrix td.agree {
+  background: color-mix(in srgb, var(--hit) 14%, transparent);
+}
+
+.matrix .count {
+  display: block;
+  font-size: 1.3rem;
   font-variant-numeric: tabular-nums;
 }
 
-th,
-td {
-  padding: 0.35rem 0.5rem;
-  border-bottom: 1px solid var(--line);
-  text-align: left;
-}
-
-th {
+.matrix .cell-note {
+  display: block;
+  margin-top: 0.15rem;
   color: var(--muted);
-  font-weight: 600;
+  font-size: 0.75rem;
 }
 
-/* The wrapper scrolls, not the table: a table set to display:block loses its
-   column alignment, since the cells stop sharing a layout context. */
-.scroll {
-  max-height: 24rem;
+/* ── Phase bars ──────────────────────────────────────────────────────────── */
+
+.bars {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content;
+  gap: 0.45rem 0.75rem;
+  align-items: center;
   margin-bottom: 1.5rem;
-  overflow-y: auto;
-  border-bottom: 1px solid var(--line);
 }
 
-.scroll table {
-  margin-bottom: 0;
+.bar-row {
+  display: contents;
 }
 
-.scroll thead th {
-  position: sticky;
-  top: 0;
-  background: var(--bg);
+.bar-label {
+  color: var(--muted);
 }
 
-.moves tr.hit td:last-child {
-  color: var(--hit);
+.bar-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--line);
+  overflow: hidden;
 }
 
-.moves tr.miss td:last-child {
-  color: var(--miss);
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
 }
+
+.bar-value {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+

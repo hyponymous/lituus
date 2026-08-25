@@ -13,12 +13,22 @@ import { describe, type Game, type GameMeta, type GameMove } from './game.ts';
 import {
   canGuess,
   countPrompts,
+  finalPosition,
   lastPlayed,
   score,
+  type Guess,
   type Score,
   type Session,
 } from './session.ts';
-import { percent, tenukiAgreement, toJSON, toText, type Summary } from './summary.ts';
+import {
+  longestStreak,
+  percent,
+  tenukiAgreement,
+  toJSON,
+  toText,
+  type Streak,
+  type Summary,
+} from './summary.ts';
 import { annotatedFilename, annotatedSgf } from './annotate.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
@@ -114,13 +124,18 @@ export interface SetupProps {
   readonly onBack: () => void;
 }
 
-/** Metadata rows worth showing, skipping whatever the record omitted. */
+/**
+ * Metadata rows worth showing, skipping whatever the record omitted.
+ *
+ * `Result` is deliberately absent. Knowing who won colors every prediction
+ * that follows — a losing player's moves read as mistakes before they are
+ * seen. The summary shows it once the guessing is over.
+ */
 function metaRows(meta: GameMeta): [string, string][] {
   const fields: [string, string | number | undefined][] = [
     ['Event', meta.event],
     ['Date', meta.date],
     ['Place', meta.place],
-    ['Result', meta.result],
     ['Komi', meta.komi],
     ['Handicap', meta.handicap],
     ['Ruleset', meta.ruleset],
@@ -213,6 +228,40 @@ function sessionStatus(session: Session): string {
   return running;
 }
 
+/**
+ * How far through the game you are. The move number alone does not answer
+ * "another ten of these, or another hundred?", and a 19x19 record asks enough
+ * questions that the answer changes how a user paces themselves.
+ */
+function progressBar(session: Session): HTMLElement {
+  const { guessed, total }: Score = score(session);
+  // The prompt on screen counts as reached, not answered. Without it the bar
+  // sits at zero while the user is already looking at the first question.
+  const reached: number = Math.min(guessed + (session.phase === 'prompt' ? 1 : 0), total);
+  const label = `${reached} of ${total}`;
+
+  return el(
+    'div',
+    {
+      class: 'progress',
+      role: 'progressbar',
+      'aria-valuemin': '0',
+      'aria-valuemax': String(total),
+      'aria-valuenow': String(reached),
+      'aria-label': `Move ${label}`,
+    },
+    [
+      el('div', { class: 'progress-track' }, [
+        el('div', {
+          class: 'progress-fill',
+          style: `width:${total > 0 ? (reached / total) * 100 : 0}%`,
+        }),
+      ]),
+      el('span', { class: 'progress-count' }, [label]),
+    ],
+  );
+}
+
 export function renderSession(root: HTMLElement, props: SessionProps): void {
   const { session } = props;
   const board: HTMLElement = el('div', { class: 'board' });
@@ -245,6 +294,7 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
     root,
     el('h2', {}, [describe(session.game)]),
     board,
+    progressBar(session),
     el('p', { class: 'readout' }, [sessionStatus(session)]),
     el('div', { class: 'actions' }, controls),
   );
@@ -254,8 +304,10 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
 
 export interface SummaryProps {
   readonly summary: Summary;
-  /** The session the summary came from, for the annotated export. */
+  /** The session the summary came from, for the annotated export and replays. */
   readonly session: Session;
+  /** Play the same record again, as either color. */
+  readonly onReplay: (color: Color) => void;
   readonly onRestart: () => void;
 }
 
@@ -276,75 +328,334 @@ function download(name: string, text: string, type: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** Your local-or-away calls against the player's, as a 2x2 with its diagonal named. */
-function tenukiTable(summary: Summary): HTMLElement {
+/**
+ * Your local-or-away calls against the player's, laid out as the 2x2 they
+ * actually form rather than as four rows.
+ *
+ * Agreement is the diagonal, and seeing it as a diagonal is the whole point: a
+ * list makes the reader rebuild the shape before they can read it, and the
+ * off-diagonal cells are two different habits, not two more numbers.
+ */
+function tenukiMatrix(summary: Summary): HTMLElement {
   const { tenuki } = summary;
   const { agreed, scored } = tenukiAgreement(tenuki);
 
-  const row = (label: string, count: number, note?: string): HTMLElement =>
-    el('tr', {}, [
-      el('td', {}, [label]),
-      el('td', {}, [String(count)]),
-      el('td', { class: 'muted' }, [note ?? '']),
+  const cell = (count: number, agrees: boolean, note?: string): HTMLElement =>
+    el('td', { class: agrees ? 'agree' : '' }, [
+      el('span', { class: 'count' }, [String(count)]),
+      ...(note === undefined ? [] : [el('span', { class: 'cell-note' }, [note])]),
     ]);
+
+  // Both leaving says little if you left for opposite corners, so the cell
+  // that claims the most agreement is the one that has to qualify itself.
+  const sameArea: string | undefined =
+    tenuki.bothAway > 0 ? `${tenuki.sameArea} to the same area` : undefined;
 
   return el('section', {}, [
     el('h3', {}, ['Local or away']),
     el('p', { class: 'muted' }, [
       `You made the same call as the player on ${agreed} of ${scored} moves ` +
-        `(${percent(scored > 0 ? agreed / scored : 0)}). Missing the exact point is ` +
-        'expected; the decision to answer or leave is the habit worth seeing.',
+        `(${percent(scored > 0 ? agreed / scored : 0)}).`,
     ]),
-    el('table', { class: 'stats' }, [
+    el('table', { class: 'matrix' }, [
+      el('thead', {}, [
+        el('tr', {}, [
+          el('td', {}, []),
+          el('th', { scope: 'col' }, ['You answered']),
+          el('th', { scope: 'col' }, ['You left']),
+        ]),
+      ]),
       el('tbody', {}, [
-        row('You both played away', tenuki.bothAway,
-          tenuki.bothAway > 0 ? `${tenuki.sameArea} to the same area` : ''),
-        row('They left, you answered', tenuki.stayedHome),
-        row('You both answered locally', tenuki.bothLocal),
-        row('They answered, you left', tenuki.leftEarly),
+        el('tr', {}, [
+          el('th', { scope: 'row' }, ['They answered']),
+          cell(tenuki.bothLocal, true),
+          cell(tenuki.leftEarly, false),
+        ]),
+        el('tr', {}, [
+          el('th', { scope: 'row' }, ['They left']),
+          cell(tenuki.stayedHome, false),
+          cell(tenuki.bothAway, true, sameArea),
+        ]),
       ]),
     ]),
   ]);
 }
 
-function phaseTable(summary: Summary): HTMLElement {
-  const body: HTMLElement[] = summary.phases.map((phase) =>
-    el('tr', {}, [
-      el('td', {}, [phase.phase]),
-      el('td', {}, [phase.guessed > 0 ? `${phase.hits} / ${phase.guessed}` : '—']),
-      el('td', {}, [phase.guessed > 0 ? percent(phase.rate) : '—']),
-    ]),
-  );
+/**
+ * The best run, with up to two more behind it. Subordinate to the rate on
+ * purpose: a streak is the memorable part of a session, but it is a smaller
+ * claim than the overall number and must not read as the score.
+ */
+function streakNote(summary: Summary): string {
+  const best: Streak | null = longestStreak(summary);
+  if (!best) return '';
 
-  return el('table', { class: 'stats' }, [
-    el('thead', {}, [
-      el('tr', {}, [el('th', {}, ['Phase']), el('th', {}, ['Hits']), el('th', {}, ['Rate'])]),
-    ]),
-    el('tbody', {}, body),
-  ]);
+  const others: Streak[] = summary.streaks
+    .filter((streak) => streak !== best)
+    .sort((a, b) => b.length - a.length || a.start - b.start)
+    .slice(0, 2);
+
+  const rest: string =
+    others.length > 0
+      ? `, then ${others.map((streak) => `${streak.length} at ${streak.firstMove}`).join(' and ')}`
+      : '';
+  return ` · longest run ${best.length} (moves ${best.firstMove}–${best.lastMove})${rest}`;
 }
 
-function moveTable(summary: Summary): HTMLElement {
-  const body: HTMLElement[] = summary.rows.map((row) =>
-    el('tr', { class: row.hit ? 'hit' : 'miss' }, [
-      el('td', {}, [String(row.moveNumber)]),
-      el('td', {}, [row.guess]),
-      el('td', {}, [row.actual]),
-      el('td', {}, [row.hit ? 'hit' : 'miss']),
+/**
+ * Phase rates as bars. Three numbers are exactly the case where a table makes
+ * the reader do the comparing: the point is which phase is weakest, and a bar
+ * answers that before the labels are read. The counts stay, since a rate over
+ * four guesses and one over forty are not the same claim.
+ */
+function phaseBars(summary: Summary): HTMLElement {
+  const rows: HTMLElement[] = summary.phases.map((phase) =>
+    el('div', { class: 'bar-row' }, [
+      el('span', { class: 'bar-label' }, [phase.phase]),
+      el('div', { class: 'bar-track' }, [
+        el('div', { class: 'bar-fill', style: `width:${phase.rate * 100}%` }),
+      ]),
+      el('span', { class: 'bar-value' }, [
+        phase.guessed > 0 ? `${percent(phase.rate)} (${phase.hits}/${phase.guessed})` : 'not reached',
+      ]),
     ]),
   );
 
-  return el('table', { class: 'moves' }, [
-    el('thead', {}, [
-      el('tr', {}, [
-        el('th', {}, ['Move']),
-        el('th', {}, ['You']),
-        el('th', {}, ['Played']),
-        el('th', {}, ['']),
-      ]),
-    ]),
-    el('tbody', {}, body),
-  ]);
+  return el('section', {}, [el('h3', {}, ['By phase']), el('div', { class: 'bars' }, rows)]);
+}
+
+/**
+ * Where the review is looking: a prediction by index, or `null` for the final
+ * position. Null is the slot *after* the last prediction rather than a
+ * separate mode — that is what lets "last" mean the end of the game, which is
+ * where the review opens and where the session itself left off.
+ */
+type Cursor = number | null;
+
+/**
+ * Where a control would go from here, or `undefined` for nowhere.
+ *
+ * The two have to be distinguishable, and `null` is already spoken for: it is
+ * the final position, a real destination. Collapsing them would leave "no
+ * earlier miss" and "go to the end of the game" as the same answer, and the
+ * buttons could not tell which of them to disable.
+ */
+type Target = Cursor | undefined;
+
+/** The nearest miss in `step`'s direction, or undefined if there is none. */
+function missFrom(summary: Summary, at: Cursor, step: number): Target {
+  const from: number = at === null ? summary.rows.length : at;
+  for (let i = from + step; i >= 0 && i < summary.rows.length; i += step) {
+    if (!summary.rows[i].hit) return i;
+  }
+  return undefined;
+}
+
+interface NavButton {
+  /** Marks the shortcut this button shares, so a key press can reuse it. */
+  readonly key: 'first' | 'prevMiss' | 'prev' | 'next' | 'nextMiss' | 'last';
+  readonly label: string;
+  readonly title: string;
+  readonly target: (at: Cursor) => Target;
+}
+
+/**
+ * The ways through a finished session, in the order they sit on screen: the
+ * ends outermost, the misses just inside them, single steps in the middle.
+ *
+ * Each is a pure "where would this go from here?", which is what lets the
+ * panel act on a control and decide whether to disable it from one definition
+ * rather than two that can disagree.
+ */
+function navButtons(summary: Summary): NavButton[] {
+  const last: number = summary.rows.length - 1;
+  const empty: boolean = summary.rows.length === 0;
+
+  return [
+    {
+      key: 'first',
+      label: '⏮',
+      title: 'First prediction (Ctrl+Left)',
+      target: (at) => (empty || at === 0 ? undefined : 0),
+    },
+    {
+      key: 'prevMiss',
+      label: '◀◀',
+      title: 'Previous miss (Shift+Left)',
+      target: (at) => missFrom(summary, at, -1),
+    },
+    {
+      key: 'prev',
+      label: '◀',
+      title: 'Previous (Left)',
+      target: (at) => {
+        if (at === null) return empty ? undefined : last;
+        return at === 0 ? undefined : at - 1;
+      },
+    },
+    {
+      key: 'next',
+      label: '▶',
+      title: 'Next (Right)',
+      target: (at) => (at === null ? undefined : at === last ? null : at + 1),
+    },
+    {
+      key: 'nextMiss',
+      label: '▶▶',
+      title: 'Next miss (Shift+Right)',
+      target: (at) => missFrom(summary, at, 1),
+    },
+    {
+      key: 'last',
+      label: '⏭',
+      title: 'Final position (Ctrl+Right)',
+      target: (at) => (at === null ? undefined : null),
+    },
+  ];
+}
+
+/** Which control an arrow key stands for, or undefined if it is not one. */
+function shortcutFor(event: KeyboardEvent): NavButton['key'] | undefined {
+  if (event.altKey || event.metaKey) return undefined;
+
+  const back: boolean = event.key === 'ArrowLeft';
+  if (!back && event.key !== 'ArrowRight') return undefined;
+
+  if (event.ctrlKey) return back ? 'first' : 'last';
+  if (event.shiftKey) return back ? 'prevMiss' : 'nextMiss';
+  return back ? 'prev' : 'next';
+}
+
+/**
+ * The summary's board, its caption, its navigation, and the hit/miss strip —
+ * one component, because all four read and write the same cursor.
+ *
+ * The board opens on the final position: the session ends mid-reveal, and a
+ * board that simply vanishes takes the game with it. From there the session is
+ * walkable by clicking a cell, by the buttons, or by the arrow keys. Walking
+ * it by keyboard is the point — reading a run of misses one at a time is the
+ * thing the summary is for, and hunting for small cells with a mouse is not.
+ *
+ * This is the one place a view keeps state of its own. Where the review is
+ * looking is not application state — nothing outside this section can observe
+ * it, and it should not survive a re-render — so it stays a closure here
+ * rather than becoming a screen main.ts has to hold.
+ */
+function reviewPanel(session: Session, summary: Summary): HTMLElement {
+  const board: HTMLElement = el('div', { class: 'board' });
+  const caption: HTMLElement = el('p', { class: 'caption muted' });
+  const nav: HTMLElement = el('div', { class: 'nav' });
+  const strip: HTMLElement = el('div', { class: 'strip' });
+  const panel: HTMLElement = el('div', { class: 'review' }, [board, caption, nav, strip]);
+
+  let at: Cursor = null;
+
+  const cells: HTMLElement[] = summary.rows.map((row, index) => {
+    const label = `Move ${row.moveNumber}: you ${row.guess}, played ${row.actual}`;
+    const cell: HTMLElement = el('button', {
+      type: 'button',
+      class: `cell ${row.hit ? 'hit' : 'miss'}`,
+      title: label,
+      'aria-label': label,
+    });
+    // Clicking the cell already showing steps back out to the final position,
+    // so the strip is a toggle and there is no dead end to click out of.
+    cell.addEventListener('click', () => go(at === index ? null : index));
+    return cell;
+  });
+  strip.append(...cells);
+
+  const controls: readonly { readonly node: HTMLElement; readonly spec: NavButton }[] =
+    navButtons(summary).map((spec) => {
+      const node: HTMLElement = el(
+        'button',
+        { type: 'button', class: 'nav-button', title: spec.title, 'aria-label': spec.title },
+        [spec.label],
+      );
+      node.addEventListener('click', () => follow(spec));
+      return { node, spec };
+    });
+  nav.append(...controls.map((control) => control.node));
+
+  const follow = (spec: NavButton): void => {
+    const target: Target = spec.target(at);
+    if (target !== undefined) go(target);
+  };
+
+  const drawBoard = (): void => {
+    if (at === null) {
+      renderGoban(finalPosition(session.game), board, { showCoordinates: true });
+      const { result } = session.game.meta;
+      caption.textContent = result
+        ? `Final position — ${result}`
+        : 'Final position — the record does not give a result.';
+      return;
+    }
+
+    const row = summary.rows[at];
+    const made: Guess = session.guesses[at];
+    const move: GameMove = session.game.moves[row.moveNumber - 1];
+
+    renderGoban(move.after, board, {
+      showCoordinates: true,
+      markers: made.hit
+        ? [{ index: made.actual, kind: 'hit' }]
+        : [
+            { index: made.actual, kind: 'actual' },
+            { index: made.guess, kind: 'guess' },
+          ],
+    });
+
+    const where = `Move ${row.moveNumber} (${at + 1} of ${summary.rows.length})`;
+    caption.textContent = made.hit
+      ? `${where} — you played ${row.actual}, and so did they.`
+      : `${where} — you played ${row.guess}; ${colorName(summary.color)} played ${row.actual}.`;
+  };
+
+  const go = (next: Cursor): void => {
+    at = next;
+    drawBoard();
+
+    cells.forEach((cell, index) => cell.classList.toggle('selected', index === at));
+    for (const { node, spec } of controls) {
+      node.toggleAttribute('disabled', spec.target(at) === undefined);
+    }
+  };
+
+  /*
+   * Arrow keys are bound on the document rather than on the panel, because a
+   * panel you must click before the keys work is a panel whose keys nobody
+   * finds. The handler removes itself once its panel is off the page, which
+   * happens on the next key press after a re-render — cheap, and it cannot
+   * outlive the document the way a forgotten listener would.
+   */
+  const onKey = (event: KeyboardEvent): void => {
+    if (!panel.isConnected) {
+      document.removeEventListener('keydown', onKey);
+      return;
+    }
+
+    const target: EventTarget | null = event.target;
+    const typing: boolean =
+      target instanceof HTMLElement && ['INPUT', 'TEXTAREA'].includes(target.tagName);
+    if (typing) return;
+
+    const key: NavButton['key'] | undefined = shortcutFor(event);
+    if (!key) return;
+
+    const spec: NavButton | undefined = controls.find((c) => c.spec.key === key)?.spec;
+    if (!spec) return;
+
+    // Only once it is going to act, so an arrow key the review cannot use
+    // still scrolls the page.
+    if (spec.target(at) === undefined) return;
+    event.preventDefault();
+    follow(spec);
+  };
+  document.addEventListener('keydown', onKey);
+
+  go(null);
+  return panel;
 }
 
 /** Copy to the clipboard, reporting on the button itself so there is no dialog. */
@@ -365,20 +676,77 @@ function copyButton(label: string, text: () => string): HTMLElement {
   return node;
 }
 
+/**
+ * What to do next, with the other color first.
+ *
+ * Playing the opposite side is the interesting replay: every one of those
+ * moves has already gone past as an answer, and none of them was ever a
+ * question. The same side again is mostly a memory test, so it is offered but
+ * not led with.
+ *
+ * Both labels lead with how the run relates to the one just finished, because
+ * that is the actual choice — two buttons reading "Replay as Black" and
+ * "Replay as White" make the reader recall which side they just played before
+ * they can tell the options apart.
+ */
+function replayActions(props: SummaryProps): HTMLElement {
+  const other: Color = props.summary.color === BLACK ? WHITE : BLACK;
+
+  const replay = (label: string, color: Color, primary: boolean): HTMLElement =>
+    button(`${label} — play as ${colorName(color)}`, () => props.onReplay(color), {
+      ...(primary ? { class: 'primary' } : {}),
+    });
+
+  return el('div', {}, [
+    el('div', { class: 'actions' }, [
+      replay('Switch sides', other, true),
+      replay('Same again', props.summary.color, false),
+      button('Study another game', props.onRestart),
+    ]),
+    // Said once, quietly. Nothing stores scores yet, so there is no number to
+    // put an asterisk on — but the second run is a different task either way.
+    el('p', { class: 'note' }, [
+      'A replay is not comparable to a first run: you have seen the answers.',
+    ]),
+  ]);
+}
+
+/** Taking the result away. The rarer path, so it sits below the replays. */
+function exportActions(props: SummaryProps): HTMLElement {
+  const { summary } = props;
+
+  return el('div', { class: 'actions' }, [
+    button('Download annotated SGF', () =>
+      download(
+        annotatedFilename(summary),
+        annotatedSgf(props.session, summary),
+        'application/x-go-sgf',
+      ),
+    ),
+    copyButton('Copy as text', () => toText(summary)),
+    copyButton('Copy as JSON', () => toJSON(summary)),
+  ]);
+}
+
 export function renderSummary(root: HTMLElement, props: SummaryProps): void {
   const { summary } = props;
   const result: Score = summary.score;
 
-  const headline: string =
-    result.guessed > 0
-      ? `${result.hits} of ${result.guessed} correct — ${percent(result.rate)}`
-      : 'No moves predicted.';
-
   const parts: Child[] = [
     el('h2', {}, ['Session summary']),
     el('p', { class: 'muted' }, [`${summary.game} · played as ${colorName(summary.color)}`]),
-    el('p', { class: 'headline' }, [headline]),
   ];
+
+  if (result.guessed > 0) {
+    // The rate leads; the raw counts and the best run hang off it. Getting one
+    // in five is the headline number, and "of how many" is the qualifier.
+    parts.push(
+      el('p', { class: 'headline' }, [percent(result.rate)]),
+      el('p', { class: 'subhead' }, [`${result.hits} of ${result.guessed} correct`, streakNote(summary)]),
+    );
+  } else {
+    parts.push(el('p', { class: 'headline' }, ['No moves predicted.']));
+  }
 
   if (summary.abandoned) {
     parts.push(
@@ -388,26 +756,14 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
     );
   }
 
+  parts.push(reviewPanel(props.session, summary));
+
   if (result.guessed > 0) {
-    parts.push(phaseTable(summary));
-    if (tenukiAgreement(summary.tenuki).scored > 0) parts.push(tenukiTable(summary));
-    parts.push(el('div', { class: 'scroll' }, [moveTable(summary)]));
+    parts.push(phaseBars(summary));
+    if (tenukiAgreement(summary.tenuki).scored > 0) parts.push(tenukiMatrix(summary));
   }
 
-  parts.push(
-    el('div', { class: 'actions' }, [
-      button('Download annotated SGF', () =>
-        download(
-          annotatedFilename(summary),
-          annotatedSgf(props.session, summary),
-          'application/x-go-sgf',
-        ),
-      ),
-      copyButton('Copy as text', () => toText(summary)),
-      copyButton('Copy as JSON', () => toJSON(summary)),
-      button('Study another game', props.onRestart, { class: 'primary' }),
-    ]),
-  );
+  parts.push(replayActions(props), exportActions(props));
 
   replace(root, ...parts);
 }
