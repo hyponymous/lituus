@@ -73,6 +73,18 @@ interface Record_ {
   readonly playedVisits: number | null;
   readonly best: string;
   readonly bestScoreLead: number;
+  /**
+   * What the network's intuition proposed before any reading, and what
+   * reading then made of it. Where the most natural-looking move turns out
+   * to lose, the position punishes intuition — which is a far better proxy
+   * for difficulty than how concentrated the policy is.
+   */
+  readonly topPolicy: string;
+  readonly topPolicyPrior: number;
+  /** Points given up by the most natural-looking move. */
+  readonly topPolicyLoss: number;
+  /** Prior of the move search settled on: low means it had to be read. */
+  readonly bestPrior: number;
   readonly rootScoreLead: number;
   readonly candidates: number;
   readonly rootVisits: number;
@@ -97,7 +109,9 @@ function initialStones(pos: Position): Array<[string, string]> {
   return stones;
 }
 
-function buildQuery(id: string, game: Game, maxVisits: number): object {
+function buildQuery(
+  id: string, game: Game, maxVisits: number, turns?: ReadonlySet<number>,
+): object {
   const moves: Array<[string, string]> = game.moves.map((m) => [
     m.color === 1 ? 'B' : 'W',
     toGtp(game.initial, m.index),
@@ -107,7 +121,7 @@ function buildQuery(id: string, game: Game, maxVisits: number): object {
   // prompted on, matching promptableMoves().
   const analyzeTurns: number[] = game.moves
     .map((m, i) => (m.index === null ? -1 : i))
-    .filter((i) => i >= 0);
+    .filter((i) => i >= 0 && (turns === undefined || turns.has(i)));
 
   return {
     id,
@@ -132,6 +146,7 @@ function toRecord(game: Game, name: string, res: Response): Record_ | null {
   const best: MoveInfo = infos[0];
   const hit: MoveInfo | undefined = infos.find((m) => m.move === played);
   const root: number = res.rootInfo?.scoreLead ?? best.scoreLead;
+  const topPolicy: MoveInfo = infos.reduce((a, b) => (b.prior > a.prior ? b : a));
 
   return {
     game: name,
@@ -145,14 +160,34 @@ function toRecord(game: Game, name: string, res: Response): Record_ | null {
     playedVisits: hit ? hit.visits : null,
     best: best.move,
     bestScoreLead: best.scoreLead,
+    topPolicy: topPolicy.move,
+    topPolicyPrior: topPolicy.prior,
+    topPolicyLoss: root - topPolicy.scoreLead,
+    bestPrior: best.prior,
     rootScoreLead: root,
     candidates: infos.length,
     rootVisits: res.rootInfo?.visits ?? 0,
   };
 }
 
+/**
+ * A sample to analyze, as `sample.ts` wrote it: game name to selected turns.
+ * Absent means every prompted position, which is what a screening run wants.
+ */
+function readPositions(path: string): Map<string, Set<number>> {
+  const selected = new Map<string, Set<number>>();
+  for (const line of readFileSync(path, 'utf8').trim().split('\n').filter(Boolean)) {
+    const { game, turn } = JSON.parse(line) as { game: string; turn: number };
+    let turns: Set<number> | undefined = selected.get(game);
+    if (!turns) { turns = new Set(); selected.set(game, turns); }
+    turns.add(turn);
+  }
+  return selected;
+}
+
 function parseArgs(argv: readonly string[]): {
-  net: string; visits: number; out: string; label: string; files: string[];
+  net: string; visits: number; out: string; label: string;
+  positions: string | undefined; files: string[];
 } {
   const flags = new Map<string, string>();
   const files: string[] = [];
@@ -163,32 +198,42 @@ function parseArgs(argv: readonly string[]): {
   const net: string | undefined = flags.get('net');
   const out: string | undefined = flags.get('out');
   if (!net || !out || files.length === 0) {
-    throw new Error('usage: analyze.ts --net <net> --visits <n> --out <file> [--label <s>] <sgf...>');
+    throw new Error(
+      'usage: analyze.ts --net <net> --visits <n> --out <file> [--label <s>]' +
+      ' [--positions <sample.jsonl>] <sgf...>',
+    );
   }
   return {
     net,
     visits: Number(flags.get('visits') ?? 500),
     out,
     label: flags.get('label') ?? basename(net),
+    positions: flags.get('positions'),
     files,
   };
 }
 
 async function main(): Promise<void> {
-  const { net, visits, out, label, files } = parseArgs(process.argv.slice(2));
+  const { net, visits, out, label, positions, files } = parseArgs(process.argv.slice(2));
+  const selected: Map<string, Set<number>> | undefined =
+    positions === undefined ? undefined : readPositions(positions);
 
   const games = new Map<string, Game>();
   const queries: object[] = [];
   for (const file of files) {
     const name: string = basename(file, '.sgf');
+    const turns: Set<number> | undefined = selected?.get(name);
+    // A sampled run skips whole games the sample did not reach into.
+    if (selected !== undefined && turns === undefined) continue;
     const trees: GameTree[] = parse(readFileSync(file, 'utf8'));
     const game: Game = readGame(trees);
     games.set(name, game);
-    queries.push(buildQuery(name, game, visits));
+    queries.push(buildQuery(name, game, visits, turns));
   }
 
-  const expected: number = [...games.values()]
-    .reduce((n, g) => n + g.moves.filter((m) => m.index !== null).length, 0);
+  const expected: number = selected === undefined
+    ? [...games.values()].reduce((n, g) => n + g.moves.filter((m) => m.index !== null).length, 0)
+    : [...selected.values()].reduce((n, t) => n + t.size, 0);
   console.error(`[${label}] ${games.size} games, ${expected} positions, ${visits} visits`);
 
   const katago: ChildProcessWithoutNullStreams = spawn(

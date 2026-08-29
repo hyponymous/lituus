@@ -38,10 +38,20 @@ Precomputing an analysis has to guess in advance which moves a user might
 guess, and pay for all of them. A live engine knows the guess the moment it
 is made and pays for nothing else.
 
-It is also **one search per prompt, not three**. Point loss for both the
-guess and the played move comes out of a single root search —
-`rootScoreLead − scoreLead(m)` — provided both moves are among the visited
-children. Coverage of that proviso is measured in §5.
+It is also **about one search per prompt, not three**. Point loss for both
+the guess and the played move comes out of a single root search —
+`rootScoreLead − scoreLead(m)` — whenever both moves are among the visited
+children. Where the guess is not, the engine is asked directly: KataGo's
+analysis engine accepts `allowMoves`, which forces the search onto a named
+move and returns a real evaluation of it. Verified — forcing A1 and T19 on
+move 5 of an empty board returns −13.40 and −13.11 against a true root of
+−0.28.
+
+So coverage, measured in §5, is a cost rather than a limit: it says how often
+a second query is needed, not how often a number is unavailable. Note that a search values a position
+assuming best play among the moves it was allowed, so a query restricted to
+one move treats that move as best and reports no loss for it. The loss is the
+unrestricted root estimate minus the forced query's value for the move.
 
 ## 3. Network sizes, measured
 
@@ -241,7 +251,39 @@ configuration measured to crash. Whether the ceiling is a leak or a genuine
 device limit is therefore the single blocker for AI scoring on mobile, rather
 than one consideration among several.
 
-## 8. HumanSL
+## 8. Difficulty is predictable from policy-versus-search
+
+The network's policy proposes a move before any search; the search then judges
+it. Where the most natural-looking move turns out to lose, the position
+punishes intuition, and humans fall into it.
+
+Measured over the corpus, against the reference's verdict on what the player
+actually did:
+
+| Positions | n | Human lost >=3pt | Blundered |
+| --- | --- | --- | --- |
+| all (baseline) | 1401 | 12.2% | 3.6% |
+| natural move costs >=3pt | 34 | 61.8% | 44.1% |
+| natural move costs >=1pt | 97 | 45.4% | 19.6% |
+| natural move costs <1pt | 1304 | 9.7% | 2.4% |
+| best move had prior <0.05 | 33 | 33.3% | 9.1% |
+
+Not circular: the signal is computed from the engine's own policy without
+reference to the played move, and the error rate comes from a different
+configuration (b40c256@500) than the signal (b15c192@100).
+
+The asymmetry matters. "Looks obvious but is bad" predicts error far better
+than "good but hard to find" — amateurs play natural moves, so they are
+punished when the natural move is bad, while a merely hidden best move costs
+them only when the alternatives are bad too.
+
+Caveats: the strongest bucket is 34 positions, so the effect is clear and its
+magnitude is not; and the corpus is a single rank band.
+
+Policy *concentration*, by contrast, is not a difficulty measure — see
+[the AI scoring PRD](prd-ai-scoring.md) §5.
+
+## 9. HumanSL
 
 There is exactly one human-imitation network, `b18c384nbt-humanv0`, ~96 MB,
 with the imitated rank set at runtime rather than by downloading a different
@@ -261,7 +303,7 @@ is attractive wherever a real KataGo runs:
   most are where human instinct diverges from correct play — a better
   criterion than score swing, which merely finds sharp positions.
 
-## 9. Methodology notes worth keeping
+## 10. Methodology notes worth keeping
 
 Each of these produced, or would have produced, a plausible wrong answer.
 
@@ -295,7 +337,7 @@ whole-board fights** — exactly where point loss is largest and most worth
 teaching. An aggregate dominated by quiet moves would hide that, so
 `compare.ts` also reports error stratified by the reference's own band.
 
-## 10. Open
+## 11. Open
 
 - Whether §7's ceiling is a leak or a high-water mark. **This is now the
   critical path for mobile**, since §5 rules out the networks that fit.

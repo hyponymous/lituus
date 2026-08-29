@@ -28,6 +28,70 @@ small networks the current run does not:
 
 Drop the corpus — 19x19 and 9x9 games, SGF — in `experiments/corpus/`.
 
+`fetch-ogs.ts` collects one, banded by rank, from OGS:
+
+    node experiments/katago/fetch-ogs.ts \
+      --band 6k-3k --games 60 --out experiments/corpus/6k-3k
+
+Bands are `25k-20k`, `15k-10k`, `6k-3k`, `1d-3d`, `4d-6d`, `7d+`. Reads need
+no authentication; requests go out one per second. A run is resumable — it
+reads back the manifest it wrote and picks up where it stopped — and
+reproducible from `--seed`.
+
+The thinnest band needs help finding its way in, because random seeding never
+lands near it:
+
+    node experiments/katago/fetch-ogs.ts --band 7d+ --games 60 \
+      --cap 6 --pages 4 --seed-from-group 515 \
+      --out experiments/corpus/7d+
+
+`--seed-from-group` primes the queue from an OGS group's membership (515 is
+"OGS Title Tournaments"); `--seed-from <manifest.jsonl>` does the same from a
+neighboring band already collected. OGS has no rating leaderboard to seed
+from — see the design doc for why that is deliberate, and why it does not
+compromise the corpus.
+
+Each band directory gets a `manifest.jsonl` alongside the SGFs, recording per
+game both players' ids, ratings, derived ranks, the ranks the record itself
+displays, move count, outcome, komi, and ruleset. `experiments/corpus/` is
+git-ignored, so the corpus stays local.
+
+See [the rank survey design](../../docs/design-rank-survey.md) for why the
+discovery works the way it does, and what the filters are for.
+
+Once a band is collected, screening and sampling run:
+
+    node experiments/katago/analyze.ts --net <b15c192> --visits 50 \
+      --label 6k-3k-screen --out experiments/out/6k-3k-screen.jsonl \
+      experiments/corpus/6k-3k/*.sgf
+
+    node experiments/katago/sample.ts \
+      --screen experiments/out/6k-3k-screen.jsonl \
+      --target 800 --out experiments/out/6k-3k-sample.jsonl
+
+    node experiments/katago/analyze.ts --net <b40c256> --visits 500 \
+      --positions experiments/out/6k-3k-sample.jsonl \
+      --label 6k-3k-ref --out experiments/out/6k-3k-ref.jsonl \
+      experiments/corpus/6k-3k/*.sgf
+
+A search only reports moves it visited, so the reference has no verdict on
+moves bad enough that it never looked at them — up to a third of a weak
+band's sample, and disproportionately the blunders. `backfill.ts` forces
+those with `allowMoves`, writing a separate file rather than overwriting:
+
+    node experiments/katago/backfill.ts --net <b40c256> --visits 500 \
+      --ref experiments/out/6k-3k-ref.jsonl \
+      --out experiments/out/6k-3k-backfill.jsonl \
+      experiments/corpus/6k-3k/*.sgf
+
+`survey.ts` then reads a band back, weighted, merging the backfill if present:
+
+    node experiments/katago/survey.ts 6k-3k
+
+The stratification rule itself lives in `strata.ts`, shared by the sampler and
+the reader so a boundary cannot move between drawing a sample and analyzing
+it — that kind of drift would corrupt every weighted estimate silently.
+
 ## Running
 
     node experiments/katago/analyze.ts \
