@@ -88,6 +88,31 @@ those with `allowMoves`, writing a separate file rather than overwriting:
 
     node experiments/katago/survey.ts 6k-3k
 
+Everything above judges the move the game played. `guesses.ts` judges the move
+the *player* guessed, from a playthrough's exported result:
+
+    node experiments/katago/guesses.ts --net <b40c256> --visits 500 \
+      --play <playthrough.json> --ref experiments/out/<band>-ref.jsonl \
+      --out experiments/out/<band>-guesses.jsonl <game.sgf>
+
+It forces every guess rather than only the ones search happened to visit: a
+guess is one amateur's idea, so it is even less likely than a played move to
+appear in an unrestricted search, and forcing also spends the full visit
+budget on it instead of the three visits it might otherwise have got.
+
+Every pass above truncates its principal variation to six plies, because a
+hundred positions at 500 visits is twenty minutes and the tail of a line is
+barely searched. The three or four moves a review is actually about deserve
+better than a two-move refutation, so `deepen.ts` re-searches only those, at a
+much larger budget, and keeps the whole line:
+
+    node experiments/katago/deepen.ts --net <b40c256> --visits 4000 \
+      --play <playthrough.json> --stem experiments/out/dogfood/<name> <game.sgf>
+
+Only the lines are kept. Its scores would be measured at a different budget
+from every other number in the review, and one move carrying two point-loss
+figures that disagree is worse than one figure.
+
 The stratification rule itself lives in `strata.ts`, shared by the sampler and
 the reader so a boundary cannot move between drawing a sample and analyzing
 it — that kind of drift would corrupt every weighted estimate silently.
@@ -116,6 +141,23 @@ dissected move by move. Anonymize before committing anything anywhere:
 The identifier is only used to group records, so nothing is lost. The map is
 written to an ignored path and is the only thing that reverses this; it is
 deliberately not version-controlled.
+
+The records themselves need the same treatment, and need it more. A game
+fetched from a server arrives with both handles, a `PC` link straight back to
+the original, and — in over half of them — `C` properties holding the players'
+in-game chat, which is where real personal names turn up rather than handles:
+
+    node experiments/katago/anonymize.ts \
+      --players experiments/out/player-map.json experiments/corpus/*/*.sgf
+
+Chat and the back-link are dropped outright; the handles are replaced. This
+rewrites in place and is safe to re-run — an id already handed out maps to
+itself rather than being renamed again.
+
+Do this even for a corpus that never leaves the machine, because a record is
+not only an input: lituus embeds the whole thing in the result it exports at
+the end of a playthrough, so whatever the record still carries travels with
+every export.
 
 ## What is measured
 

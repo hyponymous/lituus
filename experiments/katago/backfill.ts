@@ -20,7 +20,11 @@
  * Writes only the repaired positions. Nothing is overwritten; `survey.ts`
  * merges this file over the reference when it is present.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import type { Readable, Writable } from 'node:stream';
+
+/** stdin and stdout are pipes; stderr is inherited, so it is null here. */
+type Engine = ChildProcessByStdio<Writable, Readable, null>;
 import { createInterface } from 'node:readline';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
@@ -30,6 +34,20 @@ import { stoneAt, type Position } from '../../src/rules.ts';
 import { toGtp } from './coords.ts';
 
 const CONFIG = 'experiments/katago/analysis.cfg';
+/**
+ * Below this many visits a child's `scoreLead` is barely searched — at one
+ * visit it is the raw network eval — so the number is reported with the same
+ * confidence as a properly read one while being worth much less. Measured on
+ * a dogfood game, a one-visit estimate was out by 10 points where moves with
+ * 50+ visits agreed with a forced search to within 0.2.
+ *
+ * So the repair condition is not "no verdict" but "no verdict worth having".
+ */
+const MIN_TRUSTED_VISITS = 10;
+
+/** Matches `analyze.ts`, so a repaired row carries the same length of line. */
+const PV_PLIES = 6;
+
 const RULESETS = new Set(['japanese', 'chinese', 'tromp-taylor', 'aga', 'new-zealand', 'korean']);
 
 interface RefRecord {
@@ -37,12 +55,15 @@ interface RefRecord {
   readonly turn: number;
   readonly played: string;
   readonly pointLoss: number | null;
+  readonly playedVisits: number | null;
   readonly rootScoreLead: number;
 }
 
 interface Response {
   readonly id: string;
-  readonly moveInfos?: ReadonlyArray<{ readonly move: string; readonly scoreLead: number }>;
+  readonly moveInfos?: ReadonlyArray<{
+    readonly move: string; readonly scoreLead: number; readonly pv?: readonly string[];
+  }>;
   readonly error?: string;
   readonly isDuringSearch?: boolean;
 }
@@ -67,7 +88,7 @@ function initialStones(pos: Position): Array<[string, string]> {
 }
 
 function parseArgs(argv: readonly string[]): {
-  net: string; visits: number; ref: string; out: string; files: string[];
+  net: string; visits: number; ref: string; out: string; minVisits: number; files: string[];
 } {
   const flags = new Map<string, string>();
   const files: string[] = [];
@@ -79,18 +100,22 @@ function parseArgs(argv: readonly string[]): {
   const ref: string | undefined = flags.get('ref');
   const out: string | undefined = flags.get('out');
   if (!net || !ref || !out || files.length === 0) {
-    throw new Error('usage: backfill.ts --net <net> --visits <n> --ref <ref.jsonl> --out <file> <sgf...>');
+    throw new Error('usage: backfill.ts --net <net> --visits <n> --ref <ref.jsonl> --out <file> [--min-visits <n>] <sgf...>');
   }
-  return { net, ref, out, visits: Number(flags.get('visits') ?? 500), files };
+  return {
+    net, ref, out, visits: Number(flags.get('visits') ?? 500),
+    minVisits: Number(flags.get('min-visits') ?? MIN_TRUSTED_VISITS), files,
+  };
 }
 
 async function main(): Promise<void> {
-  const { net, visits, ref, out, files } = parseArgs(process.argv.slice(2));
+  const { net, visits, ref, out, minVisits, files } = parseArgs(process.argv.slice(2));
 
   const unjudged: RefRecord[] = readFileSync(ref, 'utf8').trim().split('\n')
     .filter(Boolean).map((l) => JSON.parse(l) as RefRecord)
-    .filter((r) => r.pointLoss === null);
+    .filter((r) => r.pointLoss === null || (r.playedVisits ?? 0) < minVisits);
   if (unjudged.length === 0) { console.error(`[backfill] ${basename(ref)}: nothing to repair`); return; }
+  const missing: number = unjudged.filter((r) => r.pointLoss === null).length;
 
   const games = new Map<string, Game>();
   for (const file of files) {
@@ -122,8 +147,11 @@ async function main(): Promise<void> {
     });
   }
 
-  console.error(`[backfill] ${basename(ref)}: ${queries.length} positions to repair`);
-  const katago: ChildProcessWithoutNullStreams = spawn(
+  console.error(
+    `[backfill] ${basename(ref)}: ${queries.length} positions to repair` +
+    ` (${missing} with no verdict, ${queries.length - missing} under ${minVisits} visits)`,
+  );
+  const katago: Engine = spawn(
     process.env.KATAGO ?? 'katago',
     ['analysis', '-config', CONFIG, '-model', net],
     { stdio: ['pipe', 'pipe', 'inherit'] },
@@ -137,13 +165,15 @@ async function main(): Promise<void> {
       if (res.isDuringSearch) return;
       seen++;
       const root: number | undefined = roots.get(res.id);
-      const lead: number | undefined = res.moveInfos?.[0]?.scoreLead;
+      const info = res.moveInfos?.[0];
+      const lead: number | undefined = info?.scoreLead;
       if (root !== undefined && lead !== undefined && !res.error) {
         const index: number = Number(res.id.slice(1));
         const record: RefRecord = unjudged[index];
         repaired.push(JSON.stringify({
           game: record.game, turn: record.turn, played: record.played,
           pointLoss: root - lead, backfilled: true,
+          playedPv: info?.pv?.slice(0, PV_PLIES) ?? [],
         }));
       }
       if (seen % 25 === 0) console.error(`[backfill] ${seen}/${queries.length}`);

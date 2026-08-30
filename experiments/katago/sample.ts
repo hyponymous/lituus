@@ -16,7 +16,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
-  STRATA, STRATUM_LABEL, stratumOf, type Screened, type Stratum,
+  STRATA, STRATUM_LABEL, stratumOf, type Sampled, type Screened, type Stratum,
 } from './strata.ts';
 
 function parseArgs(argv: readonly string[]): {

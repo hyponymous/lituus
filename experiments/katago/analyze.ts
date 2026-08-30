@@ -13,7 +13,11 @@
  *
  * The engine binary is taken from $KATAGO, defaulting to `katago` on PATH.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import type { Readable, Writable } from 'node:stream';
+
+/** stdin and stdout are pipes; stderr is inherited, so it is null here. */
+type Engine = ChildProcessByStdio<Writable, Readable, null>;
 import { createInterface } from 'node:readline';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
@@ -37,6 +41,25 @@ interface MoveInfo {
   readonly prior: number;
   readonly scoreLead: number;
   readonly winrate: number;
+  readonly pv?: readonly string[];
+}
+
+/**
+ * How the search expects the game to go on after a move. Point loss says a
+ * move cost four points; this says why, which is the difference between a
+ * score and an explanation.
+ *
+ * Truncated deliberately. At 50 visits the variations run four to eight moves
+ * and the tail is barely searched, so showing the whole line would imply a
+ * confidence the search does not have. Six plies is enough to show why a move
+ * was bad — the move, the punishment, and the shape it leaves — without
+ * running past where the search has actually looked. The handful of moves
+ * that deserve a longer line get one from `deepen.ts` instead.
+ */
+const PV_PLIES = 6;
+
+function pvOf(info: MoveInfo | undefined): readonly string[] {
+  return info?.pv?.slice(0, PV_PLIES) ?? [];
 }
 
 interface Response {
@@ -73,6 +96,9 @@ interface Record_ {
   readonly playedVisits: number | null;
   readonly best: string;
   readonly bestScoreLead: number;
+  /** The first few plies the search expects after the played move, and after its own. */
+  readonly playedPv: readonly string[];
+  readonly bestPv: readonly string[];
   /**
    * What the network's intuition proposed before any reading, and what
    * reading then made of it. Where the most natural-looking move turns out
@@ -160,6 +186,8 @@ function toRecord(game: Game, name: string, res: Response): Record_ | null {
     playedVisits: hit ? hit.visits : null,
     best: best.move,
     bestScoreLead: best.scoreLead,
+    playedPv: pvOf(hit),
+    bestPv: pvOf(best),
     topPolicy: topPolicy.move,
     topPolicyPrior: topPolicy.prior,
     topPolicyLoss: root - topPolicy.scoreLead,
@@ -236,7 +264,7 @@ async function main(): Promise<void> {
     : [...selected.values()].reduce((n, t) => n + t.size, 0);
   console.error(`[${label}] ${games.size} games, ${expected} positions, ${visits} visits`);
 
-  const katago: ChildProcessWithoutNullStreams = spawn(
+  const katago: Engine = spawn(
     process.env.KATAGO ?? 'katago',
     ['analysis', '-config', CONFIG, '-model', net],
     { stdio: ['pipe', 'pipe', 'inherit'] },

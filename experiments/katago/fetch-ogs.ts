@@ -385,7 +385,8 @@ async function expandPlayer(
   // Deeper pagination is how a thin band finds more accounts: each further
   // page of a strong player's history surfaces opponents the first page missed.
   for (let page = 0; page < pages && url !== null; page++) {
-    const body = await getJson<{ results: Game[]; next: string | null }>(url);
+    const body: { results: Game[]; next: string | null } | null =
+      await getJson<{ results: Game[]; next: string | null }>(url);
     if (!body) break;
     url = body.next;
     scanned += body.results.length;
@@ -474,7 +475,8 @@ async function seedFromGroup(
   let url: string | null = `${API}/groups/${groupId}/members/?page_size=100`;
   let added = 0;
   while (url !== null) {
-    const page = await getJson<{ results: GroupMember[]; next: string | null }>(url);
+    const page: { results: GroupMember[]; next: string | null } | null =
+      await getJson<{ results: GroupMember[]; next: string | null }>(url);
     if (!page) break;
     url = page.next;
     for (const { user } of page.results) {

@@ -33,6 +33,13 @@ export interface Screened {
   readonly topPolicyLoss: number;
 }
 
+/** A screened position drawn into the sample, with the weight it carries. */
+export interface Sampled extends Screened {
+  readonly stratum: Stratum;
+  /** How many screened positions this one stands for. */
+  readonly weight: number;
+}
+
 /**
  * A: the screen thinks the played move was bad — candidate blunders, and the
  *    only place the detector's precision can be measured.
