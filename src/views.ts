@@ -67,6 +67,12 @@ function colorName(color: Color): string {
 
 export interface LandingProps {
   readonly error?: string;
+  /**
+   * The fragment of a link that failed to open, if that is why there is an
+   * error. It is cleared from the address bar on the way here, so this is the
+   * only remaining copy of what the user was sent.
+   */
+  readonly failedLink?: string;
   readonly onLoad: (sgf: string) => void;
 }
 
@@ -91,7 +97,17 @@ export function renderLanding(root: HTMLElement, props: LandingProps): void {
   ];
 
   if (props.error) {
-    parts.push(el('p', { class: 'error', role: 'alert' }, [props.error]));
+    const banner: Child[] = [el('p', {}, [props.error])];
+    if (props.failedLink !== undefined) {
+      banner.push(
+        el('p', { class: 'muted' }, ['The link you opened:']),
+        el('code', { class: 'failed-link' }, [props.failedLink]),
+        el('div', { class: 'actions' }, [
+          copyButton('Copy the link', () => props.failedLink ?? ''),
+        ]),
+      );
+    }
+    parts.push(el('div', { class: 'error', role: 'alert' }, banner));
   }
 
   replace(root, ...parts);
@@ -123,6 +139,8 @@ export interface SetupProps {
   readonly game: Game;
   readonly onStart: (color: Color) => void;
   readonly onBack: () => void;
+  /** This record as a link, for handing the same game to someone else. */
+  readonly challengeLink: () => Promise<string>;
 }
 
 /**
@@ -175,7 +193,10 @@ export function renderSetup(root: HTMLElement, props: SetupProps): void {
     ...notes,
     el('p', {}, ['Which side do you want to predict?']),
     choices,
-    el('div', { class: 'actions' }, [button('Load a different game', props.onBack)]),
+    el('div', { class: 'actions' }, [
+      copyButton('Copy challenge link', props.challengeLink),
+      button('Load a different game', props.onBack),
+    ]),
   );
 }
 
@@ -309,6 +330,8 @@ export interface SummaryProps {
   readonly session: Session;
   /** Play the same record again, as either color. */
   readonly onReplay: (color: Color) => void;
+  /** This record as a link, for handing the same game to someone else. */
+  readonly challengeLink: () => Promise<string>;
   readonly onRestart: () => void;
 }
 
@@ -673,8 +696,16 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
   return panel;
 }
 
-/** Copy to the clipboard, reporting on the button itself so there is no dialog. */
-function copyButton(label: string, text: () => string): HTMLElement {
+/**
+ * Copy to the clipboard, reporting on the button itself so there is no dialog.
+ *
+ * `text` may return a promise, because a share link has to be compressed
+ * before it exists. The promise is started when the screen renders rather
+ * than when the button is pressed, so by click time it has long resolved and
+ * the write still happens in a microtask off the user's gesture — which is
+ * what the stricter clipboard implementations require.
+ */
+function copyButton(label: string, text: () => string | Promise<string>): HTMLElement {
   const node: HTMLElement = el('button', { type: 'button' }, [label]);
 
   const flash = (message: string): void => {
@@ -683,10 +714,12 @@ function copyButton(label: string, text: () => string): HTMLElement {
   };
 
   node.addEventListener('click', (): void => {
-    void navigator.clipboard.writeText(text()).then(
-      () => flash('Copied'),
-      () => flash('Copy failed'),
-    );
+    void Promise.resolve(text())
+      .then((value: string) => navigator.clipboard.writeText(value))
+      .then(
+        () => flash('Copied'),
+        () => flash('Copy failed'),
+      );
   });
   return node;
 }
@@ -740,6 +773,9 @@ function exportActions(props: SummaryProps): HTMLElement {
     ),
     copyButton('Copy as text', () => toText(summary)),
     copyButton('Copy as JSON', () => toJSON(summary)),
+    // The plain record, never the annotated one: a challenge link that
+    // carried the guesses would arrive with the answers already on it.
+    copyButton('Copy challenge link', props.challengeLink),
   ]);
 }
 

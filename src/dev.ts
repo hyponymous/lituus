@@ -249,6 +249,8 @@ export interface DevProps {
   readonly onBack: () => void;
   /** Start a real session on a restored record — the summary view offers it. */
   readonly onReplay: (game: Game, color: Color) => void;
+  /** A record as a link, so the harness offers what the real screen does. */
+  readonly challengeLink: (game: Game) => Promise<string>;
 }
 
 /** The URL fragment that opens this screen. */
@@ -340,11 +342,14 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
       return;
     }
 
+    // Started before the render, as `copyButton` expects.
+    const link: Promise<string> = props.challengeLink(session.game);
     renderSummary(root, {
       summary,
       session,
       onReplay: (color: Color): void => props.onReplay(session.game, color),
       onRestart: () => showForm(),
+      challengeLink: (): Promise<string> => link,
     });
     root.prepend(driftBanner(driftFrom(text, summary)));
   };

@@ -5,6 +5,7 @@
  */
 
 import { parse, type GameTree } from './sgf-parser.ts';
+import { serialize } from './sgf-writer.ts';
 import { GameError, readGame, type Game } from './game.ts';
 import {
   advance,
@@ -22,11 +23,16 @@ import {
   renderSummary,
 } from './views.ts';
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
-import { decode } from './share.ts';
+import { decode, encode } from './share.ts';
 import type { Color } from './rules.ts';
 
 type Screen =
-  | { readonly name: 'landing'; readonly error?: string }
+  | {
+      readonly name: 'landing';
+      readonly error?: string;
+      /** Set when the error is a link that would not open, so it can be shown. */
+      readonly failedLink?: string;
+    }
   | { readonly name: 'setup'; readonly game: Game }
   | { readonly name: 'session'; readonly session: Session }
   /**
@@ -89,10 +95,10 @@ function show(next: Screen): void {
  * errors carry line and column from the parser; game errors explain what about
  * the record cannot be studied. Either way the user stays on the landing view.
  */
-function loadGame(sgf: string): void {
+function loadGame(sgf: string): boolean {
   if (sgf.trim() === '') {
     show({ name: 'landing', error: 'Paste a game record first, or drop an .sgf file.' });
-    return;
+    return false;
   }
 
   if (looksLikeResult(sgf)) {
@@ -102,18 +108,65 @@ function loadGame(sgf: string): void {
       name: 'landing',
       error: 'That looks like an exported result, not a game record. Load the .sgf it was played on.',
     });
-    return;
+    return false;
   }
 
   try {
     const trees: GameTree[] = parse(sgf);
-    show({ name: 'setup', game: readGame(trees) });
+    const game: Game = readGame(trees);
+    useGame(game);
+    show({ name: 'setup', game });
+    return true;
   } catch (error: unknown) {
     const detail: string = error instanceof Error ? error.message : String(error);
     const prefix: string =
       error instanceof GameError ? '' : "That doesn't look like a valid SGF file. ";
     show({ name: 'landing', error: `${prefix}${detail}` });
+    return false;
   }
+}
+
+/**
+ * The loaded record as a link someone else can open.
+ *
+ * Started when a game is taken up rather than when the button is pressed, so
+ * the compression is long finished by click time and the clipboard write
+ * still counts as part of the user's gesture. The plain record is encoded,
+ * never the annotated export — a challenge that arrived carrying the answers
+ * would not be one.
+ */
+function linkFor(game: Game): Promise<string> {
+  const link: Promise<string> = encode(serialize([game.source])).then(
+    (fragment: string): string => `${location.origin}${location.pathname}#${fragment}`,
+  );
+  // The button attaches its own handler and reports failure on itself. This
+  // only keeps a link nobody copies from logging an unhandled rejection.
+  link.catch((): void => {});
+  return link;
+}
+
+let challenge: Promise<string> = Promise.reject(new Error('no game loaded'));
+challenge.catch((): void => {});
+
+function useGame(game: Game): void {
+  challenge = linkFor(game);
+}
+
+/**
+ * Drop the fragment without touching the page.
+ *
+ * `replaceState` rather than assigning to `location.hash`: it fires no
+ * `hashchange`, so clearing cannot feed back into the listener that reads the
+ * fragment, and it leaves no history entry to walk back through.
+ */
+function clearHash(): void {
+  if (location.hash !== '') history.replaceState(null, '', location.pathname + location.search);
+}
+
+/** Back to the landing screen with no game, and no stale link in the bar. */
+function restart(): void {
+  clearHash();
+  show({ name: 'landing' });
 }
 
 /**
@@ -122,8 +175,9 @@ function loadGame(sgf: string): void {
  */
 function devProps(): DevProps {
   return {
-    onBack: (): void => show({ name: 'landing' }),
+    onBack: (): void => restart(),
     onReplay: (game: Game, color: Color): void => show(startAt(game, color)),
+    challengeLink: linkFor,
   };
 }
 
@@ -142,6 +196,9 @@ function looksLikeResult(text: string): boolean {
  */
 function startAt(game: Game, color: Color): Screen {
   promptedCursor = null;
+  // Every session starts here, the dev harness's replays included, so this is
+  // where the challenge link is guaranteed to be the game actually in play.
+  useGame(game);
   return { name: 'session', session: startSession(game, color) };
 }
 
@@ -157,7 +214,8 @@ function drawSession(session: Session): void {
       summary: summarize(session),
       session,
       onReplay: (color: Color): void => show(startAt(session.game, color)),
-      onRestart: () => show({ name: 'landing' }),
+      onRestart: (): void => restart(),
+      challengeLink: (): Promise<string> => challenge,
     });
     return;
   }
@@ -190,14 +248,19 @@ function draw(): void {
 
   switch (screen.name) {
     case 'landing':
-      renderLanding(root, { error: screen.error, onLoad: loadGame });
+      renderLanding(root, {
+        error: screen.error,
+        failedLink: screen.failedLink,
+        onLoad: loadGame,
+      });
       return;
     case 'setup': {
       const { game } = screen;
       renderSetup(root, {
         game,
         onStart: (color: Color): void => show(startAt(game, color)),
-        onBack: (): void => show({ name: 'landing' }),
+        onBack: (): void => restart(),
+        challengeLink: (): Promise<string> => challenge,
       });
       return;
     }
@@ -270,6 +333,17 @@ function main(): void {
 /**
  * A game carried in the URL fragment, as `share.ts` encodes it.
  *
+ * The fragment is an inbox, not a mirror of what the page is doing. A link
+ * hands the app a record once and the fragment is then cleared, so the URL
+ * never claims to describe a session it cannot restore — a game is only one
+ * part of the state on screen, and the rest of it (which side, how far in,
+ * every answer so far) has no business being silently rewritten by whatever
+ * is in the bar.
+ *
+ * Clearing only happens once a record has actually loaded. A link that
+ * arrives damaged is left in place: a reload retries it, and it is still the
+ * link the user was sent.
+ *
  * Deliberately after `draw()` rather than awaited before it. Decoding is
  * asynchronous, so blocking the first paint on it would show nothing at all
  * while a link opens — and nothing at all is what a broken link would leave
@@ -281,12 +355,17 @@ function main(): void {
 async function loadFromHash(): Promise<void> {
   const fragment: string = location.hash.slice(1);
   if (fragment === '' || (import.meta.env.DEV && location.hash === DEV_HASH)) return;
+  const link: string = `${location.origin}${location.pathname}#${fragment}`;
   try {
     loadGame(await decode(fragment));
   } catch (error: unknown) {
     const detail: string = error instanceof Error ? error.message : String(error);
-    show({ name: 'landing', error: detail });
+    // The banner carries the link, which is why clearing it here is safe: the
+    // only copy the user has moves from the address bar onto the screen,
+    // where there is a button to take it away with.
+    show({ name: 'landing', error: detail, failedLink: link });
   }
+  clearHash();
 }
 
 main();

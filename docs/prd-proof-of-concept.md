@@ -90,6 +90,14 @@ A game can also arrive in the URL fragment, compressed as in `kifu` (§8.4).
 The fragment is never sent to the server, so a link carries the record to
 another browser without it being logged anywhere on the way.
 
+The fragment is an inbox, not a mirror of the screen. A link hands the app a
+record once and is then cleared, because the game is only one part of what a
+session holds — which side, how far in, every answer so far — and none of the
+rest belongs to whatever is in the address bar. A fragment that will not
+decode is cleared too, but its link is shown in the error, with a button to
+copy it: clearing the bar must not destroy the only copy the reader has of
+something they were sent.
+
 *Deliberately deferred:* a bundled sample-game library, and fetching by game
 ID from an external server. Both are natural follow-ons; neither is needed to
 validate the core loop.
@@ -359,9 +367,10 @@ PoC settles by fiat, and the reasoning for the fiat is worth keeping.
   the fragment, as in `kifu`, making a link a shareable study session. Pulled
   forward deliberately, to hand a second dogfooder the same games without
   mailing records around: the fragment never reaches the server, so the
-  encoding is also how a record travels without being logged anywhere. The
-  app reads a link; it does not yet offer one, so a "copy link" control
-  remains deferred.
+  encoding is also how a record travels without being logged anywhere.
+  "Copy challenge link" offers one from the setup screen and from the
+  summary. It encodes the plain record, never the annotated export — a
+  challenge arriving with the guesses on it would carry the answers.
 - **Bundled sample games.** A small set of pro games so there is something to
   do on first load, without hunting for an SGF.
 - **Remote fetch.** Load by game ID or URL from a public archive or go server.

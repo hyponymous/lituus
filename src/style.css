@@ -142,6 +142,18 @@ p {
   color: var(--miss);
 }
 
+/* A link that would not open, shown in the error banner because clearing the
+   fragment leaves this as the only copy the user has. Breaks anywhere: it is
+   800 characters of base64 with nothing to break on. */
+.failed-link {
+  display: block;
+  margin: 0.5rem 0;
+  max-height: 5.5rem;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 /* The dev harness's drift report (src/dev.ts). Wraps rather than scrolling —
    each line is one finding, and a long path is still worth reading whole.
    Unlike the script, this cannot be stripped from the production build; it is
