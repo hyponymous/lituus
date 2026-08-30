@@ -258,11 +258,47 @@ Unclassified must stay a visible category rather than being forced into the
 others. Most misses will land there, and a taxonomy that pretends otherwise
 is worse than one that admits its coverage.
 
+### 6.4 The move neither of you played
+
+A miss is scored one move at a time, which misses the thing a reader most
+wants told. In dogfooding, the engine named `Q4` as Black's best move on 26
+consecutive Black turns and Black never played it; in the same game White
+ignored `P7` for 16. Every move either player made in that stretch scored as
+a large loss, over and over, for one reason.
+
+Reported per move this is thirty separate verdicts that all say the same
+thing. Reported once — "neither of you played `Q4` in 26 straight chances" —
+it is the most useful sentence in the review.
+
+It is cheap: the best move per turn is already in every record, so the run is
+a group-by. Two details decided by the data:
+
+- **Runs are per color.** The two players miss different moves, sometimes in
+  overlapping stretches, and pooling them finds neither.
+- **Run length falls with strength**, from 26 turns at 3k to 5 at 4d, so this
+  will fire most for the players who need it most.
+
+It also explains why absolute point loss reads so much higher in some games
+than others, which is a caution for any fixed points-lost threshold: a
+standing missed move inflates every number in the stretch for a reason that
+has nothing to do with the moves being compared. See
+[rank estimation](exploration-rank-estimation.md) §3.2.
+
 ## 7. Mobile
 
 An iPhone runs b6c96 and nothing larger; b15c192 crashes the tab
 ([findings](katago-feasibility.md) §7). So mobile either does without AI
 scoring or accepts a network whose judgments are, in the aggregate, poor.
+
+**This section rests on a measurement the product does not make.** The error
+figures below come from unrestricted searches of played moves; the product
+forces the user's guess with `allowMoves`, and measured that way the *large*
+network is several times closer to the reference than the same table predicts
+([findings](katago-feasibility.md) §5b). Whether that also rescues b6c96 is
+unknown and is the thing to measure before this section is acted on. Until
+then the rules below stand, because being wrong in the cautious direction
+costs a feature and being wrong in the other direction costs the user's
+trust.
 
 The errors are not symmetric, and the design turns on that. b6c96 flags a
 blunder that is not one **42% of the time**, and misses **72%** of the real

@@ -166,6 +166,35 @@ never visited fall from 23.8% at 10 visits to 8.1% at 50, 4.8% at 100, and
 proviso, but it is a separate axis from accuracy. The cheap end is doubly
 bad: it misses blunders *and* frequently has nothing to say at all.
 
+### 5b. The same question asked the way the product asks it
+
+The table above measures the *played* move in an unrestricted search. The
+product measures the move the **user guessed**, forced with `allowMoves` so
+the whole budget lands on it. Six dogfood games — 576 guesses, every one
+forced at both configurations — put the shipping config much closer to the
+reference than §5 implies:
+
+| | median \|error\| |
+| --- | --- |
+| all 576 guesses | 0.60 pt |
+| the 55 the reference calls blunders (>=8) | 2.78 pt |
+
+Against 4.61 for b15c192 in the table above. Treating the reference's
+blunder calls as truth, the shipping config finds **71% of them at 91%
+precision**.
+
+Read this as corroboration, not as a replacement for §5. It is a different
+population (guesses, not played moves), a different n, and 55 blunders is
+thin — the per-band splits are noise and only the pooled figure is worth
+quoting. But the direction is consistent and has an obvious mechanism:
+forcing spends 50 visits on one move where an unrestricted search might have
+given it three, and §8b already documents the same effect inverting a
+detector's apparent recall by rank.
+
+**This matters most for §7.** The mobile ceiling was argued from accuracy
+that a forced query may not have. Before concluding what a phone can and
+cannot do, re-run §5's table with forcing on both sides.
+
 ## 6. Browser throughput
 
 Measured against [web-katrain](https://github.com/Sir-Teo/web-katrain)
