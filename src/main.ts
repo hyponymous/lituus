@@ -22,6 +22,7 @@ import {
   renderSummary,
 } from './views.ts';
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
+import { decode } from './share.ts';
 import type { Color } from './rules.ts';
 
 type Screen =
@@ -256,7 +257,36 @@ function main(): void {
     });
   }
 
+  // A second link pasted into the same tab only changes the fragment, which
+  // is a same-document navigation: nothing reloads and the old game would
+  // stay on screen. Handing someone a set of links makes that the normal way
+  // to arrive at the second one.
+  window.addEventListener('hashchange', (): void => void loadFromHash());
+
   draw();
+  void loadFromHash();
+}
+
+/**
+ * A game carried in the URL fragment, as `share.ts` encodes it.
+ *
+ * Deliberately after `draw()` rather than awaited before it. Decoding is
+ * asynchronous, so blocking the first paint on it would show nothing at all
+ * while a link opens — and nothing at all is what a broken link would leave
+ * on screen. The landing view paints first and the game replaces it.
+ *
+ * The dev fragment is checked before this and is a fixed short string, so it
+ * can never be mistaken for encoded game data.
+ */
+async function loadFromHash(): Promise<void> {
+  const fragment: string = location.hash.slice(1);
+  if (fragment === '' || (import.meta.env.DEV && location.hash === DEV_HASH)) return;
+  try {
+    loadGame(await decode(fragment));
+  } catch (error: unknown) {
+    const detail: string = error instanceof Error ? error.message : String(error);
+    show({ name: 'landing', error: detail });
+  }
 }
 
 main();

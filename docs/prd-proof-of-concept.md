@@ -86,9 +86,12 @@ Both paths run through the same parser and produce the same in-memory game.
 Parse failures show a human-readable error naming what went wrong and where,
 and leave the user on the landing view to try again.
 
-*Deliberately deferred:* URL-fragment encoding (as in `kifu`, §6), a
-bundled sample-game library, and fetching by game ID from an
-external server. All three are natural follow-ons; none is needed to
+A game can also arrive in the URL fragment, compressed as in `kifu` (§8.4).
+The fragment is never sent to the server, so a link carries the record to
+another browser without it being logged anywhere on the way.
+
+*Deliberately deferred:* a bundled sample-game library, and fetching by game
+ID from an external server. Both are natural follow-ons; neither is needed to
 validate the core loop.
 
 ### 4.2 SGF scope
@@ -352,9 +355,13 @@ PoC settles by fiat, and the reasoning for the fiat is worth keeping.
 
 ### 8.4 Game sources and persistence
 
-- **URL-fragment sharing.** Compressed SGF in the fragment, as in `kifu`,
-  making a link a shareable study session. The most attractive near-term
-  addition, since that encoding is already written and proven (§6).
+- **URL-fragment sharing — no longer deferred; built.** Compressed SGF in
+  the fragment, as in `kifu`, making a link a shareable study session. Pulled
+  forward deliberately, to hand a second dogfooder the same games without
+  mailing records around: the fragment never reaches the server, so the
+  encoding is also how a record travels without being logged anywhere. The
+  app reads a link; it does not yet offer one, so a "copy link" control
+  remains deferred.
 - **Bundled sample games.** A small set of pro games so there is something to
   do on first load, without hunting for an SGF.
 - **Remote fetch.** Load by game ID or URL from a public archive or go server.

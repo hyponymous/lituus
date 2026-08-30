@@ -107,6 +107,30 @@ between the reader and the board.
 **At extraction:** the markup and the GitHub mark could be shared; the
 visibility rule could not, and belongs to whichever app has screens.
 
+### URL-fragment encoding: one file, no download, typed bytes
+
+**kifu:** `src/encode.ts` and `src/decode.ts`, two files. `decode.ts` also
+exports `download()` for saving the record as a file, and both export
+`*FromHash`/`*ToHash` helpers that read and write `location.hash`
+themselves. The writer is fed with a cast: `writer.write(data as
+Uint8Array<ArrayBuffer>)`.
+
+**lituus:** one `src/share.ts` exporting `encode` and `decode` only. The
+hash is read by `main.ts`, which already owns routing and has a dev fragment
+to check first; a download already exists in `views.ts`. The byte arrays are
+typed `Uint8Array<ArrayBuffer>` at the boundary, so the writer takes them
+with no cast. Error messages are rewritten for a reader holding a broken
+link rather than a developer holding a stack trace.
+
+**Why:** two forty-line files for one concern is over-split at this size,
+and a module that reaches for `location` is harder to test than one that
+takes a string. The cast in kifu is load-bearing only because its byte
+arrays are typed loosely upstream.
+
+**At extraction:** `encode`/`decode` are the shared part and should keep the
+narrow signatures. Everything that touches `location`, the DOM, or user-facing
+wording belongs to the app.
+
 ## Candidate package contents
 
 - `sgf-parser` — the strongest candidate. Pure, no DOM, already stable.
@@ -116,3 +140,5 @@ visibility rule could not, and belongs to whichever app has screens.
 - `goban` — the renderer. Most valuable to share and hardest to generalize,
   since kifu crops to a viewport and lituus never does. The divergences
   here are the ones to document most carefully.
+- `share` — the fragment encoding. Pure, no DOM, and now proven in two
+  consumers, which is the bar the rest of this list is waiting to clear.
