@@ -556,9 +556,40 @@ harness warns about — running tfjs-core 4.22.0 on the `webgpu` backend, with a
 all-ones 19×19×32 convolution returning a checksum of 3,097,600 against an
 expected 3,097,600 in 66 ms.
 
-What remains genuinely open is the part only the deploy can answer: whether
-GitHub Pages sets `Content-Encoding` on the network the way `vite preview`
-does, and what adapter a visitor's browser reports on that origin.
+### 10b.3 What the deployed spike found
+
+Deployed to GitHub Pages and driven on the real origin. Every step passes, and
+the answer to the open question is the most useful one available: **the two
+hosts disagree.**
+
+| | `vite preview` | GitHub Pages |
+| --- | --- | --- |
+| `content-type` | `application/octet-stream` | `application/gzip` |
+| `content-encoding` | `gzip` | absent |
+| `content-length` | 36,948,927 (compressed) | 36,948,927 (compressed) |
+| bytes delivered | 39,776,212, inflated | 36,948,927, still gzipped |
+| first bytes | `67 31` | `1f 8b` |
+| decompression | skipped — host did it | `DecompressionStream` runs |
+
+Pages sends no `Content-Encoding` even when the request advertises
+`Accept-Encoding: gzip, deflate, br`, so this is the behavior a browser gets
+and not an artifact of how the header was checked.
+
+**The sniff is what makes both work**, and neither host is misconfigured. A
+build that hardcoded either assumption would have passed its own tests and
+broken on the other, which is precisely the failure §10b.1 existed to prevent
+and the strongest argument for keeping the check when the real evaluator
+replaces the spike.
+
+Everything else on the live origin: `crossOriginIsolated` false as expected,
+the Cache API round trip intact at 36,948,927 bytes, the header parsed to
+g170-b15c192 version 8 with 15 blocks of 192, and the worker on adapter
+`apple / metal-3` returning the convolution's expected checksum in 128 ms.
+
+One incidental measurement worth keeping: the network inflates 36,948,927 →
+39,776,212 bytes, a ratio of **1.08x**. Float32 weights barely compress, so
+gzip buys about 7% and the bandwidth arithmetic in §10b stands as written —
+roughly 37 MB per cold visitor, whichever way it is served.
 
 ## 11. Risks
 
