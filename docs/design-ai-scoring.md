@@ -105,16 +105,34 @@ A verdict carries what one prompt's searches produced:
 ```ts
 interface Verdict {
   readonly moveNumber: number;
-  /** The unrestricted root search's estimate of the position. */
   readonly rootScoreLead: number;
   readonly rootVisits: number;
-  /** Candidates the search actually looked at, best first. */
-  readonly candidates: readonly Candidate[];
-  /** The played move and the guess, each searched properly — see §5.3. */
-  readonly played: MoveVerdict;
+  readonly best: BestMove;
+  readonly played: MoveVerdict | null;
   readonly guessed: MoveVerdict | null;
+  readonly natural: NaturalMove | null;
 }
 ```
+
+Three things about that shape were decided by the recorded data rather than in
+advance, and are worth stating because each looked different from here:
+
+- **`best` is narrower than a `MoveVerdict`.** Its loss is zero by
+  construction, and nothing asks how many visits it got — so it carries a
+  point, a score lead and a continuation. The recorded files do not hold more
+  than that either.
+- **`played` can be null.** Where the search never looked at the played move
+  and no repair exists, there is no estimate worth having. That is not a
+  failed verdict: the position still carries a best move and a difficulty
+  signal, which are what §6.4 and the difficulty breakdown are built from.
+- **`guessed` equals `played` on a hit** rather than being null. A hit is still
+  a move the engine has an opinion about, and the case the product most wants
+  to talk about should not be the one every consumer special-cases.
+
+There is no list of candidates. It was in the first sketch and nothing needs
+it: the summary asks about four specific moves — the guess, the played move,
+the engine's own, and the one the policy proposed — and carrying the other
+ninety-odd would be a per-prompt array kept for no reader.
 
 Everything downstream — point loss, beat-the-move, the PV shown at reveal or
 in the summary, the §6.1 cluster test, the §6.4 runs — is a pure function of
