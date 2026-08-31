@@ -30,6 +30,7 @@ import {
   type Streak,
   type Summary,
 } from './summary.ts';
+import { BLUNDER_LOSS, describeEngine } from './analysis.ts';
 import { annotatedFilename, annotatedSgf } from './annotate.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
@@ -440,6 +441,91 @@ function timingNote(summary: Summary): string {
 }
 
 /**
+ * What the engine cost you, as a subordinate line under the hit rate.
+ *
+ * Subordinate deliberately, and not because engine numbers are unimportant: a
+ * hit rate is a number the reader can check by eye and a point loss is not, so
+ * exact match keeps the headline and this sits beneath it
+ * (`docs/prd-ai-scoring.md` §5). The median leads for the same reason it does
+ * for timing — one catastrophe should not swallow the figure — and the total
+ * follows it because that is the quantity a player recognizes from every other
+ * AI review tool.
+ */
+function engineNote(summary: Summary): string {
+  const { ai } = summary;
+  if (!ai || ai.graded === 0) return '';
+  return ` · ${ai.medianLoss.toFixed(1)} points a move, ${ai.totalLoss.toFixed(0)} in all`;
+}
+
+/**
+ * The engine's findings, in the order a reader cares about them.
+ *
+ * Beating the game's own move leads, because for an amateur studying a real
+ * game it is the single most motivating thing the tool can say, and because it
+ * is the finding a bare hit rate actively hides — a "miss" that was the better
+ * move reads as a failure until something says otherwise.
+ *
+ * The standing-missed-move runs come last and get a sentence each. Reported per
+ * move they are thirty separate verdicts that all say the same thing; reported
+ * once, one of them is usually the most useful line in the review.
+ */
+function engineFindings(summary: Summary): HTMLElement | null {
+  const { ai } = summary;
+  if (!ai || ai.answered === 0) return null;
+
+  const notes: Child[] = [];
+  const add = (text: string, kind: string): void => {
+    notes.push(el('li', { class: `finding finding-${kind}` }, [text]));
+  };
+
+  if (ai.beat > 0) {
+    add(
+      ai.beat === 1
+        ? 'Once, your guess was better than the move actually played.'
+        : `${ai.beat} times, your guess was better than the move actually played.`,
+      'good',
+    );
+  }
+  if (ai.blunders > 0) {
+    add(
+      `${ai.blunders} ${ai.blunders === 1 ? 'guess' : 'guesses'} cost ${BLUNDER_LOSS} points or more.`,
+      'bad',
+    );
+  }
+  if (ai.misleading > 0) {
+    // Phrased as a property of the positions rather than a verdict on the
+    // player: these are the ones where the natural move is a trap, and the
+    // engine can say that without knowing anything about who is guessing.
+    add(
+      `${ai.misleading} ${ai.misleading === 1 ? 'position' : 'positions'} where the ` +
+        `natural-looking move was a trap — you found ${ai.misleadingHits}.`,
+      'neutral',
+    );
+  }
+  for (const run of ai.runs) {
+    add(
+      `Neither of you played ${run.name} in ${run.length} straight chances ` +
+        `(moves ${run.firstMove}–${run.lastMove})` +
+        (run.everGuessed ? ', though you found it at least once.' : '.'),
+      run.everGuessed ? 'neutral' : 'bad',
+    );
+  }
+
+  if (ai.answered < summary.rows.length) {
+    // Said rather than hidden: a median over half a game is not the same claim
+    // as a median over the game, and a reader cannot tell from the number.
+    add(`Analysed ${ai.answered} of ${summary.rows.length} predictions.`, 'muted');
+  }
+
+  if (notes.length === 0) return null;
+  return el('section', { class: 'findings' }, [
+    el('h3', {}, ['What the engine saw']),
+    el('ul', {}, notes),
+    el('p', { class: 'muted engine-note' }, [describeEngine(ai.config)]),
+  ]);
+}
+
+/**
  * Phase rates as bars. Three numbers are exactly the case where a table makes
  * the reader do the comparing: the point is which phase is weakest, and a bar
  * answers that before the labels are read. The counts stay, since a rate over
@@ -797,6 +883,7 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
         `${result.hits} of ${result.guessed} correct`,
         streakNote(summary),
         timingNote(summary),
+        engineNote(summary),
       ]),
     );
   } else {
@@ -814,6 +901,8 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
   parts.push(reviewPanel(props.session, summary));
 
   if (result.guessed > 0) {
+    const findings: HTMLElement | null = engineFindings(summary);
+    if (findings) parts.push(findings);
     parts.push(phaseBars(summary));
     if (tenukiAgreement(summary.tenuki).scored > 0) parts.push(tenukiMatrix(summary));
   }

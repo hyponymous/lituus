@@ -24,7 +24,14 @@ import { readGame, type Game, type GameMove } from './game.ts';
 import { finalPosition, type Guess, type Session } from './session.ts';
 import { summarize, toJSON, type Summary } from './summary.ts';
 import { renderSummary } from './views.ts';
-import { BLACK, WHITE, type Color } from './rules.ts';
+import { BLACK, WHITE, type Color, type Position } from './rules.ts';
+import {
+  emptyAnalysis,
+  withVerdict,
+  type Analysis,
+  type MoveVerdict,
+  type NaturalMove,
+} from './analysis.ts';
 
 /** Raised when the pasted text is not a result this can rebuild. */
 export class RestoreError extends Error {
@@ -112,6 +119,104 @@ function restoreGuess(game: Game, color: Color, entry: unknown, at: number): Gue
   const elapsedMs: number | null = typeof row.ms === 'number' ? row.ms : null;
 
   return { moveNumber, actual: move.index, guess, hit, elapsedMs };
+}
+
+/** A move verdict from its exported row, or null where the export has none. */
+function restoreMove(board: Position, value: unknown, what: string): MoveVerdict | null {
+  if (value === null || value === undefined) return null;
+  const row: Record<string, unknown> = asRecord(value, what);
+
+  const name: string = asString(row.point, `${what}.point`);
+  const point: number | null = pointFromName(board, name);
+  if (point === null) throw new RestoreError(`"${name}" is not a point on this board.`);
+
+  return {
+    point,
+    loss: asNumber(row.loss, `${what}.loss`),
+    visits: asNumber(row.visits, `${what}.visits`),
+    forced: row.forced === true,
+    pv: restoreLine(board, row.pv),
+  };
+}
+
+/** A principal variation, stopping at anything this board does not name. */
+function restoreLine(board: Position, value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const points: number[] = [];
+  for (const entry of value) {
+    const point: number | null =
+      typeof entry === 'string' ? pointFromName(board, entry) : null;
+    if (point === null) break;
+    points.push(point);
+  }
+  return points;
+}
+
+/**
+ * Rebuild the engine's verdicts from an exported result.
+ *
+ * Returns null for a result exported without an engine, or by a build that
+ * predates the field — which is the ordinary case and not an error. The
+ * summary then computes exactly as it did before AI scoring existed.
+ *
+ * This is the half that makes a saved result a regression test for the engine
+ * figures: the aggregates in the export are ignored and recomputed from these,
+ * so a change to how a median or a run is derived shows up as drift rather than
+ * being read back unchallenged.
+ */
+export function restoreAnalysis(text: string, game: Game): Analysis | null {
+  const result: Record<string, unknown> = asRecord(JSON.parse(text) as unknown, 'the result');
+  const engine: unknown = result.engine;
+  const rows: unknown = result.verdicts;
+  if (engine === null || engine === undefined || !Array.isArray(rows)) return null;
+
+  const config: Record<string, unknown> = asRecord(engine, '"engine"');
+  const board: Position = game.initial;
+
+  let analysis: Analysis = emptyAnalysis({
+    network: asString(config.network, '"engine".network'),
+    visits: asNumber(config.visits, '"engine".visits'),
+    backend: asString(config.backend, '"engine".backend'),
+  });
+
+  for (const [at, entry] of rows.entries()) {
+    const row: Record<string, unknown> = asRecord(entry, `verdicts[${at}]`);
+    const best: Record<string, unknown> = asRecord(row.best, `verdicts[${at}].best`);
+    const bestName: string = asString(best.point, `verdicts[${at}].best.point`);
+    const bestPoint: number | null = pointFromName(board, bestName);
+    if (bestPoint === null) {
+      throw new RestoreError(`"${bestName}" is not a point on this board.`);
+    }
+
+    const natural: unknown = row.natural;
+    analysis = withVerdict(analysis, {
+      moveNumber: asNumber(row.move, `verdicts[${at}].move`),
+      rootScoreLead: asNumber(row.rootScoreLead, `verdicts[${at}].rootScoreLead`),
+      rootVisits: asNumber(row.rootVisits, `verdicts[${at}].rootVisits`),
+      best: {
+        point: bestPoint,
+        scoreLead: asNumber(best.scoreLead, `verdicts[${at}].best.scoreLead`),
+        pv: restoreLine(board, best.pv),
+      },
+      played: restoreMove(board, row.played, `verdicts[${at}].played`),
+      guessed: restoreMove(board, row.guessed, `verdicts[${at}].guessed`),
+      natural: restoreNatural(board, natural, `verdicts[${at}].natural`),
+    });
+  }
+  return analysis;
+}
+
+function restoreNatural(board: Position, value: unknown, what: string): NaturalMove | null {
+  if (value === null || value === undefined) return null;
+  const row: Record<string, unknown> = asRecord(value, what);
+  const name: string = asString(row.point, `${what}.point`);
+  const point: number | null = pointFromName(board, name);
+  if (point === null) return null;
+  return {
+    point,
+    prior: asNumber(row.prior, `${what}.prior`),
+    loss: asNumber(row.loss, `${what}.loss`),
+  };
 }
 
 /**
@@ -335,7 +440,10 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
     let summary: Summary;
     try {
       session = restoreSession(text);
-      summary = summarize(session);
+      // Recomputed from the restored verdicts, never read back from the
+      // export's own `ai` block: reading the figures back would make the diff
+      // below compare a file with itself.
+      summary = summarize(session, restoreAnalysis(text, session.game) ?? undefined);
     } catch (error: unknown) {
       const detail: string = error instanceof Error ? error.message : String(error);
       showForm(detail);

@@ -615,3 +615,42 @@ section .muted {
 .spike-detail:empty {
   display: none;
 }
+
+/* ── Engine findings ────────────────────────────────────────────────────────
+   Sentences, not a table. Each of these is a claim a reader acts on once —
+   "you beat the game eighteen times", "neither of you played Q4" — and a grid
+   of counts would make them look like statistics to be scanned past. */
+
+.findings {
+  margin: 2rem 0;
+}
+
+.findings h3 {
+  margin-bottom: 0.75rem;
+}
+
+.findings ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.finding {
+  padding-left: 0.85rem;
+  border-left: 3px solid var(--line);
+  line-height: 1.5;
+}
+
+/* Only two of these carry colour, and both earn it: one is the compliment the
+   hit rate hides, the other is the cost the hit rate hides. */
+.finding-good { border-left-color: var(--hit); }
+.finding-bad { border-left-color: var(--miss); }
+.finding-muted { color: var(--muted); }
+
+.engine-note {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+}

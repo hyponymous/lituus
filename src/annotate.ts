@@ -7,8 +7,14 @@
  * already knows how to explore. No per-move commentary is written: "you played
  * here and it was wrong" is precisely what the variation already says, and
  * repeating it as text would be noise. Comments are reserved for what the
- * structure cannot carry: the session summary at the root, which now includes
- * how long the predictions took, and engine evaluation once that exists.
+ * structure cannot carry: the session summary at the root, which includes how
+ * long the predictions took and what the engine made of it, and — where an
+ * engine ran — what a guess cost and what the engine would have played instead.
+ *
+ * Engine scores are signed from the guessing player's side, as
+ * `experiments/katago/review.ts` settled on against a reader: `+0.4` is four
+ * tenths of a point to the good, `-3.1` is three points thrown away. "Lost 3.1"
+ * in prose is unambiguous and unreadable in a column of thirty.
  *
  * The original tree is rebuilt in place rather than regenerated from the game
  * model, so commentary, markup, the record's own variations, and properties
@@ -16,6 +22,12 @@
  */
 
 import type { Game } from './game.ts';
+import {
+  MISLEADING_LOSS,
+  lossOf,
+  type BestMove,
+  type Verdict,
+} from './analysis.ts';
 import type { GameNode, GameTree, Props } from './sgf-parser.ts';
 import { serialize } from './sgf-writer.ts';
 import { summarize, toText, type Summary } from './summary.ts';
@@ -67,7 +79,7 @@ function asTrees(sequence: Sequence): GameTree[] {
  */
 function rebuild(
   tree: GameTree,
-  guesses: ReadonlyMap<number, Props>,
+  extras: ReadonlyMap<number, readonly GameTree[]>,
   moves: number,
   from: number,
   skipFirst: boolean,
@@ -81,7 +93,7 @@ function rebuild(
     const node: GameNode = tree.nodes[at];
     const move: boolean = isMoveNode(node.props);
     const branches: boolean =
-      move && guesses.has(counted + 1) && !(at === from && skipFirst);
+      move && extras.has(counted + 1) && !(at === from && skipFirst);
 
     if (branches) {
       branch = at;
@@ -98,27 +110,103 @@ function rebuild(
     // Only the first variation is the line the user played; the record's own
     // alternatives are carried across untouched.
     const [main, ...others] = tree.variations;
-    const walked: Sequence = rebuild(main, guesses, counted, 0, false);
+    const walked: Sequence = rebuild(main, extras, counted, 0, false);
     return { nodes: run, variations: [...asTrees(walked), ...others], moves: walked.moves };
   }
 
-  const guess: Props | undefined = guesses.get(counted + 1);
+  const extra: readonly GameTree[] = extras.get(counted + 1) ?? [];
   // Re-entering at the branch point always consumes that node, so this
   // sequence is never empty and is safe to wrap.
-  const played: Sequence = rebuild(tree, guesses, counted, branch, true);
+  const played: Sequence = rebuild(tree, extras, counted, branch, true);
   const playedTree: GameTree = { nodes: played.nodes, variations: played.variations };
 
+  // The played line stays first, so an editor opening the record on its main
+  // line still walks the game that was actually played.
   return {
     nodes: run,
-    variations: guess
-      ? [playedTree, { nodes: [{ props: guess }], variations: [] }]
-      : [playedTree],
+    variations: [playedTree, ...extra],
     moves: played.moves,
   };
 }
 
+/**
+ * How many points a move must be worth before it earns a sentence.
+ *
+ * Three, matching the threshold the rest of this work treats as a real mistake.
+ * A comment on every prompt is a comment on nothing, which is the failure this
+ * number exists to avoid.
+ */
+const MIN_EDGE = MISLEADING_LOSS;
+
+/** Points from the guessing player's side: positive is good, negative is lost. */
+function signed(loss: number): string {
+  const value: number = -loss;
+  return `${value < -0.05 ? '-' : '+'}${Math.abs(value).toFixed(1)}`;
+}
+
+/**
+ * What to say about a guess, beyond the fact that it was made.
+ *
+ * Only where the engine has something worth a sentence: the guess beat the
+ * game's move, or one of the two cost real points. Otherwise the variation
+ * speaks for itself and the comment would be noise.
+ */
+function guessComment(verdict: Verdict | undefined): string {
+  const mine: number | null = verdict ? lossOf(verdict.guessed) : null;
+  if (mine === null) return 'Your guess (lituus).';
+
+  const theirs: number | null = verdict ? lossOf(verdict.played) : null;
+  const line: string = `Your guess (lituus). ${signed(mine)}`;
+  if (theirs === null) return line;
+
+  const edge: number = theirs - mine;
+  if (edge > MIN_EDGE) return `${line} — better than the game's ${signed(theirs)}.`;
+  if (-edge > MIN_EDGE) return `${line} — the game played ${signed(theirs)}.`;
+  return `${line} (game ${signed(theirs)}).`;
+}
+
+/**
+ * The engine's own move, as a third branch, where neither of you found it and
+ * the position was expensive enough to be worth stopping at.
+ *
+ * Without this the reader is told a third move was best and never shown it,
+ * which is the difference between a score and an explanation.
+ */
+function bestBranch(
+  board: Position,
+  color: Color,
+  verdict: Verdict | undefined,
+  guess: number,
+  actual: number,
+): GameTree | null {
+  if (!verdict) return null;
+  const best: BestMove = verdict.best;
+  if (best.point === guess || best.point === actual) return null;
+
+  const cost: number | null = lossOf(verdict.played);
+  const mine: number | null = lossOf(verdict.guessed);
+  const worst: number = Math.max(cost ?? 0, mine ?? 0);
+  if (worst < MIN_EDGE) return null;
+
+  // The whole variation, not just the move: a line the reader can walk is what
+  // makes "this was better" checkable rather than asserted.
+  const line: readonly number[] = best.pv.length > 0 ? best.pv : [best.point];
+  const nodes: GameNode[] = line.map((point, ply) => ({
+    props: {
+      [moveProp(ply % 2 === 0 ? color : (-color as Color))]: [pointValue(board, point)],
+    } as Props,
+  }));
+
+  nodes[0].props.C = [`The engine would have played here (lituus).`];
+  return { nodes, variations: [] };
+}
+
 /** The guess nodes to graft on, keyed by the move number they answer. */
-function guessNodes(session: Session, board: Position): Map<number, Props> {
+function guessNodes(
+  session: Session,
+  board: Position,
+  verdicts: ReadonlyMap<number, Verdict>,
+): Map<number, Props> {
   const nodes = new Map<number, Props>();
 
   for (const made of session.guesses) {
@@ -130,10 +218,55 @@ function guessNodes(session: Session, board: Position): Map<number, Props> {
       [moveProp(move.color)]: [pointValue(board, made.guess)],
       // The one thing the structure cannot say: which branches are yours
       // rather than the record's own.
-      C: ['Your guess (lituus).'],
+      C: [guessComment(verdicts.get(made.moveNumber))],
     });
   }
   return nodes;
+}
+
+/**
+ * Every branch to hang beside a move, in the order a reader should meet them:
+ * what you guessed, then what the engine would have done.
+ */
+function branchesFor(
+  session: Session,
+  board: Position,
+  verdicts: ReadonlyMap<number, Verdict>,
+): Map<number, GameTree[]> {
+  const guesses: Map<number, Props> = guessNodes(session, board, verdicts);
+  const best: Map<number, GameTree> = bestNodes(session, board, verdicts);
+  const branches = new Map<number, GameTree[]>();
+
+  for (const [moveNumber, props] of guesses) {
+    branches.set(moveNumber, [{ nodes: [{ props }], variations: [] }]);
+  }
+  for (const [moveNumber, tree] of best) {
+    branches.set(moveNumber, [...(branches.get(moveNumber) ?? []), tree]);
+  }
+  return branches;
+}
+
+/** The engine's own move, for every prompt that earns one. */
+function bestNodes(
+  session: Session,
+  board: Position,
+  verdicts: ReadonlyMap<number, Verdict>,
+): Map<number, GameTree> {
+  const trees = new Map<number, GameTree>();
+
+  for (const made of session.guesses) {
+    const move = session.game.moves[made.moveNumber - 1];
+    if (!move) continue;
+    const branch: GameTree | null = bestBranch(
+      board,
+      move.color,
+      verdicts.get(made.moveNumber),
+      made.guess,
+      made.actual,
+    );
+    if (branch) trees.set(made.moveNumber, branch);
+  }
+  return trees;
 }
 
 /** Prepend the session summary to the root comment, keeping anything already there. */
@@ -155,7 +288,10 @@ function withRootComment(tree: GameTree, summary: Summary): GameTree {
 
 export function annotatedTree(session: Session, summary: Summary): GameTree {
   const game: Game = session.game;
-  const nodes: Map<number, Props> = guessNodes(session, game.initial);
+  const verdicts = new Map<number, Verdict>(
+    (summary.verdicts ?? []).map((verdict) => [verdict.moveNumber, verdict]),
+  );
+  const nodes: Map<number, GameTree[]> = branchesFor(session, game.initial, verdicts);
 
   // A record whose first node carries both the root properties and move 1
   // cannot have a variation hung beside that move: branching before it would

@@ -15,6 +15,9 @@
  * computed. See `docs/design-ai-scoring.md` §3.
  */
 
+import { pointName } from './goban.ts';
+import type { Position } from './rules.ts';
+
 /**
  * Which engine produced a set of verdicts.
  *
@@ -165,10 +168,46 @@ export function emptyAnalysis(config: EngineConfig): Analysis {
   return { config, verdicts: new Map() };
 }
 
-/** A new analysis with this verdict added, replacing any verdict for that move. */
+/**
+ * Points, at the precision this product is willing to claim.
+ *
+ * A loss is the difference between two fifty-visit estimates. Two decimals is
+ * already past what that supports, and the extra digits are not free: they sit
+ * either side of every threshold in this file. A difference of 0.500001 against
+ * `BEAT_MARGIN` decides whether the summary tells someone they beat the game,
+ * and whether it still says so after the result has been exported and read back
+ * depends on how the file was rounded. Fixing the precision here, at the one
+ * door into the store, makes a stored verdict and a restored one the same
+ * value — so the thresholds cannot disagree with themselves.
+ */
+const LOSS_DECIMALS = 2;
+
+function roundLoss(loss: number): number {
+  return Number(loss.toFixed(LOSS_DECIMALS));
+}
+
+function normalizeMove(verdict: MoveVerdict | null): MoveVerdict | null {
+  return verdict === null ? null : { ...verdict, loss: roundLoss(verdict.loss) };
+}
+
+/**
+ * A new analysis with this verdict added, replacing any verdict for that move.
+ *
+ * Losses are normalized on the way in, so every evaluator — recorded, in
+ * browser, or anything later — stores the same value for the same search, and
+ * nothing downstream has to remember to round.
+ */
 export function withVerdict(analysis: Analysis, verdict: Verdict): Analysis {
   const verdicts = new Map(analysis.verdicts);
-  verdicts.set(verdict.moveNumber, verdict);
+  verdicts.set(verdict.moveNumber, {
+    ...verdict,
+    played: normalizeMove(verdict.played),
+    guessed: normalizeMove(verdict.guessed),
+    natural:
+      verdict.natural === null
+        ? null
+        : { ...verdict.natural, loss: roundLoss(verdict.natural.loss) },
+  });
   return { config: analysis.config, verdicts };
 }
 
@@ -198,4 +237,265 @@ export function sameEngine(a: EngineConfig, b: EngineConfig): boolean {
 /** A configuration as one short string, for an export or a footnote. */
 export function describeEngine(config: EngineConfig): string {
   return `${config.network} @ ${config.visits} visits (${config.backend})`;
+}
+
+// ── Derived statistics ───────────────────────────────────────────────────────
+//
+// Everything below is a pure function of verdicts plus the game they belong to.
+// None of it needs an engine, a session, or a DOM, which is what lets the whole
+// AI half of the summary be tested from hand-built verdicts.
+
+/**
+ * How much better a guess must be than the played move before we say so.
+ *
+ * Differences below roughly half a point are search noise, and "you beat the
+ * professional" is a claim worth being sure of — it is the single most
+ * motivating thing the tool can say, which is exactly why it must not be said
+ * on a rounding error (`docs/prd-ai-scoring.md` §5).
+ */
+export const BEAT_MARGIN = 0.5;
+
+/**
+ * Points at or above which a move is a blunder.
+ *
+ * Eight, matching the threshold every accuracy figure in
+ * `docs/katago-feasibility.md` §5 was measured against. Moving it would not
+ * merely change a label — it would detach the word from the recall and
+ * precision numbers that justify using it at all.
+ */
+export const BLUNDER_LOSS = 8;
+
+/**
+ * Points the most natural-looking move must cost before a position counts as
+ * one that misleads.
+ *
+ * Three, the bucket measured in `docs/katago-feasibility.md` §8: restricted to
+ * these positions, human blunder rates rose from 3.6% to 44%. The lift over
+ * baseline holds at 3-7x across every rank band, which is why one threshold
+ * survives — but what it *means* varies, from about three times in four for a
+ * 5k to under three in ten for a 7d, so the confidence attached to it belongs
+ * in the copy rather than in this number (`docs/prd-ai-scoring.md` §8b).
+ */
+export const MISLEADING_LOSS = 3;
+
+/** A move verdict's loss, or null when there is nothing worth quoting. */
+export function lossOf(verdict: MoveVerdict | null | undefined): number | null {
+  if (!verdict || !isTrusted(verdict)) return null;
+  return verdict.loss;
+}
+
+/**
+ * Whether the guess was better than the move actually played.
+ *
+ * Both sides have to be trusted. Comparing a properly searched guess against a
+ * one-visit estimate of the played move would manufacture these.
+ */
+export function beatPlayed(verdict: Verdict): boolean {
+  const guess: number | null = lossOf(verdict.guessed);
+  const played: number | null = lossOf(verdict.played);
+  if (guess === null || played === null) return false;
+  return played - guess > BEAT_MARGIN;
+}
+
+/**
+ * Whether this position punishes intuition — the difficulty signal.
+ *
+ * A property of the position, computed from the engine's own policy without
+ * reference to what anybody played, which is what keeps it from being circular.
+ */
+export function isMisleading(verdict: Verdict): boolean {
+  return verdict.natural !== null && verdict.natural.loss >= MISLEADING_LOSS;
+}
+
+/**
+ * A stretch of consecutive prompts where the engine kept naming the same best
+ * move and neither player ever played it.
+ *
+ * Reported once rather than as thirty separate verdicts that all say the same
+ * thing. "Neither of you played Q4 in 26 straight chances" is a sentence a
+ * reader can act on; thirty large point losses with one cause is not
+ * (`docs/prd-ai-scoring.md` §6.4).
+ */
+export interface MissedRun {
+  /** The move both of you kept not playing, as a board index — the view draws it. */
+  readonly point: number;
+  /** The same point named, e.g. "Q4", so the exports need no board to read it. */
+  readonly name: string;
+  /** Consecutive prompts it went unplayed. */
+  readonly length: number;
+  readonly firstMove: number;
+  readonly lastMove: number;
+  /** Whether the user ever guessed it during the run. */
+  readonly everGuessed: boolean;
+}
+
+/**
+ * Shortest run worth naming.
+ *
+ * Calibrated, not guessed. Run lengths across the six dogfood games — 252 runs
+ * in all — fall off sharply:
+ *
+ *     length  1    2   3  4  5  6  7  8  11  23
+ *     count   198  32  7  5  2  2  3  1   1   1
+ *
+ * Almost everything is one or two prompts long, which is just the engine
+ * changing its mind; four is where the tail begins. Three would add seven more
+ * runs and no more meaning.
+ *
+ * It also reproduces the effect §6.4 predicts: the longest run per game falls
+ * with playing strength — 23 prompts against a 6k, 5 against a 4d, 2 against a
+ * 7d — so this fires hardest for the players it helps most. Like
+ * `TENUKI_RADIUS`, six games is enough to place the threshold and not enough to
+ * settle it.
+ */
+export const MISSED_RUN_MIN = 4;
+
+/**
+ * Find the runs, over the prompts of one session, in move order.
+ *
+ * Runs are per colour by construction here: a session prompts one colour, so
+ * every verdict in the store belongs to the same player. That is the property
+ * §6.4 insists on — the two players miss different moves, sometimes in
+ * overlapping stretches, and pooling them finds neither.
+ */
+export function missedRuns(
+  analysis: Analysis,
+  prompts: readonly { readonly moveNumber: number; readonly actual: number; readonly guess: number }[],
+  board: Position,
+): MissedRun[] {
+  const runs: MissedRun[] = [];
+  let point: number | null = null;
+  let start = 0;
+  let guessedInRun = false;
+
+  const close = (end: number): void => {
+    const length: number = end - start;
+    if (point !== null && length >= MISSED_RUN_MIN) {
+      runs.push({
+        point,
+        name: pointName(board, point),
+        length,
+        firstMove: prompts[start].moveNumber,
+        lastMove: prompts[end - 1].moveNumber,
+        everGuessed: guessedInRun,
+      });
+    }
+  };
+
+  for (let i = 0; i < prompts.length; i++) {
+    const prompt = prompts[i];
+    const verdict: Verdict | null = verdictFor(analysis, prompt.moveNumber);
+    // A prompt with no verdict breaks the run rather than being skipped over.
+    // Bridging a gap would claim the engine kept naming a move across positions
+    // where nothing asked it.
+    const best: number | null = verdict?.best.point ?? null;
+    const unplayed: boolean = best !== null && prompt.actual !== best;
+
+    if (unplayed && best === point) {
+      guessedInRun ||= prompt.guess === best;
+      continue;
+    }
+
+    close(i);
+    if (unplayed) {
+      point = best;
+      start = i;
+      guessedInRun = prompt.guess === best;
+    } else {
+      point = null;
+      start = i + 1;
+      guessedInRun = false;
+    }
+  }
+  close(prompts.length);
+
+  return runs;
+}
+
+/** What the engine made of a session, in aggregate. */
+export interface AiResult {
+  readonly config: EngineConfig;
+  /** Predictions with a point loss worth quoting. */
+  readonly graded: number;
+  /** Prompts asked about, whether or not a number came back. */
+  readonly answered: number;
+  /**
+   * Median points given up per guess.
+   *
+   * The median rather than the mean, for the same reason the existing summary
+   * reports a median time: one catastrophe should not swallow the figure.
+   */
+  readonly medianLoss: number;
+  /** Total points given up, the quantity a player recognizes from AI review. */
+  readonly totalLoss: number;
+  /** Guesses that beat the move actually played, by more than the noise floor. */
+  readonly beat: number;
+  /** Guesses at or past the blunder threshold. */
+  readonly blunders: number;
+  /** Positions where the most natural-looking move was a trap. */
+  readonly misleading: number;
+  /** Of those, how many the user got right. */
+  readonly misleadingHits: number;
+  /** Stretches where neither of you played the engine's move. */
+  readonly runs: readonly MissedRun[];
+}
+
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted: number[] = [...values].sort((a, b) => a - b);
+  const middle: number = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+/**
+ * Aggregate a session's verdicts.
+ *
+ * `prompts` is the session's guesses in move order — everything this needs to
+ * know about the session, passed in rather than imported, so that this module
+ * stays independent of the session layer.
+ */
+export function aiResult(
+  analysis: Analysis,
+  prompts: readonly { readonly moveNumber: number; readonly actual: number; readonly guess: number; readonly hit: boolean }[],
+  board: Position,
+): AiResult {
+  const losses: number[] = [];
+  let answered = 0;
+  let beat = 0;
+  let blunders = 0;
+  let misleading = 0;
+  let misleadingHits = 0;
+
+  for (const prompt of prompts) {
+    const verdict: Verdict | null = verdictFor(analysis, prompt.moveNumber);
+    if (!verdict) continue;
+    answered++;
+
+    const loss: number | null = lossOf(verdict.guessed);
+    if (loss !== null) {
+      losses.push(loss);
+      if (loss >= BLUNDER_LOSS) blunders++;
+    }
+    if (beatPlayed(verdict)) beat++;
+    if (isMisleading(verdict)) {
+      misleading++;
+      if (prompt.hit) misleadingHits++;
+    }
+  }
+
+  return {
+    config: analysis.config,
+    graded: losses.length,
+    answered,
+    medianLoss: median(losses),
+    // Negative losses are search noise around zero, not points won back, so
+    // they are kept in the sum rather than clamped: clamping would bias the
+    // total upward by exactly the noise it was trying to hide.
+    totalLoss: losses.reduce((sum, loss) => sum + loss, 0),
+    beat,
+    blunders,
+    misleading,
+    misleadingHits,
+    runs: missedRuns(analysis, prompts, board),
+  };
 }

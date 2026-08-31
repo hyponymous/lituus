@@ -11,6 +11,19 @@ import { pointName } from './goban.ts';
 import { serialize } from './sgf-writer.ts';
 import { describe, type Game } from './game.ts';
 import { countPrompts, score, type Guess, type Score, type Session } from './session.ts';
+import {
+  BLUNDER_LOSS,
+  aiResult,
+  describeEngine,
+  beatPlayed,
+  isMisleading,
+  lossOf,
+  verdictFor,
+  type AiResult,
+  type Analysis,
+  type MoveVerdict,
+  type Verdict,
+} from './analysis.ts';
 import { BLACK, toRowCol, type Color, type Position } from './rules.ts';
 
 export type Phase = 'opening' | 'middle' | 'endgame';
@@ -83,6 +96,19 @@ export interface SummaryRow {
   readonly guessAway: boolean | null;
   /** How long this one took, or null if it was never measured. */
   readonly elapsedMs: number | null;
+  /**
+   * What the guess cost, in points, or null with no engine — and also null
+   * where the engine looked at the move too briefly for the number to be worth
+   * quoting. The two cases are deliberately not distinguished here: a figure
+   * that cannot be shown is a figure that cannot be shown.
+   */
+  readonly loss: number | null;
+  /** What the move actually played cost, on the same terms. */
+  readonly playedLoss: number | null;
+  /** Whether the guess beat the played move by more than the noise floor. */
+  readonly beat: boolean;
+  /** Whether this position's most natural-looking move was a trap. */
+  readonly misleading: boolean;
 }
 
 /**
@@ -156,6 +182,32 @@ export interface Summary {
   readonly timing: Timing | null;
   /** True when the user stopped before the record ran out. */
   readonly abandoned: boolean;
+  /**
+   * What the engine made of the session, or null when there was no engine.
+   *
+   * Subordinate to `score` by design, not by accident: a hit rate is a number
+   * the user can check by eye and an engine estimate is not, so exact match
+   * stays the headline (`docs/prd-ai-scoring.md` §5).
+   */
+  readonly ai: AiResult | null;
+  /**
+   * The verdicts behind `ai`, in move order, or null with no engine.
+   *
+   * Kept alongside the derived figures rather than instead of them: the
+   * figures are what a reader wants, and these are what lets a saved result be
+   * recomputed and checked (`docs/design-ai-scoring.md` §9.4).
+   */
+  readonly verdicts: readonly Verdict[] | null;
+  /**
+   * The board the session was played on, empty of everything but its shape and
+   * any setup stones.
+   *
+   * Carried so a summary can serialize itself. Every point in this structure is
+   * either already a name or an index needing one, and reaching back through
+   * `sgf` to re-parse a record for the sake of a few coordinates would be a
+   * silly way to render an export.
+   */
+  readonly board: Position;
   /**
    * The record the session was played on, serialized back to SGF.
    *
@@ -300,13 +352,23 @@ function phaseResults(game: Game, rows: readonly SummaryRow[]): PhaseResult[] {
   });
 }
 
-export function summarize(session: Session): Summary {
+/**
+ * Everything the summary knows about one session.
+ *
+ * `analysis` is optional and absent by default, so a session that never had an
+ * engine — the common case, since AI scoring is off by default — produces
+ * exactly the summary it produced before this existed. Every AI field is null
+ * or zero rather than missing, so consumers branch once on `summary.ai` instead
+ * of on every figure.
+ */
+export function summarize(session: Session, analysis?: Analysis): Summary {
   const { game, color } = session;
   // Any position serves for naming points; they all share the board's shape.
   const board: Position = game.initial;
 
   const rows: SummaryRow[] = session.guesses.map((made: Guess) => {
     const from: number | null = referencePoint(game, made.moveNumber);
+    const verdict: Verdict | null = analysis ? verdictFor(analysis, made.moveNumber) : null;
     return {
       moveNumber: made.moveNumber,
       phase: phaseOf(game, made.moveNumber),
@@ -316,6 +378,10 @@ export function summarize(session: Session): Summary {
       actualAway: from === null ? null : isAway(board, from, made.actual),
       guessAway: from === null ? null : isAway(board, from, made.guess),
       elapsedMs: made.elapsedMs,
+      loss: verdict ? lossOf(verdict.guessed) : null,
+      playedLoss: verdict ? lossOf(verdict.played) : null,
+      beat: verdict ? beatPlayed(verdict) : false,
+      misleading: verdict ? isMisleading(verdict) : false,
     };
   });
 
@@ -329,6 +395,13 @@ export function summarize(session: Session): Summary {
     streaks: streaksOf(rows),
     timing: timingOf(session.guesses),
     abandoned: session.guesses.length < countPrompts(game, color),
+    ai: analysis ? aiResult(analysis, session.guesses, board) : null,
+    verdicts: analysis
+      ? session.guesses
+          .map((made: Guess) => verdictFor(analysis, made.moveNumber))
+          .filter((verdict): verdict is Verdict => verdict !== null)
+      : null,
+    board,
     sgf: serialize([game.source]),
   };
 }
@@ -340,6 +413,51 @@ function colorName(color: Color): string {
 /** A percentage for display. Rounded to whole numbers; nobody needs decimals. */
 export function percent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
+}
+
+/**
+ * One move verdict as the export writes it. Points named, numbers rounded.
+ *
+ * Losses round to the same two decimals the derived figures above use, and that
+ * is load-bearing rather than tidy. Round the verdict finer than the figure
+ * derived from it and a restored result rounds twice — 0.5249 becomes 0.525
+ * becomes 0.53, where the original said 0.52 — so the round trip drifts by a
+ * hundredth on a handful of moves and the fixture check starts crying wolf.
+ * Rounding once, at one precision, makes the trip exact by construction.
+ */
+function exportMove(verdict: MoveVerdict | null, board: Position): object | null {
+  return verdict === null
+    ? null
+    : {
+        point: pointName(board, verdict.point),
+        loss: Number(verdict.loss.toFixed(2)),
+        visits: verdict.visits,
+        forced: verdict.forced,
+        pv: verdict.pv.map((point: number) => pointName(board, point)),
+      };
+}
+
+function exportVerdict(verdict: Verdict, board: Position): object {
+  return {
+    move: verdict.moveNumber,
+    rootScoreLead: Number(verdict.rootScoreLead.toFixed(3)),
+    rootVisits: verdict.rootVisits,
+    best: {
+      point: pointName(board, verdict.best.point),
+      scoreLead: Number(verdict.best.scoreLead.toFixed(3)),
+      pv: verdict.best.pv.map((point) => pointName(board, point)),
+    },
+    played: exportMove(verdict.played, board),
+    guessed: exportMove(verdict.guessed, board),
+    natural:
+      verdict.natural === null
+        ? null
+        : {
+            point: pointName(board, verdict.natural.point),
+            prior: Number(verdict.natural.prior.toFixed(4)),
+            loss: Number(verdict.natural.loss.toFixed(3)),
+          },
+  };
 }
 
 export function toJSON(summary: Summary): string {
@@ -381,6 +499,36 @@ export function toJSON(summary: Summary): string {
         hits: result.hits,
         rate: Number(result.rate.toFixed(4)),
       })),
+      // Null throughout when no engine ran, rather than absent: a reader
+      // diffing two exports should see the same keys either way.
+      engine:
+        summary.ai === null
+          ? null
+          : {
+              network: summary.ai.config.network,
+              visits: summary.ai.config.visits,
+              backend: summary.ai.config.backend,
+            },
+      ai:
+        summary.ai === null
+          ? null
+          : {
+              graded: summary.ai.graded,
+              answered: summary.ai.answered,
+              medianLoss: Number(summary.ai.medianLoss.toFixed(2)),
+              totalLoss: Number(summary.ai.totalLoss.toFixed(1)),
+              beat: summary.ai.beat,
+              blunders: summary.ai.blunders,
+              misleading: summary.ai.misleading,
+              misleadingHits: summary.ai.misleadingHits,
+              runs: summary.ai.runs.map((run) => ({
+                point: run.name,
+                length: run.length,
+                firstMove: run.firstMove,
+                lastMove: run.lastMove,
+                everGuessed: run.everGuessed,
+              })),
+            },
       moves: summary.rows.map((row) => ({
         move: row.moveNumber,
         phase: row.phase,
@@ -390,7 +538,27 @@ export function toJSON(summary: Summary): string {
         playedAway: row.actualAway,
         youPlayedAway: row.guessAway,
         ms: row.elapsedMs,
+        loss: row.loss === null ? null : Number(row.loss.toFixed(2)),
+        playedLoss: row.playedLoss === null ? null : Number(row.playedLoss.toFixed(2)),
+        beat: row.beat,
+        misleading: row.misleading,
       })),
+      /*
+       * The verdicts themselves, not just the figures derived from them.
+       *
+       * Everything in `ai` above can be recomputed from this, which is what
+       * makes a saved result a regression test for every engine number on the
+       * summary screen rather than only for the ones that happened to be
+       * exported. `dev.ts` reads it back and recomputes
+       * (`docs/design-ai-scoring.md` §9.4).
+       *
+       * Points are names, as everywhere else in this export, so the file can be
+       * read without a board in hand.
+       */
+      verdicts:
+        summary.verdicts === null
+          ? null
+          : summary.verdicts.map((verdict) => exportVerdict(verdict, summary.board)),
       // Last, and much the largest field: the record itself, so the result is
       // self-contained. Everything a reader wants is above it.
       sgf: summary.sgf,
@@ -451,10 +619,55 @@ export function toText(summary: Summary): string {
     lines.push(`  they answered, you left        ${tenuki.leftEarly}`);
   }
 
+  const { ai } = summary;
+  if (ai && ai.answered > 0) {
+    lines.push('', `Engine: ${describeEngine(ai.config)}`);
+    if (ai.graded > 0) {
+      lines.push(
+        `Points given up: ${ai.totalLoss.toFixed(1)} over ${ai.graded} guesses, ` +
+          `median ${ai.medianLoss.toFixed(1)}`,
+      );
+    }
+    if (ai.beat > 0) {
+      // The most motivating thing the tool can say, so it gets its own line
+      // rather than being folded into a table.
+      lines.push(`Your guess beat the game's move ${ai.beat} times.`);
+    }
+    if (ai.blunders > 0) {
+      lines.push(`Guesses that cost ${BLUNDER_LOSS} points or more: ${ai.blunders}`);
+    }
+    if (ai.misleading > 0) {
+      lines.push(
+        `Positions where the natural move was a trap: ${ai.misleading} ` +
+          `(you found ${ai.misleadingHits})`,
+      );
+    }
+    if (ai.answered < summary.rows.length) {
+      // Said plainly rather than omitted: a median over half the game is not
+      // the same number as a median over the game.
+      lines.push(`Analysed ${ai.answered} of ${summary.rows.length} predictions.`);
+    }
+
+    for (const run of ai.runs) {
+      lines.push(
+        `Neither of you played ${run.name} in ${run.length} straight chances ` +
+          `(moves ${run.firstMove}–${run.lastMove})` +
+          (run.everGuessed ? ' — though you found it at least once.' : '.'),
+      );
+    }
+  }
+
   lines.push('', 'Moves:');
   for (const row of summary.rows) {
     const mark: string = row.hit ? 'hit ' : 'miss';
-    lines.push(`  ${String(row.moveNumber).padStart(4)}  ${mark}  ${row.guess} / ${row.actual}`);
+    // Signed from your side, as the annotated SGF does it: +0.4 is four tenths
+    // to the good, -3.1 is three points thrown away. A loss reads more
+    // naturally as a number to avoid than as a quantity to accumulate.
+    const cost: string = row.loss === null ? '' : `  ${(-row.loss).toFixed(1).padStart(6)}`;
+    const beat: string = row.beat ? '  beat the game' : '';
+    lines.push(
+      `  ${String(row.moveNumber).padStart(4)}  ${mark}  ${row.guess} / ${row.actual}${cost}${beat}`,
+    );
   }
 
   return lines.join('\n');
