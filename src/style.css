@@ -557,3 +557,61 @@ section .muted {
   font-variant-numeric: tabular-nums;
 }
 
+
+/* ── Engine deployment spike (#spike) ───────────────────────────────────────
+   A diagnostic, not a view. It ships because it has to run against the built,
+   deployed site, so it gets enough style to be readable and no more. */
+
+.spike {
+  max-width: 46rem;
+  margin: 0 auto;
+}
+
+.spike-blurb {
+  color: var(--muted);
+  margin-bottom: 1.5rem;
+}
+
+.spike-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-left: 1.25rem;
+}
+
+.spike-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.spike-label {
+  font-weight: 600;
+}
+
+.spike-note {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.spike-run { color: var(--muted); }
+.spike-ok { color: var(--hit); }
+.spike-warn { color: var(--accent); }
+.spike-bad { color: var(--miss); }
+
+.spike-detail {
+  margin: 0.35rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--panel);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.spike-detail:empty {
+  display: none;
+}

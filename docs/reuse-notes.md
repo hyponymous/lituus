@@ -9,6 +9,10 @@ This file records divergences **as they are made**, so the eventual
 extraction is a matter of reading notes rather than reconstructing decisions
 from two diverged codebases.
 
+kifu is the main upstream, and everything below concerns it unless a section
+says otherwise. The analysis engine has a second one — web-katrain — which is
+borrowed from on the same terms and gets its own section at the end.
+
 ## Conventions
 
 - Every vendored file carries a header comment naming its upstream origin.
@@ -130,6 +134,56 @@ arrays are typed loosely upstream.
 **At extraction:** `encode`/`decode` are the shared part and should keep the
 narrow signatures. Everything that touches `location`, the DOM, or user-facing
 wording belongs to the app.
+
+## Vendored from web-katrain
+
+A second upstream, on the same terms: [web-katrain](https://github.com/Sir-Teo/web-katrain),
+MIT. It is the only browser KataGo close enough to lituus's needs to borrow
+from, and `docs/design-ai-scoring.md` §4 records why a subset is adapted rather
+than the whole thing vendored or a new engine written.
+
+Unlike the kifu borrowings, nothing here is heading for a shared package. It is
+a transcription of KataGo's model format and search, and its correctness is
+owed to KataGo rather than to us — which is exactly why the divergences need
+recording.
+
+### `binModelParser.ts` → `src/engine/bin-model-parser.ts`
+
+A clean lift. The `.bin` tokenizer is pure, dependency-free, and has no reason
+to differ. Renamed to the project's kebab-case file convention; contents
+unchanged.
+
+### `loadModelV8.ts` → `src/engine/load-model-v8.ts`
+
+Lifted. Two changes, both about imports:
+
+- Specifiers carry `.ts` extensions, as everything in this project does.
+- The `ParsedKataGoModelV8` type comes from a new `model-types.ts` rather than
+  from `modelV8.ts`.
+
+**Why the second one matters.** Upstream, the parsed-model type lives in the
+same module as the TensorFlow.js graph, so reading a network drags TensorFlow.js
+in behind it. Splitting the type out keeps the parser free of it, which is what
+lets `node --test` exercise the parser with no bundler and no GPU, and what lets
+the deployment spike validate a downloaded network before any backend exists.
+
+### `modelV8.ts` → `src/engine/model-types.ts` (types only, so far)
+
+Only the type declarations have come across; the graph itself has not been
+adapted yet. See the split above for why they are separated at all.
+
+### Deliberately not taken
+
+- **`fastBoard.ts`'s move logic.** `src/rules.ts` already owns legality. Its
+  *feature* half — liberty maps, pass-alive area, ladders — has no counterpart
+  here and will have to come across; `docs/design-ai-scoring.md` §4.2 records
+  the sizing, and the correction to it.
+- **`worker.ts` / `client.ts`.** Their lifecycle serves an analysis product with
+  tree reuse, cancellation and progressive reporting. lituus queues one search
+  at a time behind a session and needs a much smaller one.
+- **The `tfjs` umbrella package.** Upstream depends on it; lituus takes
+  `@tensorflow/tfjs-core` and the WebGPU backend only. The KataGo graph uses
+  core ops, and layers, converter and data would be bundle nobody calls.
 
 ## Candidate package contents
 

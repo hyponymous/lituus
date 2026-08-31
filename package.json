@@ -6,14 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "fetch:net": "node scripts/fetch-network.ts dist",
     "preview": "vite preview",
     "test": "node --test 'test/*.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@webgpu/types": "^0.1.72",
     "playwright": "^1.62.1",
     "typescript": "^5.9.3",
     "vite": "^8.0.0"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs-backend-webgpu": "^4.22.0",
+    "@tensorflow/tfjs-core": "^4.22.0"
   }
 }

@@ -4,11 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "lib": ["ES2022", "DOM"],
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client", "@webgpu/types"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "experiments/katago/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "experiments/katago/**/*.ts"]
 }

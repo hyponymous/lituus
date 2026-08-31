@@ -23,6 +23,7 @@ import {
   renderSummary,
 } from './views.ts';
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
+import { SPIKE_HASH } from './engine/spike-hash.ts';
 import { decode, encode } from './share.ts';
 import type { Color } from './rules.ts';
 
@@ -320,6 +321,15 @@ function main(): void {
     });
   }
 
+  // The engine spike, unlike the dev harness, ships. It exists to test the
+  // built, deployed, base-pathed site, which is the one place it cannot be
+  // allowed to be absent. Imported dynamically so an ordinary visit pays
+  // nothing for it, and reachable only by typing the fragment.
+  if (location.hash === SPIKE_HASH) void openSpike();
+  window.addEventListener('hashchange', (): void => {
+    if (location.hash === SPIKE_HASH) void openSpike();
+  });
+
   // A second link pasted into the same tab only changes the fragment, which
   // is a same-document navigation: nothing reloads and the old game would
   // stay on screen. Handing someone a set of links makes that the normal way
@@ -328,6 +338,19 @@ function main(): void {
 
   draw();
   void loadFromHash();
+}
+
+/**
+ * Hand the page over to the spike.
+ *
+ * The screen name is set after the import, not before: bootstrap calls `draw()`
+ * while this is still awaiting, and `draw()` writes the same attribute. Setting
+ * it first would simply be overwritten a tick later.
+ */
+async function openSpike(): Promise<void> {
+  const { renderSpike } = await import('./spike.ts');
+  document.body.dataset.screen = 'spike';
+  await renderSpike(root);
 }
 
 /**
@@ -349,12 +372,13 @@ function main(): void {
  * while a link opens — and nothing at all is what a broken link would leave
  * on screen. The landing view paints first and the game replaces it.
  *
- * The dev fragment is checked before this and is a fixed short string, so it
- * can never be mistaken for encoded game data.
+ * The dev and spike fragments are checked before this and are fixed short
+ * strings, so neither can be mistaken for encoded game data.
  */
 async function loadFromHash(): Promise<void> {
   const fragment: string = location.hash.slice(1);
-  if (fragment === '' || (import.meta.env.DEV && location.hash === DEV_HASH)) return;
+  if (fragment === '' || location.hash === SPIKE_HASH) return;
+  if (import.meta.env.DEV && location.hash === DEV_HASH) return;
   const link: string = `${location.origin}${location.pathname}#${fragment}`;
   try {
     loadGame(await decode(fragment));

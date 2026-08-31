@@ -76,12 +76,18 @@ study, other games may teach more or be more fun. Some options:
 ## Development
 
 Requires Node 24 or later, which strips TypeScript types natively, so tests run
-with no loader hook and no flags. There are no runtime dependencies.
+with no loader hook and no flags.
+
+The app itself has no runtime dependencies. The optional in-browser analysis
+engine has two — TensorFlow.js and its WebGPU backend — reached only from the
+analysis worker, so a session that is not using the engine downloads none of
+it.
 
 ```sh
 npm install
 npm run dev        # Vite dev server
 npm run build      # production build to dist/
+npm run fetch:net  # download the KataGo network into dist/ (build-time only)
 npm test           # Node test runner
 npm run typecheck  # tsc --noEmit
 ```

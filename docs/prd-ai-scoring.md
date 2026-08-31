@@ -1,13 +1,16 @@
 # lituus — Product Requirements: AI Scoring
 
 **Status:** draft · not started
-**Last updated:** 2026-08-25
+**Last updated:** 2026-08-30
 
 What an engine adds to a session, and what it is allowed to claim.
 [The PoC PRD](prd-proof-of-concept.md) §7 sketched this as the tracked next
 step; the sketch is now superseded, because the measurements in
 [the feasibility findings](katago-feasibility.md) rule out several of the
 options it left open. Evidence lives there and is not repeated here.
+
+How it gets built is [the design doc](design-ai-scoring.md)'s question, not
+this one's.
 
 ## 1. Problem
 
@@ -467,11 +470,17 @@ foreclosing it.
   an engine implementation problem than a device limit
   ([findings](katago-feasibility.md) §7), and §7 exists only because it is
   unresolved. Settling it could delete most of that section.
-- **Which engine actually ships.** The measurements were taken against a
-  vendored third-party implementation. Using it directly, adapting it, or
-  writing a search against lituus's own rules engine are three different
-  answers with different dependency costs — the project currently has no
-  runtime dependencies, and that implementation brings TensorFlow.js.
+- ~~**Which engine actually ships.**~~ Settled: a subset of the vendored
+  implementation is adapted into the project, and the search is rewritten
+  against it. TensorFlow.js becomes an optional runtime dependency, reachable
+  only from the analysis worker, so a session without AI scoring still
+  downloads none of it. See [the design doc](design-ai-scoring.md) §4.
+- **Square boards only.** The network's input features are indexed by a single
+  board dimension, so 9×9, 13×13 and 19×19 are fine and a rectangular `SZ` is
+  not. Such a record gets exact-match scoring, with the reason stated where the
+  toggle would be ([design](design-ai-scoring.md) §7). Whether this is worth
+  lifting is unexamined; rectangular records are rare enough that it may never
+  be worth the feature work.
 - **Where analysis comes from for anyone wanting better than the browser
   offers**, which §10 also depends on. Reviewing a game first spoils it, so
   any local path must be headless, one-shot, and unread.

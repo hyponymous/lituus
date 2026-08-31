@@ -26,6 +26,19 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+      # The network is served same-origin because it cannot be served any other
+      # way: neither upstream host sends Access-Control-Allow-Origin, so a
+      # browser on the published site cannot fetch one. See
+      # docs/design-ai-scoring.md §10b. It is fetched here rather than
+      # committed — 37 MB in git history is permanent and is paid by everyone
+      # who clones. Restored after the build, which empties dist/.
+      - uses: actions/cache@v4
+        with:
+          path: dist/nets
+          key: katago-net-${{ hashFiles('src/engine/network.ts') }}
+      - run: npm run fetch:net
+
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
