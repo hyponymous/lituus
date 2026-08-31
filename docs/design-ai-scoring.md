@@ -411,10 +411,30 @@ time well spent, exactly as it was against kifu.
 
 ### 9.4 A saved session as a fixture
 
-Once one real session has been played against the real engine, its export —
-verdicts included, per §3 — is committed as a fixture and `dev.ts` recomputes
-every AI number from it. That is a regression test for the whole of §6 that
-costs nothing to maintain and needs no GPU.
+A session played against the real engine has its export — verdicts included,
+per §3 — committed as a fixture, and `dev.ts` recomputes every AI number from
+it. A regression test for the whole of §6 that costs nothing to maintain and
+needs no GPU.
+
+**Built, as `test/fixtures/result-ai.json`.** It required no new record: the
+repository already carries `result.json`, a real hundred-guess session on Ke
+Jie against Ichiriki Ryo, 10th Ing Cup — a published professional game, which
+is why it can be committed at all. Running KataGo over that same session's
+positions at the shipping configuration, with every guess forced, produces a
+fixture with real verdicts and publishes nothing new.
+
+Doing it that way avoided the alternative, which was committing an amateur's
+game record to a public repository so that a test could have something to read.
+Worth remembering as a pattern: the fixture that needs no new data is usually
+sitting in the repository already.
+
+The fixture is deliberately the *wrong* game for the feature. §1 says AI
+scoring exists for games where the played move is frequently a mistake, and
+against two professionals it nearly always deserves to be found — so the losses
+are small, the median is 0.03 points, and there are no standing-missed-move
+runs at all. That makes it an excellent regression fixture and a poor
+demonstration, and it means §6.4's runs stay covered by hand-built verdicts
+rather than by this.
 
 ## 10. Build and dependencies
 

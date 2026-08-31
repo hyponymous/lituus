@@ -30,7 +30,7 @@ import {
 } from './analysis.ts';
 import type { GameNode, GameTree, Props } from './sgf-parser.ts';
 import { serialize } from './sgf-writer.ts';
-import { summarize, toText, type Summary } from './summary.ts';
+import { signed, summarize, toText, type Summary } from './summary.ts';
 import { BLACK, toRowCol, type Color, type Position } from './rules.ts';
 import type { Session } from './session.ts';
 
@@ -137,12 +137,6 @@ function rebuild(
  * number exists to avoid.
  */
 const MIN_EDGE = MISLEADING_LOSS;
-
-/** Points from the guessing player's side: positive is good, negative is lost. */
-function signed(loss: number): string {
-  const value: number = -loss;
-  return `${value < -0.05 ? '-' : '+'}${Math.abs(value).toFixed(1)}`;
-}
 
 /**
  * What to say about a guess, beyond the fact that it was made.

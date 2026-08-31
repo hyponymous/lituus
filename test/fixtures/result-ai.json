@@ -1,0 +1,6347 @@
+{
+  "game": "Ke Jie 9d vs Ichiriki Ryo 9d",
+  "color": "White",
+  "predicted": 100,
+  "hits": 52,
+  "prompts": 100,
+  "rate": 0.52,
+  "abandoned": false,
+  "tenuki": {
+    "bothAway": 12,
+    "stayedHome": 7,
+    "bothLocal": 77,
+    "leftEarly": 4,
+    "sameArea": 9,
+    "unscored": 0
+  },
+  "timing": null,
+  "streaks": [
+    {
+      "length": 4,
+      "firstMove": 2,
+      "lastMove": 8
+    },
+    {
+      "length": 5,
+      "firstMove": 22,
+      "lastMove": 30
+    },
+    {
+      "length": 3,
+      "firstMove": 54,
+      "lastMove": 58
+    },
+    {
+      "length": 6,
+      "firstMove": 72,
+      "lastMove": 82
+    },
+    {
+      "length": 5,
+      "firstMove": 90,
+      "lastMove": 98
+    },
+    {
+      "length": 4,
+      "firstMove": 106,
+      "lastMove": 112
+    },
+    {
+      "length": 3,
+      "firstMove": 116,
+      "lastMove": 120
+    },
+    {
+      "length": 3,
+      "firstMove": 142,
+      "lastMove": 146
+    }
+  ],
+  "phases": [
+    {
+      "phase": "opening",
+      "predicted": 25,
+      "hits": 15,
+      "rate": 0.6
+    },
+    {
+      "phase": "middle",
+      "predicted": 50,
+      "hits": 30,
+      "rate": 0.6
+    },
+    {
+      "phase": "endgame",
+      "predicted": 25,
+      "hits": 7,
+      "rate": 0.28
+    }
+  ],
+  "engine": {
+    "network": "b15c192",
+    "visits": 50,
+    "backend": "katago"
+  },
+  "ai": {
+    "graded": 100,
+    "answered": 100,
+    "medianLoss": 0.03,
+    "totalLoss": 111.9,
+    "beat": 9,
+    "blunders": 5,
+    "misleading": 2,
+    "misleadingHits": 0,
+    "runs": []
+  },
+  "moves": [
+    {
+      "move": 2,
+      "phase": "opening",
+      "guess": "D16",
+      "actual": "D16",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": -0.05,
+      "playedLoss": -0.05,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 4,
+      "phase": "opening",
+      "guess": "C4",
+      "actual": "C4",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 0.04,
+      "playedLoss": 0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 6,
+      "phase": "opening",
+      "guess": "R5",
+      "actual": "R5",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": -0.04,
+      "playedLoss": -0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 8,
+      "phase": "opening",
+      "guess": "P5",
+      "actual": "P5",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.08,
+      "playedLoss": -0.08,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 10,
+      "phase": "opening",
+      "guess": "M3",
+      "actual": "M4",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.1,
+      "playedLoss": -0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 12,
+      "phase": "opening",
+      "guess": "P6",
+      "actual": "P6",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.04,
+      "playedLoss": -0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 14,
+      "phase": "opening",
+      "guess": "R3",
+      "actual": "R3",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.31,
+      "playedLoss": -0.31,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 16,
+      "phase": "opening",
+      "guess": "R6",
+      "actual": "S3",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 2.72,
+      "playedLoss": -0.23,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 18,
+      "phase": "opening",
+      "guess": "R6",
+      "actual": "R6",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.23,
+      "playedLoss": 0.23,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 20,
+      "phase": "opening",
+      "guess": "K3",
+      "actual": "J3",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.29,
+      "playedLoss": -0.07,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 22,
+      "phase": "opening",
+      "guess": "E4",
+      "actual": "E4",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.1,
+      "playedLoss": -0.1,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 24,
+      "phase": "opening",
+      "guess": "E5",
+      "actual": "E5",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.01,
+      "playedLoss": -0.01,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 26,
+      "phase": "opening",
+      "guess": "C5",
+      "actual": "C5",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.19,
+      "playedLoss": -0.19,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 28,
+      "phase": "opening",
+      "guess": "P3",
+      "actual": "P3",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": -0.49,
+      "playedLoss": -0.49,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 30,
+      "phase": "opening",
+      "guess": "P2",
+      "actual": "P2",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.2,
+      "playedLoss": -0.2,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 32,
+      "phase": "opening",
+      "guess": "G6",
+      "actual": "Q2",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 4.23,
+      "playedLoss": -0.17,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 34,
+      "phase": "opening",
+      "guess": "E8",
+      "actual": "E8",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.05,
+      "playedLoss": 0.05,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 36,
+      "phase": "opening",
+      "guess": "G5",
+      "actual": "O7",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.81,
+      "playedLoss": 0.77,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 38,
+      "phase": "opening",
+      "guess": "J4",
+      "actual": "G2",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.42,
+      "playedLoss": 0.29,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 40,
+      "phase": "opening",
+      "guess": "G6",
+      "actual": "K5",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 1.05,
+      "playedLoss": 0.07,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 42,
+      "phase": "opening",
+      "guess": "G6",
+      "actual": "N7",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.51,
+      "playedLoss": 0.65,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 44,
+      "phase": "opening",
+      "guess": "K6",
+      "actual": "K6",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.21,
+      "playedLoss": -0.21,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 46,
+      "phase": "opening",
+      "guess": "J7",
+      "actual": "J7",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.17,
+      "playedLoss": -0.17,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 48,
+      "phase": "opening",
+      "guess": "M6",
+      "actual": "O6",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -1.04,
+      "playedLoss": -0.8,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 50,
+      "phase": "opening",
+      "guess": "H2",
+      "actual": "H6",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.62,
+      "playedLoss": 0.6,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 52,
+      "phase": "middle",
+      "guess": "J4",
+      "actual": "J2",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 3.15,
+      "playedLoss": -0.26,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 54,
+      "phase": "middle",
+      "guess": "K4",
+      "actual": "K4",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.05,
+      "playedLoss": -0.05,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 56,
+      "phase": "middle",
+      "guess": "M3",
+      "actual": "M3",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.02,
+      "playedLoss": 0.02,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 58,
+      "phase": "middle",
+      "guess": "N2",
+      "actual": "N2",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.13,
+      "playedLoss": -0.13,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 60,
+      "phase": "middle",
+      "guess": "N3",
+      "actual": "L4",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.39,
+      "playedLoss": 4.27,
+      "beat": true,
+      "misleading": true
+    },
+    {
+      "move": 62,
+      "phase": "middle",
+      "guess": "O1",
+      "actual": "N3",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 10.51,
+      "playedLoss": -0.22,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 64,
+      "phase": "middle",
+      "guess": "M1",
+      "actual": "M1",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.02,
+      "playedLoss": -0.02,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 66,
+      "phase": "middle",
+      "guess": "O1",
+      "actual": "F6",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 6.52,
+      "playedLoss": -0.42,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 68,
+      "phase": "middle",
+      "guess": "S8",
+      "actual": "C13",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 3.23,
+      "playedLoss": -0.14,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 70,
+      "phase": "middle",
+      "guess": "K16",
+      "actual": "G7",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 6.31,
+      "playedLoss": -0.11,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 72,
+      "phase": "middle",
+      "guess": "H9",
+      "actual": "H9",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.69,
+      "playedLoss": 0.69,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 74,
+      "phase": "middle",
+      "guess": "D17",
+      "actual": "D17",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.01,
+      "playedLoss": 0.01,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 76,
+      "phase": "middle",
+      "guess": "C15",
+      "actual": "C15",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.17,
+      "playedLoss": -0.17,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 78,
+      "phase": "middle",
+      "guess": "B14",
+      "actual": "B14",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.03,
+      "playedLoss": 0.03,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 80,
+      "phase": "middle",
+      "guess": "C14",
+      "actual": "C14",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.03,
+      "playedLoss": 0.03,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 82,
+      "phase": "middle",
+      "guess": "E18",
+      "actual": "E18",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.02,
+      "playedLoss": -0.02,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 84,
+      "phase": "middle",
+      "guess": "D19",
+      "actual": "F17",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.15,
+      "playedLoss": 1.15,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 86,
+      "phase": "middle",
+      "guess": "F16",
+      "actual": "F16",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.37,
+      "playedLoss": 0.37,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 88,
+      "phase": "middle",
+      "guess": "F15",
+      "actual": "G14",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 1.55,
+      "playedLoss": 0.68,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 90,
+      "phase": "middle",
+      "guess": "O16",
+      "actual": "O16",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.53,
+      "playedLoss": -0.53,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 92,
+      "phase": "middle",
+      "guess": "O17",
+      "actual": "O17",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.53,
+      "playedLoss": -0.53,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 94,
+      "phase": "middle",
+      "guess": "O13",
+      "actual": "O13",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.04,
+      "playedLoss": -0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 96,
+      "phase": "middle",
+      "guess": "Q15",
+      "actual": "Q15",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.23,
+      "playedLoss": -0.23,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 98,
+      "phase": "middle",
+      "guess": "Q13",
+      "actual": "Q13",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.33,
+      "playedLoss": -0.33,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 100,
+      "phase": "middle",
+      "guess": "N13",
+      "actual": "M14",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.73,
+      "playedLoss": -0.34,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 102,
+      "phase": "middle",
+      "guess": "N14",
+      "actual": "O15",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 3.65,
+      "playedLoss": -0.96,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 104,
+      "phase": "middle",
+      "guess": "R14",
+      "actual": "N14",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 2.03,
+      "playedLoss": 0.07,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 106,
+      "phase": "middle",
+      "guess": "L13",
+      "actual": "L13",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.69,
+      "playedLoss": -0.69,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 108,
+      "phase": "middle",
+      "guess": "M12",
+      "actual": "M12",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.5,
+      "playedLoss": -0.5,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 110,
+      "phase": "middle",
+      "guess": "K12",
+      "actual": "K12",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.39,
+      "playedLoss": -0.39,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 112,
+      "phase": "middle",
+      "guess": "K11",
+      "actual": "K11",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.04,
+      "playedLoss": 0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 114,
+      "phase": "middle",
+      "guess": "D12",
+      "actual": "D19",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -1.62,
+      "playedLoss": -0.73,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 116,
+      "phase": "middle",
+      "guess": "C18",
+      "actual": "C18",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.01,
+      "playedLoss": -0.01,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 118,
+      "phase": "middle",
+      "guess": "G6",
+      "actual": "G6",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.6,
+      "playedLoss": -0.6,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 120,
+      "phase": "middle",
+      "guess": "D12",
+      "actual": "D12",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.37,
+      "playedLoss": 0.37,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 122,
+      "phase": "middle",
+      "guess": "E12",
+      "actual": "F12",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 4.62,
+      "playedLoss": -0.58,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 124,
+      "phase": "middle",
+      "guess": "E12",
+      "actual": "E12",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0,
+      "playedLoss": 0,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 126,
+      "phase": "middle",
+      "guess": "M9",
+      "actual": "E9",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.81,
+      "playedLoss": -2.36,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 128,
+      "phase": "middle",
+      "guess": "F9",
+      "actual": "F9",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.23,
+      "playedLoss": 0.23,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 130,
+      "phase": "middle",
+      "guess": "O9",
+      "actual": "O18",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 0.81,
+      "playedLoss": 0.7,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 132,
+      "phase": "middle",
+      "guess": "J18",
+      "actual": "R12",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": -0.18,
+      "playedLoss": -1.06,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 134,
+      "phase": "middle",
+      "guess": "S12",
+      "actual": "R14",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 9.7,
+      "playedLoss": -0.03,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 136,
+      "phase": "middle",
+      "guess": "S14",
+      "actual": "S14",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.61,
+      "playedLoss": -0.61,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 138,
+      "phase": "middle",
+      "guess": "T16",
+      "actual": "O12",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.51,
+      "playedLoss": 0.63,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 140,
+      "phase": "middle",
+      "guess": "S7",
+      "actual": "F19",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 1.48,
+      "playedLoss": -1.35,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 142,
+      "phase": "middle",
+      "guess": "Q4",
+      "actual": "Q4",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.03,
+      "playedLoss": 0.03,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 144,
+      "phase": "middle",
+      "guess": "Q3",
+      "actual": "Q3",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.03,
+      "playedLoss": 0.03,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 146,
+      "phase": "middle",
+      "guess": "O1",
+      "actual": "O1",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.15,
+      "playedLoss": -0.15,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 148,
+      "phase": "middle",
+      "guess": "F13",
+      "actual": "H13",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 3.37,
+      "playedLoss": 0.54,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 150,
+      "phase": "middle",
+      "guess": "T16",
+      "actual": "T16",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 0.35,
+      "playedLoss": 0.35,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 152,
+      "phase": "endgame",
+      "guess": "O1",
+      "actual": "O1",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 0.45,
+      "playedLoss": 0.45,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 154,
+      "phase": "endgame",
+      "guess": "F15",
+      "actual": "H15",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 6.22,
+      "playedLoss": -1.33,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 156,
+      "phase": "endgame",
+      "guess": "F15",
+      "actual": "G17",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 3.22,
+      "playedLoss": 2.98,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 158,
+      "phase": "endgame",
+      "guess": "F15",
+      "actual": "F15",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.29,
+      "playedLoss": -0.29,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 160,
+      "phase": "endgame",
+      "guess": "T17",
+      "actual": "D19",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 1.98,
+      "playedLoss": 5.3,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 162,
+      "phase": "endgame",
+      "guess": "C18",
+      "actual": "L18",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 11.76,
+      "playedLoss": -1.98,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 164,
+      "phase": "endgame",
+      "guess": "J18",
+      "actual": "J18",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -2.15,
+      "playedLoss": -2.15,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 166,
+      "phase": "endgame",
+      "guess": "H14",
+      "actual": "H14",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.13,
+      "playedLoss": 0.13,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 168,
+      "phase": "endgame",
+      "guess": "G18",
+      "actual": "M18",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.12,
+      "playedLoss": -1.09,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 170,
+      "phase": "endgame",
+      "guess": "H19",
+      "actual": "G18",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 19.54,
+      "playedLoss": -1.37,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 172,
+      "phase": "endgame",
+      "guess": "F13",
+      "actual": "D19",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 3.57,
+      "playedLoss": -1.2,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 174,
+      "phase": "endgame",
+      "guess": "K18",
+      "actual": "K18",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -1.25,
+      "playedLoss": -1.25,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 176,
+      "phase": "endgame",
+      "guess": "E16",
+      "actual": "F13",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 8.37,
+      "playedLoss": -0.46,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 178,
+      "phase": "endgame",
+      "guess": "E16",
+      "actual": "D19",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 4.88,
+      "playedLoss": -1,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 180,
+      "phase": "endgame",
+      "guess": "N16",
+      "actual": "C18",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -4.28,
+      "playedLoss": 8.03,
+      "beat": true,
+      "misleading": true
+    },
+    {
+      "move": 182,
+      "phase": "endgame",
+      "guess": "B19",
+      "actual": "B19",
+      "hit": true,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": 0.12,
+      "playedLoss": 0.12,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 184,
+      "phase": "endgame",
+      "guess": "S5",
+      "actual": "M6",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.03,
+      "playedLoss": 1.04,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 186,
+      "phase": "endgame",
+      "guess": "S5",
+      "actual": "B5",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": -0.76,
+      "playedLoss": 0.67,
+      "beat": true,
+      "misleading": false
+    },
+    {
+      "move": 188,
+      "phase": "endgame",
+      "guess": "A6",
+      "actual": "N17",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.09,
+      "playedLoss": -0.93,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 190,
+      "phase": "endgame",
+      "guess": "S5",
+      "actual": "O9",
+      "hit": false,
+      "playedAway": true,
+      "youPlayedAway": true,
+      "ms": null,
+      "loss": -0.6,
+      "playedLoss": -0.33,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 192,
+      "phase": "endgame",
+      "guess": "O10",
+      "actual": "J13",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.31,
+      "playedLoss": -0.33,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 194,
+      "phase": "endgame",
+      "guess": "J9",
+      "actual": "M11",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 1.78,
+      "playedLoss": 0.04,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 196,
+      "phase": "endgame",
+      "guess": "P8",
+      "actual": "L9",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -0.48,
+      "playedLoss": -1.23,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 198,
+      "phase": "endgame",
+      "guess": "N5",
+      "actual": "N5",
+      "hit": true,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": -1.11,
+      "playedLoss": -1.11,
+      "beat": false,
+      "misleading": false
+    },
+    {
+      "move": 200,
+      "phase": "endgame",
+      "guess": "K10",
+      "actual": "N8",
+      "hit": false,
+      "playedAway": false,
+      "youPlayedAway": false,
+      "ms": null,
+      "loss": 0.69,
+      "playedLoss": -5.71,
+      "beat": false,
+      "misleading": false
+    }
+  ],
+  "verdicts": [
+    {
+      "move": 2,
+      "rootScoreLead": 1.502,
+      "rootVisits": 55,
+      "best": {
+        "point": "D4",
+        "scoreLead": 1.47,
+        "pv": [
+          "D4",
+          "Q4",
+          "D16",
+          "O16",
+          "O3"
+        ]
+      },
+      "played": {
+        "point": "D16",
+        "loss": -0.05,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D16",
+          "Q4",
+          "D4",
+          "O16",
+          "O3",
+          "R6"
+        ]
+      },
+      "guessed": {
+        "point": "D16",
+        "loss": -0.05,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D16",
+          "Q4",
+          "D4",
+          "O16",
+          "O3",
+          "R6"
+        ]
+      },
+      "natural": {
+        "point": "D16",
+        "prior": 0.2492,
+        "loss": -0.03
+      }
+    },
+    {
+      "move": 4,
+      "rootScoreLead": 1.528,
+      "rootVisits": 55,
+      "best": {
+        "point": "D4",
+        "scoreLead": 1.532,
+        "pv": [
+          "D4",
+          "O16",
+          "R5",
+          "O4"
+        ]
+      },
+      "played": {
+        "point": "C4",
+        "loss": 0.04,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "C4",
+          "E3",
+          "D5",
+          "O17",
+          "R5",
+          "O4"
+        ]
+      },
+      "guessed": {
+        "point": "C4",
+        "loss": 0.04,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "C4",
+          "E3",
+          "D5",
+          "O17",
+          "R5",
+          "O4"
+        ]
+      },
+      "natural": {
+        "point": "D4",
+        "prior": 0.5489,
+        "loss": 0
+      }
+    },
+    {
+      "move": 6,
+      "rootScoreLead": 1.623,
+      "rootVisits": 55,
+      "best": {
+        "point": "Q5",
+        "scoreLead": 1.598,
+        "pv": [
+          "Q5",
+          "R5",
+          "R6",
+          "R4",
+          "Q6",
+          "O3"
+        ]
+      },
+      "played": {
+        "point": "R5",
+        "loss": -0.04,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "R5",
+          "O4",
+          "F3",
+          "R9"
+        ]
+      },
+      "guessed": {
+        "point": "R5",
+        "loss": -0.04,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "R5",
+          "O4",
+          "F3",
+          "R9"
+        ]
+      },
+      "natural": {
+        "point": "R5",
+        "prior": 0.3729,
+        "loss": -0.04
+      }
+    },
+    {
+      "move": 8,
+      "rootScoreLead": 1.896,
+      "rootVisits": 54,
+      "best": {
+        "point": "P5",
+        "scoreLead": 1.976,
+        "pv": [
+          "P5",
+          "O4",
+          "F3",
+          "Q10",
+          "F17",
+          "R4"
+        ]
+      },
+      "played": {
+        "point": "P5",
+        "loss": -0.08,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "P5",
+          "O4",
+          "F3",
+          "Q10",
+          "F17",
+          "R4"
+        ]
+      },
+      "guessed": {
+        "point": "P5",
+        "loss": -0.08,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "P5",
+          "O4",
+          "F3",
+          "Q10",
+          "F17",
+          "R4"
+        ]
+      },
+      "natural": {
+        "point": "P5",
+        "prior": 0.2513,
+        "loss": -0.08
+      }
+    },
+    {
+      "move": 10,
+      "rootScoreLead": 1.766,
+      "rootVisits": 55,
+      "best": {
+        "point": "F3",
+        "scoreLead": 1.83,
+        "pv": [
+          "F3",
+          "F17",
+          "H17",
+          "Q10",
+          "O16"
+        ]
+      },
+      "played": {
+        "point": "M4",
+        "loss": -0.04,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "M4",
+          "O5",
+          "P6",
+          "R4",
+          "O6",
+          "S5"
+        ]
+      },
+      "guessed": {
+        "point": "M3",
+        "loss": 0.1,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "M3",
+          "R4",
+          "S4",
+          "S3",
+          "E4",
+          "O5"
+        ]
+      },
+      "natural": {
+        "point": "F3",
+        "prior": 0.2822,
+        "loss": -0.06
+      }
+    },
+    {
+      "move": 12,
+      "rootScoreLead": 1.303,
+      "rootVisits": 55,
+      "best": {
+        "point": "P6",
+        "scoreLead": 1.341,
+        "pv": [
+          "P6",
+          "R4",
+          "S5",
+          "N6",
+          "R8"
+        ]
+      },
+      "played": {
+        "point": "P6",
+        "loss": -0.04,
+        "visits": 19,
+        "forced": false,
+        "pv": [
+          "P6",
+          "R4",
+          "S5",
+          "N6",
+          "R8"
+        ]
+      },
+      "guessed": {
+        "point": "P6",
+        "loss": -0.04,
+        "visits": 19,
+        "forced": false,
+        "pv": [
+          "P6",
+          "R4",
+          "S5",
+          "N6",
+          "R8"
+        ]
+      },
+      "natural": {
+        "point": "P6",
+        "prior": 0.6627,
+        "loss": -0.04
+      }
+    },
+    {
+      "move": 14,
+      "rootScoreLead": 1.704,
+      "rootVisits": 55,
+      "best": {
+        "point": "R3",
+        "scoreLead": 2.192,
+        "pv": [
+          "R3",
+          "R2",
+          "S3",
+          "Q4",
+          "R6",
+          "K4"
+        ]
+      },
+      "played": {
+        "point": "R3",
+        "loss": -0.31,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R3",
+          "R2",
+          "S3",
+          "Q4",
+          "R6",
+          "K4"
+        ]
+      },
+      "guessed": {
+        "point": "R3",
+        "loss": -0.31,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R3",
+          "R2",
+          "S3",
+          "Q4",
+          "R6",
+          "K4"
+        ]
+      },
+      "natural": {
+        "point": "O6",
+        "prior": 0.2341,
+        "loss": 0.58
+      }
+    },
+    {
+      "move": 16,
+      "rootScoreLead": 1.861,
+      "rootVisits": 55,
+      "best": {
+        "point": "S3",
+        "scoreLead": 2.095,
+        "pv": [
+          "S3",
+          "P2",
+          "S7",
+          "H3",
+          "E3"
+        ]
+      },
+      "played": {
+        "point": "S3",
+        "loss": -0.23,
+        "visits": 18,
+        "forced": false,
+        "pv": [
+          "S3",
+          "P2",
+          "S7",
+          "H3",
+          "E3"
+        ]
+      },
+      "guessed": {
+        "point": "R6",
+        "loss": 2.72,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R6",
+          "S3",
+          "R9",
+          "E4",
+          "H3"
+        ]
+      },
+      "natural": {
+        "point": "S3",
+        "prior": 0.3801,
+        "loss": -0.23
+      }
+    },
+    {
+      "move": 18,
+      "rootScoreLead": 1.847,
+      "rootVisits": 55,
+      "best": {
+        "point": "R6",
+        "scoreLead": 1.634,
+        "pv": [
+          "R6",
+          "R7",
+          "P3",
+          "P2",
+          "O3"
+        ]
+      },
+      "played": {
+        "point": "R6",
+        "loss": 0.23,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R6",
+          "E3",
+          "O6",
+          "O7",
+          "N5"
+        ]
+      },
+      "guessed": {
+        "point": "R6",
+        "loss": 0.23,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R6",
+          "E3",
+          "O6",
+          "O7",
+          "N5"
+        ]
+      },
+      "natural": {
+        "point": "P3",
+        "prior": 0.3453,
+        "loss": -0.29
+      }
+    },
+    {
+      "move": 20,
+      "rootScoreLead": 1.338,
+      "rootVisits": 55,
+      "best": {
+        "point": "O6",
+        "scoreLead": 1.376,
+        "pv": [
+          "O6",
+          "O7",
+          "N5",
+          "M3",
+          "L3",
+          "N3"
+        ]
+      },
+      "played": {
+        "point": "J3",
+        "loss": -0.07,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "J3",
+          "D5",
+          "C5",
+          "D6",
+          "C7",
+          "R7"
+        ]
+      },
+      "guessed": {
+        "point": "K3",
+        "loss": 0.29,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "K3",
+          "D5",
+          "C5",
+          "D6",
+          "C7",
+          "R7"
+        ]
+      },
+      "natural": {
+        "point": "O6",
+        "prior": 0.2246,
+        "loss": -0.04
+      }
+    },
+    {
+      "move": 22,
+      "rootScoreLead": 1.546,
+      "rootVisits": 55,
+      "best": {
+        "point": "E4",
+        "scoreLead": 1.646,
+        "pv": [
+          "E4",
+          "D4",
+          "D5",
+          "D3",
+          "C5",
+          "E5"
+        ]
+      },
+      "played": {
+        "point": "E4",
+        "loss": -0.1,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "E4",
+          "D4",
+          "D5",
+          "D3",
+          "C5",
+          "E5"
+        ]
+      },
+      "guessed": {
+        "point": "E4",
+        "loss": -0.1,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "E4",
+          "D4",
+          "D5",
+          "D3",
+          "C5",
+          "E5"
+        ]
+      },
+      "natural": {
+        "point": "O6",
+        "prior": 0.2281,
+        "loss": -0.01
+      }
+    },
+    {
+      "move": 24,
+      "rootScoreLead": 1.765,
+      "rootVisits": 55,
+      "best": {
+        "point": "E5",
+        "scoreLead": 1.773,
+        "pv": [
+          "E5",
+          "D3",
+          "C3",
+          "H4",
+          "G2",
+          "G3"
+        ]
+      },
+      "played": {
+        "point": "E5",
+        "loss": -0.01,
+        "visits": 30,
+        "forced": false,
+        "pv": [
+          "E5",
+          "D3",
+          "C3",
+          "H4",
+          "G2",
+          "G3"
+        ]
+      },
+      "guessed": {
+        "point": "E5",
+        "loss": -0.01,
+        "visits": 30,
+        "forced": false,
+        "pv": [
+          "E5",
+          "D3",
+          "C3",
+          "H4",
+          "G2",
+          "G3"
+        ]
+      },
+      "natural": {
+        "point": "E5",
+        "prior": 0.9586,
+        "loss": -0.01
+      }
+    },
+    {
+      "move": 26,
+      "rootScoreLead": 1.759,
+      "rootVisits": 55,
+      "best": {
+        "point": "C3",
+        "scoreLead": 1.67,
+        "pv": [
+          "C3",
+          "D4",
+          "D5",
+          "C5",
+          "F5",
+          "B5"
+        ]
+      },
+      "played": {
+        "point": "C5",
+        "loss": -0.19,
+        "visits": 20,
+        "forced": false,
+        "pv": [
+          "C5",
+          "C3",
+          "G2",
+          "F3",
+          "N2",
+          "N3"
+        ]
+      },
+      "guessed": {
+        "point": "C5",
+        "loss": -0.19,
+        "visits": 20,
+        "forced": false,
+        "pv": [
+          "C5",
+          "C3",
+          "G2",
+          "F3",
+          "N2",
+          "N3"
+        ]
+      },
+      "natural": {
+        "point": "C5",
+        "prior": 0.3655,
+        "loss": -0.19
+      }
+    },
+    {
+      "move": 28,
+      "rootScoreLead": 1.337,
+      "rootVisits": 55,
+      "best": {
+        "point": "G2",
+        "scoreLead": 1.337,
+        "pv": [
+          "G2",
+          "F3",
+          "O6",
+          "O7",
+          "N5"
+        ]
+      },
+      "played": {
+        "point": "P3",
+        "loss": -0.49,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "P3",
+          "P2",
+          "O3",
+          "N3",
+          "P4",
+          "O2"
+        ]
+      },
+      "guessed": {
+        "point": "P3",
+        "loss": -0.49,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "P3",
+          "P2",
+          "O3",
+          "N3",
+          "P4",
+          "O2"
+        ]
+      },
+      "natural": {
+        "point": "G2",
+        "prior": 0.2883,
+        "loss": 0
+      }
+    },
+    {
+      "move": 30,
+      "rootScoreLead": 1.685,
+      "rootVisits": 55,
+      "best": {
+        "point": "P2",
+        "scoreLead": 1.881,
+        "pv": [
+          "P2",
+          "O2",
+          "G2",
+          "F3",
+          "M2",
+          "C8"
+        ]
+      },
+      "played": {
+        "point": "P2",
+        "loss": -0.2,
+        "visits": 27,
+        "forced": false,
+        "pv": [
+          "P2",
+          "O2",
+          "G2",
+          "F3",
+          "M2",
+          "C8"
+        ]
+      },
+      "guessed": {
+        "point": "P2",
+        "loss": -0.2,
+        "visits": 27,
+        "forced": false,
+        "pv": [
+          "P2",
+          "O2",
+          "G2",
+          "F3",
+          "M2",
+          "C8"
+        ]
+      },
+      "natural": {
+        "point": "P2",
+        "prior": 0.5939,
+        "loss": -0.2
+      }
+    },
+    {
+      "move": 32,
+      "rootScoreLead": 1.97,
+      "rootVisits": 55,
+      "best": {
+        "point": "Q2",
+        "scoreLead": 2.145,
+        "pv": [
+          "Q2",
+          "G3",
+          "F5",
+          "G5",
+          "G6",
+          "H5"
+        ]
+      },
+      "played": {
+        "point": "Q2",
+        "loss": -0.17,
+        "visits": 30,
+        "forced": false,
+        "pv": [
+          "Q2",
+          "G3",
+          "F5",
+          "G5",
+          "G6",
+          "H5"
+        ]
+      },
+      "guessed": {
+        "point": "G6",
+        "loss": 4.23,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "G6",
+          "Q2",
+          "S8",
+          "F5",
+          "M2",
+          "N2"
+        ]
+      },
+      "natural": {
+        "point": "Q2",
+        "prior": 0.5579,
+        "loss": -0.17
+      }
+    },
+    {
+      "move": 34,
+      "rootScoreLead": 1.526,
+      "rootVisits": 55,
+      "best": {
+        "point": "F7",
+        "scoreLead": 1.839,
+        "pv": [
+          "F7",
+          "H4",
+          "F5",
+          "H3",
+          "G4",
+          "G3"
+        ]
+      },
+      "played": {
+        "point": "E8",
+        "loss": 0.05,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "E8",
+          "H5",
+          "K5",
+          "F7",
+          "E7",
+          "E6"
+        ]
+      },
+      "guessed": {
+        "point": "E8",
+        "loss": 0.05,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "E8",
+          "H5",
+          "K5",
+          "F7",
+          "E7",
+          "E6"
+        ]
+      },
+      "natural": {
+        "point": "F7",
+        "prior": 0.1455,
+        "loss": -0.31
+      }
+    },
+    {
+      "move": 36,
+      "rootScoreLead": 1.228,
+      "rootVisits": 55,
+      "best": {
+        "point": "H5",
+        "scoreLead": 2.044,
+        "pv": [
+          "H5",
+          "G3",
+          "F5",
+          "J4",
+          "H4"
+        ]
+      },
+      "played": {
+        "point": "O7",
+        "loss": 0.77,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O7",
+          "J5",
+          "L6",
+          "L5",
+          "M5",
+          "M6"
+        ]
+      },
+      "guessed": {
+        "point": "G5",
+        "loss": 0.81,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "G5",
+          "F5",
+          "E6",
+          "F6",
+          "F7",
+          "G6"
+        ]
+      },
+      "natural": {
+        "point": "J5",
+        "prior": 0.1459,
+        "loss": 0.26
+      }
+    },
+    {
+      "move": 38,
+      "rootScoreLead": 0.539,
+      "rootVisits": 55,
+      "best": {
+        "point": "J4",
+        "scoreLead": 0.693,
+        "pv": [
+          "J4",
+          "H6",
+          "J6",
+          "J7",
+          "K6",
+          "N7"
+        ]
+      },
+      "played": {
+        "point": "G2",
+        "loss": 0.29,
+        "visits": 10,
+        "forced": false,
+        "pv": [
+          "G2",
+          "F3",
+          "J4",
+          "O6"
+        ]
+      },
+      "guessed": {
+        "point": "J4",
+        "loss": -0.42,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "J4",
+          "H6",
+          "J6",
+          "J7",
+          "K6",
+          "N7"
+        ]
+      },
+      "natural": {
+        "point": "J4",
+        "prior": 0.4805,
+        "loss": -0.15
+      }
+    },
+    {
+      "move": 40,
+      "rootScoreLead": 0.212,
+      "rootVisits": 55,
+      "best": {
+        "point": "J4",
+        "scoreLead": 0.278,
+        "pv": [
+          "J4",
+          "F7",
+          "J6",
+          "L6",
+          "E7"
+        ]
+      },
+      "played": {
+        "point": "K5",
+        "loss": 0.07,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "K5",
+          "O6",
+          "O8",
+          "M7",
+          "J6",
+          "F7"
+        ]
+      },
+      "guessed": {
+        "point": "G6",
+        "loss": 1.05,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "G6",
+          "J4",
+          "K3",
+          "O6",
+          "O8",
+          "L5"
+        ]
+      },
+      "natural": {
+        "point": "J4",
+        "prior": 0.4697,
+        "loss": -0.07
+      }
+    },
+    {
+      "move": 42,
+      "rootScoreLead": 0.823,
+      "rootVisits": 55,
+      "best": {
+        "point": "F6",
+        "scoreLead": 1.118,
+        "pv": [
+          "F6",
+          "G7",
+          "E7",
+          "E6",
+          "F5",
+          "H6"
+        ]
+      },
+      "played": {
+        "point": "N7",
+        "loss": 0.65,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N7",
+          "L6",
+          "K6",
+          "M7",
+          "O6",
+          "M5"
+        ]
+      },
+      "guessed": {
+        "point": "G6",
+        "loss": 0.51,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "G6",
+          "O6",
+          "O8",
+          "M7",
+          "J6",
+          "F6"
+        ]
+      },
+      "natural": {
+        "point": "E7",
+        "prior": 0.1955,
+        "loss": 1.32
+      }
+    },
+    {
+      "move": 44,
+      "rootScoreLead": -0.362,
+      "rootVisits": 55,
+      "best": {
+        "point": "K6",
+        "scoreLead": -0.152,
+        "pv": [
+          "K6",
+          "M7",
+          "O6",
+          "M5",
+          "K7",
+          "M8"
+        ]
+      },
+      "played": {
+        "point": "K6",
+        "loss": -0.21,
+        "visits": 13,
+        "forced": false,
+        "pv": [
+          "K6",
+          "M7",
+          "O6",
+          "M5",
+          "K7",
+          "M8"
+        ]
+      },
+      "guessed": {
+        "point": "K6",
+        "loss": -0.21,
+        "visits": 13,
+        "forced": false,
+        "pv": [
+          "K6",
+          "M7",
+          "O6",
+          "M5",
+          "K7",
+          "M8"
+        ]
+      },
+      "natural": {
+        "point": "K6",
+        "prior": 0.1909,
+        "loss": -0.21
+      }
+    },
+    {
+      "move": 46,
+      "rootScoreLead": -0.052,
+      "rootVisits": 55,
+      "best": {
+        "point": "J7",
+        "scoreLead": 0.122,
+        "pv": [
+          "J7",
+          "L7",
+          "H6",
+          "G6",
+          "J9",
+          "K9"
+        ]
+      },
+      "played": {
+        "point": "J7",
+        "loss": -0.17,
+        "visits": 21,
+        "forced": false,
+        "pv": [
+          "J7",
+          "L7",
+          "H6",
+          "G6",
+          "J9",
+          "K9"
+        ]
+      },
+      "guessed": {
+        "point": "J7",
+        "loss": -0.17,
+        "visits": 21,
+        "forced": false,
+        "pv": [
+          "J7",
+          "L7",
+          "H6",
+          "G6",
+          "J9",
+          "K9"
+        ]
+      },
+      "natural": {
+        "point": "J7",
+        "prior": 0.4886,
+        "loss": -0.17
+      }
+    },
+    {
+      "move": 48,
+      "rootScoreLead": 0.049,
+      "rootVisits": 53,
+      "best": {
+        "point": "O6",
+        "scoreLead": 0.585,
+        "pv": [
+          "O6",
+          "J8",
+          "B3",
+          "B2"
+        ]
+      },
+      "played": {
+        "point": "O6",
+        "loss": -0.8,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O6",
+          "J6",
+          "J5",
+          "H6",
+          "H5",
+          "G6"
+        ]
+      },
+      "guessed": {
+        "point": "M6",
+        "loss": -1.04,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "M6",
+          "M5",
+          "M7",
+          "L5",
+          "L7",
+          "L4"
+        ]
+      },
+      "natural": {
+        "point": "M7",
+        "prior": 0.2509,
+        "loss": 0.14
+      }
+    },
+    {
+      "move": 50,
+      "rootScoreLead": 1.089,
+      "rootVisits": 55,
+      "best": {
+        "point": "F6",
+        "scoreLead": 1.68,
+        "pv": [
+          "F6",
+          "G6",
+          "E7",
+          "E6",
+          "F5"
+        ]
+      },
+      "played": {
+        "point": "H6",
+        "loss": 0.6,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "H6",
+          "G6",
+          "H9",
+          "K3",
+          "K4",
+          "L3"
+        ]
+      },
+      "guessed": {
+        "point": "H2",
+        "loss": 0.62,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "H2",
+          "M5",
+          "L7",
+          "J4",
+          "K4",
+          "K3"
+        ]
+      },
+      "natural": {
+        "point": "J8",
+        "prior": 0.1828,
+        "loss": 0.07
+      }
+    },
+    {
+      "move": 52,
+      "rootScoreLead": 1.741,
+      "rootVisits": 55,
+      "best": {
+        "point": "J2",
+        "scoreLead": 2,
+        "pv": [
+          "J2",
+          "J4",
+          "K4",
+          "L3",
+          "M3",
+          "M2"
+        ]
+      },
+      "played": {
+        "point": "J2",
+        "loss": -0.26,
+        "visits": 13,
+        "forced": false,
+        "pv": [
+          "J2",
+          "J4",
+          "K4",
+          "L3",
+          "M3",
+          "M2"
+        ]
+      },
+      "guessed": {
+        "point": "J4",
+        "loss": 3.15,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "J4",
+          "J2",
+          "F6",
+          "G7",
+          "G6",
+          "E6"
+        ]
+      },
+      "natural": {
+        "point": "K4",
+        "prior": 0.3586,
+        "loss": -0.18
+      }
+    },
+    {
+      "move": 54,
+      "rootScoreLead": 2.464,
+      "rootVisits": 55,
+      "best": {
+        "point": "K4",
+        "scoreLead": 2.515,
+        "pv": [
+          "K4",
+          "L3",
+          "M3",
+          "M2",
+          "N2",
+          "L2"
+        ]
+      },
+      "played": {
+        "point": "K4",
+        "loss": -0.05,
+        "visits": 41,
+        "forced": false,
+        "pv": [
+          "K4",
+          "L3",
+          "M3",
+          "M2",
+          "N2",
+          "L2"
+        ]
+      },
+      "guessed": {
+        "point": "K4",
+        "loss": -0.05,
+        "visits": 41,
+        "forced": false,
+        "pv": [
+          "K4",
+          "L3",
+          "M3",
+          "M2",
+          "N2",
+          "L2"
+        ]
+      },
+      "natural": {
+        "point": "K4",
+        "prior": 0.9086,
+        "loss": -0.05
+      }
+    },
+    {
+      "move": 56,
+      "rootScoreLead": 1.93,
+      "rootVisits": 55,
+      "best": {
+        "point": "M3",
+        "scoreLead": 1.91,
+        "pv": [
+          "M3",
+          "M2",
+          "N2",
+          "L2",
+          "O2",
+          "H2"
+        ]
+      },
+      "played": {
+        "point": "M3",
+        "loss": 0.02,
+        "visits": 44,
+        "forced": false,
+        "pv": [
+          "M3",
+          "M2",
+          "N2",
+          "L2",
+          "O2",
+          "H2"
+        ]
+      },
+      "guessed": {
+        "point": "M3",
+        "loss": 0.02,
+        "visits": 44,
+        "forced": false,
+        "pv": [
+          "M3",
+          "M2",
+          "N2",
+          "L2",
+          "O2",
+          "H2"
+        ]
+      },
+      "natural": {
+        "point": "M3",
+        "prior": 0.9743,
+        "loss": 0.02
+      }
+    },
+    {
+      "move": 58,
+      "rootScoreLead": 1.308,
+      "rootVisits": 55,
+      "best": {
+        "point": "N2",
+        "scoreLead": 1.434,
+        "pv": [
+          "N2",
+          "L2",
+          "O2",
+          "H2",
+          "F6",
+          "L4"
+        ]
+      },
+      "played": {
+        "point": "N2",
+        "loss": -0.13,
+        "visits": 32,
+        "forced": false,
+        "pv": [
+          "N2",
+          "L2",
+          "O2",
+          "H2",
+          "F6",
+          "L4"
+        ]
+      },
+      "guessed": {
+        "point": "N2",
+        "loss": -0.13,
+        "visits": 32,
+        "forced": false,
+        "pv": [
+          "N2",
+          "L2",
+          "O2",
+          "H2",
+          "F6",
+          "L4"
+        ]
+      },
+      "natural": {
+        "point": "N2",
+        "prior": 0.5552,
+        "loss": -0.13
+      }
+    },
+    {
+      "move": 60,
+      "rootScoreLead": 0.747,
+      "rootVisits": 55,
+      "best": {
+        "point": "M1",
+        "scoreLead": 1.078,
+        "pv": [
+          "M1",
+          "O2",
+          "N3",
+          "P1",
+          "Q4"
+        ]
+      },
+      "played": {
+        "point": "L4",
+        "loss": 4.27,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "L4",
+          "O2",
+          "N3",
+          "N1",
+          "M1",
+          "L1"
+        ]
+      },
+      "guessed": {
+        "point": "N3",
+        "loss": -0.39,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N3",
+          "H2",
+          "F6",
+          "G7",
+          "G6",
+          "E6"
+        ]
+      },
+      "natural": {
+        "point": "L4",
+        "prior": 0.3558,
+        "loss": 3.36
+      }
+    },
+    {
+      "move": 62,
+      "rootScoreLead": -4.319,
+      "rootVisits": 55,
+      "best": {
+        "point": "N3",
+        "scoreLead": -4.1,
+        "pv": [
+          "N3",
+          "N1",
+          "H2",
+          "Q4",
+          "S2",
+          "N5"
+        ]
+      },
+      "played": {
+        "point": "N3",
+        "loss": -0.22,
+        "visits": 46,
+        "forced": false,
+        "pv": [
+          "N3",
+          "N1",
+          "H2",
+          "Q4",
+          "S2",
+          "N5"
+        ]
+      },
+      "guessed": {
+        "point": "O1",
+        "loss": 10.51,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O1",
+          "N3",
+          "Q4",
+          "N1",
+          "P1",
+          "H2"
+        ]
+      },
+      "natural": {
+        "point": "N3",
+        "prior": 0.6693,
+        "loss": -0.22
+      }
+    },
+    {
+      "move": 64,
+      "rootScoreLead": 2.044,
+      "rootVisits": 55,
+      "best": {
+        "point": "M1",
+        "scoreLead": 2.059,
+        "pv": [
+          "M1",
+          "G6",
+          "H1",
+          "K1",
+          "J1"
+        ]
+      },
+      "played": {
+        "point": "M1",
+        "loss": -0.02,
+        "visits": 40,
+        "forced": false,
+        "pv": [
+          "M1",
+          "G6",
+          "H1",
+          "K1",
+          "J1"
+        ]
+      },
+      "guessed": {
+        "point": "M1",
+        "loss": -0.02,
+        "visits": 40,
+        "forced": false,
+        "pv": [
+          "M1",
+          "G6",
+          "H1",
+          "K1",
+          "J1"
+        ]
+      },
+      "natural": {
+        "point": "M1",
+        "prior": 0.7334,
+        "loss": -0.02
+      }
+    },
+    {
+      "move": 66,
+      "rootScoreLead": 3.365,
+      "rootVisits": 55,
+      "best": {
+        "point": "F6",
+        "scoreLead": 3.781,
+        "pv": [
+          "F6",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "played": {
+        "point": "F6",
+        "loss": -0.42,
+        "visits": 20,
+        "forced": false,
+        "pv": [
+          "F6",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "guessed": {
+        "point": "O1",
+        "loss": 6.52,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O1",
+          "G6",
+          "C7",
+          "D7",
+          "B7"
+        ]
+      },
+      "natural": {
+        "point": "L1",
+        "prior": 0.2096,
+        "loss": 2.48
+      }
+    },
+    {
+      "move": 68,
+      "rootScoreLead": 4.92,
+      "rootVisits": 55,
+      "best": {
+        "point": "G7",
+        "scoreLead": 5.283,
+        "pv": [
+          "G7",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3"
+        ]
+      },
+      "played": {
+        "point": "C13",
+        "loss": -0.14,
+        "visits": 13,
+        "forced": false,
+        "pv": [
+          "C13",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "guessed": {
+        "point": "S8",
+        "loss": 3.23,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "S8",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "natural": {
+        "point": "E7",
+        "prior": 0.1709,
+        "loss": 0.08
+      }
+    },
+    {
+      "move": 70,
+      "rootScoreLead": 7.67,
+      "rootVisits": 55,
+      "best": {
+        "point": "G7",
+        "scoreLead": 7.776,
+        "pv": [
+          "G7",
+          "F8",
+          "O16",
+          "P1",
+          "Q4",
+          "Q1"
+        ]
+      },
+      "played": {
+        "point": "G7",
+        "loss": -0.11,
+        "visits": 27,
+        "forced": false,
+        "pv": [
+          "G7",
+          "F8",
+          "O16",
+          "P1",
+          "Q4",
+          "Q1"
+        ]
+      },
+      "guessed": {
+        "point": "K16",
+        "loss": 6.31,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "K16",
+          "G6",
+          "D8",
+          "C7",
+          "G7",
+          "G5"
+        ]
+      },
+      "natural": {
+        "point": "G7",
+        "prior": 0.8445,
+        "loss": -0.11
+      }
+    },
+    {
+      "move": 72,
+      "rootScoreLead": 7.995,
+      "rootVisits": 55,
+      "best": {
+        "point": "O16",
+        "scoreLead": 7.94,
+        "pv": [
+          "O16",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3"
+        ]
+      },
+      "played": {
+        "point": "H9",
+        "loss": 0.69,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "H9",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "guessed": {
+        "point": "H9",
+        "loss": 0.69,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "H9",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "natural": {
+        "point": "O16",
+        "prior": 0.1679,
+        "loss": 0.05
+      }
+    },
+    {
+      "move": 74,
+      "rootScoreLead": 9.34,
+      "rootVisits": 55,
+      "best": {
+        "point": "D17",
+        "scoreLead": 9.326,
+        "pv": [
+          "D17",
+          "C16",
+          "D15",
+          "B14",
+          "D11"
+        ]
+      },
+      "played": {
+        "point": "D17",
+        "loss": 0.01,
+        "visits": 17,
+        "forced": false,
+        "pv": [
+          "D17",
+          "C16",
+          "D15",
+          "B14",
+          "D11"
+        ]
+      },
+      "guessed": {
+        "point": "D17",
+        "loss": 0.01,
+        "visits": 17,
+        "forced": false,
+        "pv": [
+          "D17",
+          "C16",
+          "D15",
+          "B14",
+          "D11"
+        ]
+      },
+      "natural": {
+        "point": "D17",
+        "prior": 0.9167,
+        "loss": 0.01
+      }
+    },
+    {
+      "move": 76,
+      "rootScoreLead": 9.284,
+      "rootVisits": 55,
+      "best": {
+        "point": "D15",
+        "scoreLead": 9.155,
+        "pv": [
+          "D15",
+          "B14",
+          "D11",
+          "D10",
+          "E11"
+        ]
+      },
+      "played": {
+        "point": "C15",
+        "loss": -0.17,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "C15",
+          "B15",
+          "B14",
+          "D15",
+          "C14",
+          "D18"
+        ]
+      },
+      "guessed": {
+        "point": "C15",
+        "loss": -0.17,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "C15",
+          "B15",
+          "B14",
+          "D15",
+          "C14",
+          "D18"
+        ]
+      },
+      "natural": {
+        "point": "D15",
+        "prior": 0.6652,
+        "loss": 0.13
+      }
+    },
+    {
+      "move": 78,
+      "rootScoreLead": 9.172,
+      "rootVisits": 55,
+      "best": {
+        "point": "B14",
+        "scoreLead": 9.146,
+        "pv": [
+          "B14",
+          "D15",
+          "C14",
+          "D18",
+          "E18",
+          "C18"
+        ]
+      },
+      "played": {
+        "point": "B14",
+        "loss": 0.03,
+        "visits": 31,
+        "forced": false,
+        "pv": [
+          "B14",
+          "D15",
+          "C14",
+          "D18",
+          "E18",
+          "C18"
+        ]
+      },
+      "guessed": {
+        "point": "B14",
+        "loss": 0.03,
+        "visits": 31,
+        "forced": false,
+        "pv": [
+          "B14",
+          "D15",
+          "C14",
+          "D18",
+          "E18",
+          "C18"
+        ]
+      },
+      "natural": {
+        "point": "B14",
+        "prior": 0.9285,
+        "loss": 0.03
+      }
+    },
+    {
+      "move": 80,
+      "rootScoreLead": 8.641,
+      "rootVisits": 55,
+      "best": {
+        "point": "C14",
+        "scoreLead": 8.615,
+        "pv": [
+          "C14",
+          "D18",
+          "E18",
+          "C18",
+          "F17",
+          "E15"
+        ]
+      },
+      "played": {
+        "point": "C14",
+        "loss": 0.03,
+        "visits": 37,
+        "forced": false,
+        "pv": [
+          "C14",
+          "D18",
+          "E18",
+          "C18",
+          "F17",
+          "E15"
+        ]
+      },
+      "guessed": {
+        "point": "C14",
+        "loss": 0.03,
+        "visits": 37,
+        "forced": false,
+        "pv": [
+          "C14",
+          "D18",
+          "E18",
+          "C18",
+          "F17",
+          "E15"
+        ]
+      },
+      "natural": {
+        "point": "C14",
+        "prior": 0.9997,
+        "loss": 0.03
+      }
+    },
+    {
+      "move": 82,
+      "rootScoreLead": 8.999,
+      "rootVisits": 55,
+      "best": {
+        "point": "E18",
+        "scoreLead": 9.019,
+        "pv": [
+          "E18",
+          "C18",
+          "F17",
+          "E15",
+          "F16",
+          "B16"
+        ]
+      },
+      "played": {
+        "point": "E18",
+        "loss": -0.02,
+        "visits": 41,
+        "forced": false,
+        "pv": [
+          "E18",
+          "C18",
+          "F17",
+          "E15",
+          "F16",
+          "B16"
+        ]
+      },
+      "guessed": {
+        "point": "E18",
+        "loss": -0.02,
+        "visits": 41,
+        "forced": false,
+        "pv": [
+          "E18",
+          "C18",
+          "F17",
+          "E15",
+          "F16",
+          "B16"
+        ]
+      },
+      "natural": {
+        "point": "E18",
+        "prior": 0.9912,
+        "loss": -0.02
+      }
+    },
+    {
+      "move": 84,
+      "rootScoreLead": 9.867,
+      "rootVisits": 54,
+      "best": {
+        "point": "D19",
+        "scoreLead": 10.062,
+        "pv": [
+          "D19",
+          "C18",
+          "F17",
+          "B16",
+          "E15",
+          "P1"
+        ]
+      },
+      "played": {
+        "point": "F17",
+        "loss": 1.15,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "F17",
+          "E15",
+          "F16",
+          "E13",
+          "B16"
+        ]
+      },
+      "guessed": {
+        "point": "D19",
+        "loss": 0.15,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D19",
+          "C18",
+          "F17",
+          "B16",
+          "E15",
+          "P1"
+        ]
+      },
+      "natural": {
+        "point": "D19",
+        "prior": 0.689,
+        "loss": -0.19
+      }
+    },
+    {
+      "move": 86,
+      "rootScoreLead": 9.499,
+      "rootVisits": 55,
+      "best": {
+        "point": "F16",
+        "scoreLead": 9.125,
+        "pv": [
+          "F16",
+          "F15",
+          "D19",
+          "B16"
+        ]
+      },
+      "played": {
+        "point": "F16",
+        "loss": 0.37,
+        "visits": 22,
+        "forced": false,
+        "pv": [
+          "F16",
+          "F15",
+          "D19",
+          "B16"
+        ]
+      },
+      "guessed": {
+        "point": "F16",
+        "loss": 0.37,
+        "visits": 22,
+        "forced": false,
+        "pv": [
+          "F16",
+          "F15",
+          "D19",
+          "B16"
+        ]
+      },
+      "natural": {
+        "point": "F16",
+        "prior": 0.6361,
+        "loss": 0.37
+      }
+    },
+    {
+      "move": 88,
+      "rootScoreLead": 10.194,
+      "rootVisits": 54,
+      "best": {
+        "point": "F14",
+        "scoreLead": 10.051,
+        "pv": [
+          "F14",
+          "E12",
+          "E13",
+          "O12"
+        ]
+      },
+      "played": {
+        "point": "G14",
+        "loss": 0.68,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "G14",
+          "E13",
+          "D12",
+          "G13",
+          "D11",
+          "G15"
+        ]
+      },
+      "guessed": {
+        "point": "F15",
+        "loss": 1.55,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F15",
+          "E13",
+          "D12",
+          "F14",
+          "H15",
+          "F11"
+        ]
+      },
+      "natural": {
+        "point": "F14",
+        "prior": 0.2199,
+        "loss": 0.14
+      }
+    },
+    {
+      "move": 90,
+      "rootScoreLead": 10.775,
+      "rootVisits": 55,
+      "best": {
+        "point": "O16",
+        "scoreLead": 11.301,
+        "pv": [
+          "O16",
+          "E13",
+          "D12",
+          "G13",
+          "D11"
+        ]
+      },
+      "played": {
+        "point": "O16",
+        "loss": -0.53,
+        "visits": 13,
+        "forced": false,
+        "pv": [
+          "O16",
+          "E13",
+          "D12",
+          "G13",
+          "D11"
+        ]
+      },
+      "guessed": {
+        "point": "O16",
+        "loss": -0.53,
+        "visits": 13,
+        "forced": false,
+        "pv": [
+          "O16",
+          "E13",
+          "D12",
+          "G13",
+          "D11"
+        ]
+      },
+      "natural": {
+        "point": "O16",
+        "prior": 0.2086,
+        "loss": -0.53
+      }
+    },
+    {
+      "move": 92,
+      "rootScoreLead": 10.936,
+      "rootVisits": 55,
+      "best": {
+        "point": "O17",
+        "scoreLead": 11.467,
+        "pv": [
+          "O17",
+          "P16",
+          "N15",
+          "L15",
+          "P15"
+        ]
+      },
+      "played": {
+        "point": "O17",
+        "loss": -0.53,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "O17",
+          "P16",
+          "N15",
+          "L15",
+          "P15"
+        ]
+      },
+      "guessed": {
+        "point": "O17",
+        "loss": -0.53,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "O17",
+          "P16",
+          "N15",
+          "L15",
+          "P15"
+        ]
+      },
+      "natural": {
+        "point": "O17",
+        "prior": 0.2448,
+        "loss": -0.53
+      }
+    },
+    {
+      "move": 94,
+      "rootScoreLead": 11.171,
+      "rootVisits": 55,
+      "best": {
+        "point": "O13",
+        "scoreLead": 11.215,
+        "pv": [
+          "O13",
+          "E13",
+          "D12",
+          "G13",
+          "D11"
+        ]
+      },
+      "played": {
+        "point": "O13",
+        "loss": -0.04,
+        "visits": 10,
+        "forced": false,
+        "pv": [
+          "O13",
+          "E13",
+          "D12",
+          "G13",
+          "D11"
+        ]
+      },
+      "guessed": {
+        "point": "O13",
+        "loss": -0.04,
+        "visits": 10,
+        "forced": false,
+        "pv": [
+          "O13",
+          "E13",
+          "D12",
+          "G13",
+          "D11"
+        ]
+      },
+      "natural": {
+        "point": "O13",
+        "prior": 0.214,
+        "loss": -0.04
+      }
+    },
+    {
+      "move": 96,
+      "rootScoreLead": 10.842,
+      "rootVisits": 55,
+      "best": {
+        "point": "Q12",
+        "scoreLead": 10.514,
+        "pv": [
+          "Q12",
+          "Q11",
+          "Q15",
+          "S14",
+          "N12"
+        ]
+      },
+      "played": {
+        "point": "Q15",
+        "loss": -0.23,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "Q15",
+          "E13",
+          "D12",
+          "G13"
+        ]
+      },
+      "guessed": {
+        "point": "Q15",
+        "loss": -0.23,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "Q15",
+          "E13",
+          "D12",
+          "G13"
+        ]
+      },
+      "natural": {
+        "point": "Q12",
+        "prior": 0.2023,
+        "loss": 0.33
+      }
+    },
+    {
+      "move": 98,
+      "rootScoreLead": 11.025,
+      "rootVisits": 55,
+      "best": {
+        "point": "N12",
+        "scoreLead": 11.339,
+        "pv": [
+          "N12",
+          "N10",
+          "Q13",
+          "E13"
+        ]
+      },
+      "played": {
+        "point": "Q13",
+        "loss": -0.33,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "Q13",
+          "E13",
+          "B16",
+          "B17",
+          "A15"
+        ]
+      },
+      "guessed": {
+        "point": "Q13",
+        "loss": -0.33,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "Q13",
+          "E13",
+          "B16",
+          "B17",
+          "A15"
+        ]
+      },
+      "natural": {
+        "point": "Q13",
+        "prior": 0.2282,
+        "loss": -0.33
+      }
+    },
+    {
+      "move": 100,
+      "rootScoreLead": 11.543,
+      "rootVisits": 55,
+      "best": {
+        "point": "M14",
+        "scoreLead": 11.882,
+        "pv": [
+          "M14",
+          "N15",
+          "O15",
+          "N14",
+          "N13"
+        ]
+      },
+      "played": {
+        "point": "M14",
+        "loss": -0.34,
+        "visits": 16,
+        "forced": false,
+        "pv": [
+          "M14",
+          "N15",
+          "O15",
+          "N14",
+          "N13"
+        ]
+      },
+      "guessed": {
+        "point": "N13",
+        "loss": 0.73,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N13",
+          "M13",
+          "R14",
+          "R12",
+          "M12"
+        ]
+      },
+      "natural": {
+        "point": "M14",
+        "prior": 0.3524,
+        "loss": -0.34
+      }
+    },
+    {
+      "move": 102,
+      "rootScoreLead": 11.474,
+      "rootVisits": 55,
+      "best": {
+        "point": "O15",
+        "scoreLead": 12.43,
+        "pv": [
+          "O15",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "played": {
+        "point": "O15",
+        "loss": -0.96,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "O15",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "guessed": {
+        "point": "N14",
+        "loss": 3.65,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N14",
+          "O15",
+          "O12",
+          "O11",
+          "N11",
+          "N10"
+        ]
+      },
+      "natural": {
+        "point": "O15",
+        "prior": 0.2018,
+        "loss": -0.96
+      }
+    },
+    {
+      "move": 104,
+      "rootScoreLead": 13.407,
+      "rootVisits": 55,
+      "best": {
+        "point": "L14",
+        "scoreLead": 14.017,
+        "pv": [
+          "L14",
+          "E13",
+          "D12",
+          "J14"
+        ]
+      },
+      "played": {
+        "point": "N14",
+        "loss": 0.07,
+        "visits": 10,
+        "forced": false,
+        "pv": [
+          "N14",
+          "E13",
+          "B16",
+          "B17",
+          "A15"
+        ]
+      },
+      "guessed": {
+        "point": "R14",
+        "loss": 2.03,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R14",
+          "S14",
+          "L14",
+          "E13",
+          "D12",
+          "J14"
+        ]
+      },
+      "natural": {
+        "point": "N14",
+        "prior": 0.2767,
+        "loss": 0.07
+      }
+    },
+    {
+      "move": 106,
+      "rootScoreLead": 13.781,
+      "rootVisits": 55,
+      "best": {
+        "point": "L13",
+        "scoreLead": 14.47,
+        "pv": [
+          "L13",
+          "K14",
+          "M12",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "played": {
+        "point": "L13",
+        "loss": -0.69,
+        "visits": 17,
+        "forced": false,
+        "pv": [
+          "L13",
+          "K14",
+          "M12",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "guessed": {
+        "point": "L13",
+        "loss": -0.69,
+        "visits": 17,
+        "forced": false,
+        "pv": [
+          "L13",
+          "K14",
+          "M12",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "natural": {
+        "point": "L13",
+        "prior": 0.4606,
+        "loss": -0.69
+      }
+    },
+    {
+      "move": 108,
+      "rootScoreLead": 13.71,
+      "rootVisits": 55,
+      "best": {
+        "point": "M12",
+        "scoreLead": 14.212,
+        "pv": [
+          "M12",
+          "E13",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "played": {
+        "point": "M12",
+        "loss": -0.5,
+        "visits": 18,
+        "forced": false,
+        "pv": [
+          "M12",
+          "E13",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "guessed": {
+        "point": "M12",
+        "loss": -0.5,
+        "visits": 18,
+        "forced": false,
+        "pv": [
+          "M12",
+          "E13",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "natural": {
+        "point": "M12",
+        "prior": 0.4217,
+        "loss": -0.5
+      }
+    },
+    {
+      "move": 110,
+      "rootScoreLead": 13.89,
+      "rootVisits": 53,
+      "best": {
+        "point": "K12",
+        "scoreLead": 14.282,
+        "pv": [
+          "K12",
+          "J12",
+          "K11",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "played": {
+        "point": "K12",
+        "loss": -0.39,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "K12",
+          "J12",
+          "K11",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "guessed": {
+        "point": "K12",
+        "loss": -0.39,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "K12",
+          "J12",
+          "K11",
+          "E13",
+          "B16",
+          "B17"
+        ]
+      },
+      "natural": {
+        "point": "K12",
+        "prior": 0.4868,
+        "loss": -0.39
+      }
+    },
+    {
+      "move": 112,
+      "rootScoreLead": 13.51,
+      "rootVisits": 54,
+      "best": {
+        "point": "K11",
+        "scoreLead": 13.473,
+        "pv": [
+          "K11",
+          "E13",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "played": {
+        "point": "K11",
+        "loss": 0.04,
+        "visits": 23,
+        "forced": false,
+        "pv": [
+          "K11",
+          "E13",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "guessed": {
+        "point": "K11",
+        "loss": 0.04,
+        "visits": 23,
+        "forced": false,
+        "pv": [
+          "K11",
+          "E13",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "natural": {
+        "point": "K11",
+        "prior": 0.8877,
+        "loss": 0.04
+      }
+    },
+    {
+      "move": 114,
+      "rootScoreLead": 13.363,
+      "rootVisits": 54,
+      "best": {
+        "point": "B16",
+        "scoreLead": 12.594,
+        "pv": [
+          "B16",
+          "B17",
+          "A15",
+          "C19",
+          "E19",
+          "D19"
+        ]
+      },
+      "played": {
+        "point": "D19",
+        "loss": -0.73,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "D19",
+          "B16",
+          "D12",
+          "F12",
+          "D11",
+          "C18"
+        ]
+      },
+      "guessed": {
+        "point": "D12",
+        "loss": -1.62,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D12",
+          "F12",
+          "B16",
+          "B17",
+          "A15",
+          "C19"
+        ]
+      },
+      "natural": {
+        "point": "B16",
+        "prior": 0.5494,
+        "loss": 0.77
+      }
+    },
+    {
+      "move": 116,
+      "rootScoreLead": 13.065,
+      "rootVisits": 55,
+      "best": {
+        "point": "C18",
+        "scoreLead": 13.07,
+        "pv": [
+          "C18",
+          "P1",
+          "Q4",
+          "D18",
+          "E14"
+        ]
+      },
+      "played": {
+        "point": "C18",
+        "loss": -0.01,
+        "visits": 16,
+        "forced": false,
+        "pv": [
+          "C18",
+          "P1",
+          "Q4",
+          "D18",
+          "E14"
+        ]
+      },
+      "guessed": {
+        "point": "C18",
+        "loss": -0.01,
+        "visits": 16,
+        "forced": false,
+        "pv": [
+          "C18",
+          "P1",
+          "Q4",
+          "D18",
+          "E14"
+        ]
+      },
+      "natural": {
+        "point": "C18",
+        "prior": 0.8182,
+        "loss": -0.01
+      }
+    },
+    {
+      "move": 118,
+      "rootScoreLead": 12.187,
+      "rootVisits": 55,
+      "best": {
+        "point": "G6",
+        "scoreLead": 12.784,
+        "pv": [
+          "G6",
+          "D18",
+          "E14",
+          "D14",
+          "C18"
+        ]
+      },
+      "played": {
+        "point": "G6",
+        "loss": -0.6,
+        "visits": 17,
+        "forced": false,
+        "pv": [
+          "G6",
+          "D18",
+          "E14",
+          "D14",
+          "C18"
+        ]
+      },
+      "guessed": {
+        "point": "G6",
+        "loss": -0.6,
+        "visits": 17,
+        "forced": false,
+        "pv": [
+          "G6",
+          "D18",
+          "E14",
+          "D14",
+          "C18"
+        ]
+      },
+      "natural": {
+        "point": "G6",
+        "prior": 0.6422,
+        "loss": -0.6
+      }
+    },
+    {
+      "move": 120,
+      "rootScoreLead": 13.004,
+      "rootVisits": 55,
+      "best": {
+        "point": "E14",
+        "scoreLead": 12.944,
+        "pv": [
+          "E14",
+          "E19",
+          "F14"
+        ]
+      },
+      "played": {
+        "point": "D12",
+        "loss": 0.37,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D12",
+          "E19",
+          "F12",
+          "E12",
+          "E11",
+          "F13"
+        ]
+      },
+      "guessed": {
+        "point": "D12",
+        "loss": 0.37,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D12",
+          "E19",
+          "F12",
+          "E12",
+          "E11",
+          "F13"
+        ]
+      },
+      "natural": {
+        "point": "B16",
+        "prior": 0.2032,
+        "loss": 0.61
+      }
+    },
+    {
+      "move": 122,
+      "rootScoreLead": 13.235,
+      "rootVisits": 53,
+      "best": {
+        "point": "F12",
+        "scoreLead": 13.812,
+        "pv": [
+          "F12",
+          "E12",
+          "E11",
+          "F13",
+          "G13"
+        ]
+      },
+      "played": {
+        "point": "F12",
+        "loss": -0.58,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "F12",
+          "E12",
+          "E11",
+          "F13",
+          "G13"
+        ]
+      },
+      "guessed": {
+        "point": "E12",
+        "loss": 4.62,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "E12",
+          "F13",
+          "H12",
+          "H13",
+          "G13",
+          "F12"
+        ]
+      },
+      "natural": {
+        "point": "G12",
+        "prior": 0.3215,
+        "loss": -0.87
+      }
+    },
+    {
+      "move": 124,
+      "rootScoreLead": 14.956,
+      "rootVisits": 55,
+      "best": {
+        "point": "E12",
+        "scoreLead": 14.954,
+        "pv": [
+          "E12",
+          "G13",
+          "F13",
+          "G15",
+          "F15",
+          "H14"
+        ]
+      },
+      "played": {
+        "point": "E12",
+        "loss": 0,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "E12",
+          "G13",
+          "F13",
+          "G15",
+          "F15",
+          "H14"
+        ]
+      },
+      "guessed": {
+        "point": "E12",
+        "loss": 0,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "E12",
+          "G13",
+          "F13",
+          "G15",
+          "F15",
+          "H14"
+        ]
+      },
+      "natural": {
+        "point": "E12",
+        "prior": 0.8023,
+        "loss": 0
+      }
+    },
+    {
+      "move": 126,
+      "rootScoreLead": 15.592,
+      "rootVisits": 55,
+      "best": {
+        "point": "E10",
+        "scoreLead": 15.637,
+        "pv": [
+          "E10",
+          "E9",
+          "M9"
+        ]
+      },
+      "played": {
+        "point": "E9",
+        "loss": -2.36,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "E9",
+          "B7",
+          "F9",
+          "B12",
+          "B9",
+          "C9"
+        ]
+      },
+      "guessed": {
+        "point": "M9",
+        "loss": 0.81,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "M9",
+          "L10",
+          "M10",
+          "L11",
+          "M11",
+          "L12"
+        ]
+      },
+      "natural": {
+        "point": "E10",
+        "prior": 0.1286,
+        "loss": -0.05
+      }
+    },
+    {
+      "move": 128,
+      "rootScoreLead": 15.894,
+      "rootVisits": 55,
+      "best": {
+        "point": "B10",
+        "scoreLead": 18.879,
+        "pv": [
+          "B10",
+          "B11",
+          "C9",
+          "D9",
+          "D8"
+        ]
+      },
+      "played": {
+        "point": "F9",
+        "loss": 0.23,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F9",
+          "B12",
+          "C9",
+          "B9",
+          "D8"
+        ]
+      },
+      "guessed": {
+        "point": "F9",
+        "loss": 0.23,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F9",
+          "B12",
+          "C9",
+          "B9",
+          "D8"
+        ]
+      },
+      "natural": {
+        "point": "F9",
+        "prior": 0.167,
+        "loss": 0.42
+      }
+    },
+    {
+      "move": 130,
+      "rootScoreLead": 15.423,
+      "rootVisits": 55,
+      "best": {
+        "point": "C9",
+        "scoreLead": 16.761,
+        "pv": [
+          "C9",
+          "B9",
+          "B8",
+          "D8"
+        ]
+      },
+      "played": {
+        "point": "O18",
+        "loss": 0.7,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O18",
+          "P1",
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1"
+        ]
+      },
+      "guessed": {
+        "point": "O9",
+        "loss": 0.81,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O9",
+          "Q12",
+          "R14",
+          "S14",
+          "Q14",
+          "S12"
+        ]
+      },
+      "natural": {
+        "point": "M9",
+        "prior": 0.1019,
+        "loss": -0.75
+      }
+    },
+    {
+      "move": 132,
+      "rootScoreLead": 15.291,
+      "rootVisits": 55,
+      "best": {
+        "point": "R12",
+        "scoreLead": 17.23,
+        "pv": [
+          "R12",
+          "Q12",
+          "R14",
+          "S12",
+          "S14"
+        ]
+      },
+      "played": {
+        "point": "R12",
+        "loss": -1.06,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "R12",
+          "Q12",
+          "R14",
+          "S12",
+          "S14",
+          "R18"
+        ]
+      },
+      "guessed": {
+        "point": "J18",
+        "loss": -0.18,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "J18",
+          "H14",
+          "G15",
+          "G13",
+          "F13",
+          "G18"
+        ]
+      },
+      "natural": {
+        "point": "F19",
+        "prior": 0.0864,
+        "loss": -1.29
+      }
+    },
+    {
+      "move": 134,
+      "rootScoreLead": 15.832,
+      "rootVisits": 55,
+      "best": {
+        "point": "R14",
+        "scoreLead": 15.864,
+        "pv": [
+          "R14",
+          "S12",
+          "S14",
+          "R18",
+          "Q16",
+          "Q17"
+        ]
+      },
+      "played": {
+        "point": "R14",
+        "loss": -0.03,
+        "visits": 20,
+        "forced": false,
+        "pv": [
+          "R14",
+          "S12",
+          "S14",
+          "R18",
+          "Q16",
+          "Q17"
+        ]
+      },
+      "guessed": {
+        "point": "S12",
+        "loss": 9.7,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "S12",
+          "Q14",
+          "S9",
+          "P1",
+          "Q4",
+          "Q1"
+        ]
+      },
+      "natural": {
+        "point": "R14",
+        "prior": 0.7448,
+        "loss": -0.03
+      }
+    },
+    {
+      "move": 136,
+      "rootScoreLead": 16.943,
+      "rootVisits": 55,
+      "best": {
+        "point": "S14",
+        "scoreLead": 17.556,
+        "pv": [
+          "S14",
+          "R18",
+          "Q16",
+          "Q17",
+          "S17",
+          "S16"
+        ]
+      },
+      "played": {
+        "point": "S14",
+        "loss": -0.61,
+        "visits": 16,
+        "forced": false,
+        "pv": [
+          "S14",
+          "R18",
+          "Q16",
+          "Q17",
+          "S17",
+          "S16"
+        ]
+      },
+      "guessed": {
+        "point": "S14",
+        "loss": -0.61,
+        "visits": 16,
+        "forced": false,
+        "pv": [
+          "S14",
+          "R18",
+          "Q16",
+          "Q17",
+          "S17",
+          "S16"
+        ]
+      },
+      "natural": {
+        "point": "S14",
+        "prior": 0.5409,
+        "loss": -0.61
+      }
+    },
+    {
+      "move": 138,
+      "rootScoreLead": 17.08,
+      "rootVisits": 55,
+      "best": {
+        "point": "Q17",
+        "scoreLead": 18.69,
+        "pv": [
+          "Q17",
+          "Q16",
+          "Q18"
+        ]
+      },
+      "played": {
+        "point": "O12",
+        "loss": 0.63,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O12",
+          "R7",
+          "O9",
+          "P9",
+          "P8",
+          "Q9"
+        ]
+      },
+      "guessed": {
+        "point": "T16",
+        "loss": -0.51,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "T16",
+          "S16",
+          "T17",
+          "T18"
+        ]
+      },
+      "natural": {
+        "point": "O12",
+        "prior": 0.0948,
+        "loss": 0.62
+      }
+    },
+    {
+      "move": 140,
+      "rootScoreLead": 15.589,
+      "rootVisits": 55,
+      "best": {
+        "point": "O9",
+        "scoreLead": 16.273,
+        "pv": [
+          "O9",
+          "P9",
+          "F19",
+          "G18"
+        ]
+      },
+      "played": {
+        "point": "F19",
+        "loss": -1.35,
+        "visits": 10,
+        "forced": false,
+        "pv": [
+          "F19",
+          "G18",
+          "D19",
+          "G13"
+        ]
+      },
+      "guessed": {
+        "point": "S7",
+        "loss": 1.48,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "S7",
+          "S8",
+          "F19",
+          "G18",
+          "D19"
+        ]
+      },
+      "natural": {
+        "point": "O9",
+        "prior": 0.1625,
+        "loss": -0.68
+      }
+    },
+    {
+      "move": 142,
+      "rootScoreLead": 16.739,
+      "rootVisits": 55,
+      "best": {
+        "point": "Q4",
+        "scoreLead": 16.712,
+        "pv": [
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1",
+          "O1",
+          "G13"
+        ]
+      },
+      "played": {
+        "point": "Q4",
+        "loss": 0.03,
+        "visits": 24,
+        "forced": false,
+        "pv": [
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1",
+          "O1",
+          "G13"
+        ]
+      },
+      "guessed": {
+        "point": "Q4",
+        "loss": 0.03,
+        "visits": 24,
+        "forced": false,
+        "pv": [
+          "Q4",
+          "Q1",
+          "Q3",
+          "N1",
+          "O1",
+          "G13"
+        ]
+      },
+      "natural": {
+        "point": "Q4",
+        "prior": 0.9756,
+        "loss": 0.03
+      }
+    },
+    {
+      "move": 144,
+      "rootScoreLead": 16.687,
+      "rootVisits": 55,
+      "best": {
+        "point": "Q3",
+        "scoreLead": 16.659,
+        "pv": [
+          "Q3",
+          "N1",
+          "O1",
+          "G13",
+          "H14",
+          "H13"
+        ]
+      },
+      "played": {
+        "point": "Q3",
+        "loss": 0.03,
+        "visits": 24,
+        "forced": false,
+        "pv": [
+          "Q3",
+          "N1",
+          "O1",
+          "G13",
+          "H14",
+          "H13"
+        ]
+      },
+      "guessed": {
+        "point": "Q3",
+        "loss": 0.03,
+        "visits": 24,
+        "forced": false,
+        "pv": [
+          "Q3",
+          "N1",
+          "O1",
+          "G13",
+          "H14",
+          "H13"
+        ]
+      },
+      "natural": {
+        "point": "Q3",
+        "prior": 0.6771,
+        "loss": 0.03
+      }
+    },
+    {
+      "move": 146,
+      "rootScoreLead": 16.877,
+      "rootVisits": 55,
+      "best": {
+        "point": "O1",
+        "scoreLead": 17.024,
+        "pv": [
+          "O1",
+          "G13",
+          "H14",
+          "H13",
+          "F13"
+        ]
+      },
+      "played": {
+        "point": "O1",
+        "loss": -0.15,
+        "visits": 18,
+        "forced": false,
+        "pv": [
+          "O1",
+          "G13",
+          "H14",
+          "H13",
+          "F13"
+        ]
+      },
+      "guessed": {
+        "point": "O1",
+        "loss": -0.15,
+        "visits": 18,
+        "forced": false,
+        "pv": [
+          "O1",
+          "G13",
+          "H14",
+          "H13",
+          "F13"
+        ]
+      },
+      "natural": {
+        "point": "O1",
+        "prior": 0.421,
+        "loss": -0.15
+      }
+    },
+    {
+      "move": 148,
+      "rootScoreLead": 16.802,
+      "rootVisits": 54,
+      "best": {
+        "point": "H14",
+        "scoreLead": 18.059,
+        "pv": [
+          "H14",
+          "H13",
+          "F13",
+          "G18",
+          "D19"
+        ]
+      },
+      "played": {
+        "point": "H13",
+        "loss": 0.54,
+        "visits": 10,
+        "forced": false,
+        "pv": [
+          "H13",
+          "H14",
+          "H15",
+          "J14",
+          "G15",
+          "G12"
+        ]
+      },
+      "guessed": {
+        "point": "F13",
+        "loss": 3.37,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F13",
+          "G15",
+          "F15",
+          "H14",
+          "F14",
+          "N1"
+        ]
+      },
+      "natural": {
+        "point": "H14",
+        "prior": 0.3804,
+        "loss": -1.26
+      }
+    },
+    {
+      "move": 150,
+      "rootScoreLead": 17.962,
+      "rootVisits": 55,
+      "best": {
+        "point": "H14",
+        "scoreLead": 18.669,
+        "pv": [
+          "H14",
+          "G18",
+          "H17",
+          "J17"
+        ]
+      },
+      "played": {
+        "point": "T16",
+        "loss": 0.35,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "T16",
+          "S16",
+          "O1",
+          "H14",
+          "H15",
+          "J14"
+        ]
+      },
+      "guessed": {
+        "point": "T16",
+        "loss": 0.35,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "T16",
+          "S16",
+          "O1",
+          "H14",
+          "H15",
+          "J14"
+        ]
+      },
+      "natural": {
+        "point": "H15",
+        "prior": 0.2051,
+        "loss": -0.43
+      }
+    },
+    {
+      "move": 152,
+      "rootScoreLead": 16.014,
+      "rootVisits": 54,
+      "best": {
+        "point": "O1",
+        "scoreLead": 15.559,
+        "pv": [
+          "O1",
+          "H14",
+          "H15",
+          "J14",
+          "G15",
+          "G12"
+        ]
+      },
+      "played": {
+        "point": "O1",
+        "loss": 0.45,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "O1",
+          "H14",
+          "H15",
+          "J14",
+          "G15",
+          "G12"
+        ]
+      },
+      "guessed": {
+        "point": "O1",
+        "loss": 0.45,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "O1",
+          "H14",
+          "H15",
+          "J14",
+          "G15",
+          "G12"
+        ]
+      },
+      "natural": {
+        "point": "O1",
+        "prior": 0.4074,
+        "loss": 0.45
+      }
+    },
+    {
+      "move": 154,
+      "rootScoreLead": 18.558,
+      "rootVisits": 55,
+      "best": {
+        "point": "H15",
+        "scoreLead": 19.884,
+        "pv": [
+          "H15",
+          "H16",
+          "F15",
+          "G18",
+          "D19",
+          "N1"
+        ]
+      },
+      "played": {
+        "point": "H15",
+        "loss": -1.33,
+        "visits": 23,
+        "forced": false,
+        "pv": [
+          "H15",
+          "H16",
+          "F15",
+          "G18",
+          "D19",
+          "N1"
+        ]
+      },
+      "guessed": {
+        "point": "F15",
+        "loss": 6.22,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F15",
+          "H14",
+          "F14",
+          "H12",
+          "F13",
+          "N1"
+        ]
+      },
+      "natural": {
+        "point": "H15",
+        "prior": 0.7074,
+        "loss": -1.33
+      }
+    },
+    {
+      "move": 156,
+      "rootScoreLead": 20.634,
+      "rootVisits": 55,
+      "best": {
+        "point": "H16",
+        "scoreLead": 21.58,
+        "pv": [
+          "H16",
+          "G17",
+          "H17",
+          "G18",
+          "H18"
+        ]
+      },
+      "played": {
+        "point": "G17",
+        "loss": 2.98,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "G17",
+          "H16",
+          "F15",
+          "J18",
+          "D19"
+        ]
+      },
+      "guessed": {
+        "point": "F15",
+        "loss": 3.22,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F15",
+          "E16",
+          "E17",
+          "F14",
+          "H14",
+          "G17"
+        ]
+      },
+      "natural": {
+        "point": "H16",
+        "prior": 0.4447,
+        "loss": -0.95
+      }
+    },
+    {
+      "move": 158,
+      "rootScoreLead": 17.201,
+      "rootVisits": 55,
+      "best": {
+        "point": "F15",
+        "scoreLead": 17.487,
+        "pv": [
+          "F15",
+          "J18",
+          "H14",
+          "N1",
+          "C9"
+        ]
+      },
+      "played": {
+        "point": "F15",
+        "loss": -0.29,
+        "visits": 28,
+        "forced": false,
+        "pv": [
+          "F15",
+          "J18",
+          "H14",
+          "N1",
+          "C9"
+        ]
+      },
+      "guessed": {
+        "point": "F15",
+        "loss": -0.29,
+        "visits": 28,
+        "forced": false,
+        "pv": [
+          "F15",
+          "J18",
+          "H14",
+          "N1",
+          "C9"
+        ]
+      },
+      "natural": {
+        "point": "F15",
+        "prior": 0.8378,
+        "loss": -0.29
+      }
+    },
+    {
+      "move": 160,
+      "rootScoreLead": 22.657,
+      "rootVisits": 55,
+      "best": {
+        "point": "J18",
+        "scoreLead": 25.422,
+        "pv": [
+          "J18",
+          "K18",
+          "K17",
+          "H18",
+          "L18"
+        ]
+      },
+      "played": {
+        "point": "D19",
+        "loss": 5.3,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "D19",
+          "J18",
+          "O1",
+          "E19",
+          "H14",
+          "N1"
+        ]
+      },
+      "guessed": {
+        "point": "T17",
+        "loss": 1.98,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "T17",
+          "T18",
+          "O1",
+          "J18",
+          "H14"
+        ]
+      },
+      "natural": {
+        "point": "J18",
+        "prior": 0.2203,
+        "loss": -2.77
+      }
+    },
+    {
+      "move": 162,
+      "rootScoreLead": 23.705,
+      "rootVisits": 55,
+      "best": {
+        "point": "J18",
+        "scoreLead": 25.602,
+        "pv": [
+          "J18",
+          "H14",
+          "J14",
+          "F14"
+        ]
+      },
+      "played": {
+        "point": "L18",
+        "loss": -1.98,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "L18",
+          "H14",
+          "J14",
+          "F14",
+          "H14",
+          "H12"
+        ]
+      },
+      "guessed": {
+        "point": "C18",
+        "loss": 11.76,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "C18",
+          "J18",
+          "H14",
+          "M18",
+          "H18"
+        ]
+      },
+      "natural": {
+        "point": "J18",
+        "prior": 0.2979,
+        "loss": -1.9
+      }
+    },
+    {
+      "move": 164,
+      "rootScoreLead": 28.078,
+      "rootVisits": 54,
+      "best": {
+        "point": "J18",
+        "scoreLead": 30.224,
+        "pv": [
+          "J18",
+          "H18",
+          "M18",
+          "F14",
+          "H14",
+          "G18"
+        ]
+      },
+      "played": {
+        "point": "J18",
+        "loss": -2.15,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "J18",
+          "H18",
+          "M18",
+          "F14",
+          "H14",
+          "G18"
+        ]
+      },
+      "guessed": {
+        "point": "J18",
+        "loss": -2.15,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "J18",
+          "H18",
+          "M18",
+          "F14",
+          "H14",
+          "G18"
+        ]
+      },
+      "natural": {
+        "point": "J18",
+        "prior": 0.3095,
+        "loss": -2.15
+      }
+    },
+    {
+      "move": 166,
+      "rootScoreLead": 30.603,
+      "rootVisits": 55,
+      "best": {
+        "point": "H14",
+        "scoreLead": 30.475,
+        "pv": [
+          "H14",
+          "H18",
+          "M18",
+          "G18",
+          "C18",
+          "F18"
+        ]
+      },
+      "played": {
+        "point": "H14",
+        "loss": 0.13,
+        "visits": 31,
+        "forced": false,
+        "pv": [
+          "H14",
+          "H18",
+          "M18",
+          "G18",
+          "C18",
+          "F18"
+        ]
+      },
+      "guessed": {
+        "point": "H14",
+        "loss": 0.13,
+        "visits": 31,
+        "forced": false,
+        "pv": [
+          "H14",
+          "H18",
+          "M18",
+          "G18",
+          "C18",
+          "F18"
+        ]
+      },
+      "natural": {
+        "point": "H14",
+        "prior": 0.9841,
+        "loss": 0.13
+      }
+    },
+    {
+      "move": 168,
+      "rootScoreLead": 32.499,
+      "rootVisits": 55,
+      "best": {
+        "point": "M18",
+        "scoreLead": 33.587,
+        "pv": [
+          "M18",
+          "E19",
+          "G18",
+          "E16"
+        ]
+      },
+      "played": {
+        "point": "M18",
+        "loss": -1.09,
+        "visits": 19,
+        "forced": false,
+        "pv": [
+          "M18",
+          "E19",
+          "G18",
+          "E16"
+        ]
+      },
+      "guessed": {
+        "point": "G18",
+        "loss": -0.12,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "G18",
+          "H19",
+          "M18",
+          "E19",
+          "C9",
+          "B9"
+        ]
+      },
+      "natural": {
+        "point": "M18",
+        "prior": 0.3846,
+        "loss": -1.09
+      }
+    },
+    {
+      "move": 170,
+      "rootScoreLead": 29.64,
+      "rootVisits": 55,
+      "best": {
+        "point": "G18",
+        "scoreLead": 31.008,
+        "pv": [
+          "G18",
+          "H19",
+          "D19",
+          "J10",
+          "J11"
+        ]
+      },
+      "played": {
+        "point": "G18",
+        "loss": -1.37,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "G18",
+          "H19",
+          "D19",
+          "J10",
+          "J11"
+        ]
+      },
+      "guessed": {
+        "point": "H19",
+        "loss": 19.54,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "H19",
+          "G18",
+          "F18",
+          "G19",
+          "E14",
+          "D14"
+        ]
+      },
+      "natural": {
+        "point": "G18",
+        "prior": 0.2458,
+        "loss": -1.37
+      }
+    },
+    {
+      "move": 172,
+      "rootScoreLead": 29.245,
+      "rootVisits": 55,
+      "best": {
+        "point": "D19",
+        "scoreLead": 30.44,
+        "pv": [
+          "D19",
+          "L11",
+          "L12",
+          "E19",
+          "C9"
+        ]
+      },
+      "played": {
+        "point": "D19",
+        "loss": -1.2,
+        "visits": 21,
+        "forced": false,
+        "pv": [
+          "D19",
+          "L11",
+          "L12",
+          "E19",
+          "C9"
+        ]
+      },
+      "guessed": {
+        "point": "F13",
+        "loss": 3.57,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "F13",
+          "E16",
+          "E17",
+          "G19",
+          "D19",
+          "M13"
+        ]
+      },
+      "natural": {
+        "point": "D19",
+        "prior": 0.4844,
+        "loss": -1.2
+      }
+    },
+    {
+      "move": 174,
+      "rootScoreLead": 25.464,
+      "rootVisits": 54,
+      "best": {
+        "point": "K18",
+        "scoreLead": 26.716,
+        "pv": [
+          "K18",
+          "E19",
+          "C9",
+          "B9",
+          "D19",
+          "L16"
+        ]
+      },
+      "played": {
+        "point": "K18",
+        "loss": -1.25,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "K18",
+          "E19",
+          "C9",
+          "B9",
+          "D19",
+          "L16"
+        ]
+      },
+      "guessed": {
+        "point": "K18",
+        "loss": -1.25,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "K18",
+          "E19",
+          "C9",
+          "B9",
+          "D19",
+          "L16"
+        ]
+      },
+      "natural": {
+        "point": "K18",
+        "prior": 0.5488,
+        "loss": -1.25
+      }
+    },
+    {
+      "move": 176,
+      "rootScoreLead": 25.821,
+      "rootVisits": 54,
+      "best": {
+        "point": "C9",
+        "scoreLead": 26.642,
+        "pv": [
+          "C9",
+          "B9",
+          "D19",
+          "L16",
+          "N16"
+        ]
+      },
+      "played": {
+        "point": "F13",
+        "loss": -0.46,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "F13",
+          "G19",
+          "D19",
+          "L11",
+          "C18"
+        ]
+      },
+      "guessed": {
+        "point": "E16",
+        "loss": 8.37,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "E16",
+          "G19",
+          "D19",
+          "L11",
+          "C18",
+          "L12"
+        ]
+      },
+      "natural": {
+        "point": "C9",
+        "prior": 0.2526,
+        "loss": -0.82
+      }
+    },
+    {
+      "move": 178,
+      "rootScoreLead": 28.556,
+      "rootVisits": 54,
+      "best": {
+        "point": "D19",
+        "scoreLead": 29.557,
+        "pv": [
+          "D19",
+          "L16",
+          "C18",
+          "N16",
+          "B19"
+        ]
+      },
+      "played": {
+        "point": "D19",
+        "loss": -1,
+        "visits": 14,
+        "forced": false,
+        "pv": [
+          "D19",
+          "L16",
+          "C18",
+          "N16",
+          "B19"
+        ]
+      },
+      "guessed": {
+        "point": "E16",
+        "loss": 4.88,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "E16",
+          "G19",
+          "D19",
+          "M13",
+          "N13",
+          "E19"
+        ]
+      },
+      "natural": {
+        "point": "D19",
+        "prior": 0.485,
+        "loss": -1
+      }
+    },
+    {
+      "move": 180,
+      "rootScoreLead": 25.732,
+      "rootVisits": 55,
+      "best": {
+        "point": "N16",
+        "scoreLead": 30.133,
+        "pv": [
+          "N16",
+          "E19",
+          "E16",
+          "G19",
+          "D19",
+          "M13"
+        ]
+      },
+      "played": {
+        "point": "C18",
+        "loss": 8.03,
+        "visits": 11,
+        "forced": false,
+        "pv": [
+          "C18",
+          "N16",
+          "B19",
+          "N5",
+          "S7"
+        ]
+      },
+      "guessed": {
+        "point": "N16",
+        "loss": -4.28,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N16",
+          "E19",
+          "E16",
+          "G19",
+          "D19",
+          "M13"
+        ]
+      },
+      "natural": {
+        "point": "C18",
+        "prior": 0.347,
+        "loss": 8.03
+      }
+    },
+    {
+      "move": 182,
+      "rootScoreLead": 17.122,
+      "rootVisits": 55,
+      "best": {
+        "point": "B19",
+        "scoreLead": 17.002,
+        "pv": [
+          "B19",
+          "G8",
+          "G9",
+          "N5",
+          "M7"
+        ]
+      },
+      "played": {
+        "point": "B19",
+        "loss": 0.12,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "B19",
+          "G8",
+          "G9",
+          "N5",
+          "M7"
+        ]
+      },
+      "guessed": {
+        "point": "B19",
+        "loss": 0.12,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "B19",
+          "G8",
+          "G9",
+          "N5",
+          "M7"
+        ]
+      },
+      "natural": {
+        "point": "B19",
+        "prior": 0.2992,
+        "loss": 0.12
+      }
+    },
+    {
+      "move": 184,
+      "rootScoreLead": 17.039,
+      "rootVisits": 55,
+      "best": {
+        "point": "O9",
+        "scoreLead": 17.356,
+        "pv": [
+          "O9",
+          "N5",
+          "M7",
+          "P9",
+          "P8"
+        ]
+      },
+      "played": {
+        "point": "M6",
+        "loss": 1.04,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "M6",
+          "O8",
+          "B3",
+          "B2",
+          "B5"
+        ]
+      },
+      "guessed": {
+        "point": "S5",
+        "loss": 0.03,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "S5",
+          "S7",
+          "O9",
+          "G8",
+          "N5",
+          "G9"
+        ]
+      },
+      "natural": {
+        "point": "O9",
+        "prior": 0.1719,
+        "loss": -0.32
+      }
+    },
+    {
+      "move": 186,
+      "rootScoreLead": 16.005,
+      "rootVisits": 55,
+      "best": {
+        "point": "N17",
+        "scoreLead": 16.285,
+        "pv": [
+          "N17",
+          "L17",
+          "O9",
+          "P9",
+          "P8",
+          "Q9"
+        ]
+      },
+      "played": {
+        "point": "B5",
+        "loss": 0.67,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "B5",
+          "B7",
+          "O9",
+          "P10",
+          "N11",
+          "M11"
+        ]
+      },
+      "guessed": {
+        "point": "S5",
+        "loss": -0.76,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "S5",
+          "S7",
+          "O9",
+          "P10",
+          "N11",
+          "M11"
+        ]
+      },
+      "natural": {
+        "point": "O9",
+        "prior": 0.1963,
+        "loss": -0.35
+      }
+    },
+    {
+      "move": 188,
+      "rootScoreLead": 14.89,
+      "rootVisits": 55,
+      "best": {
+        "point": "O9",
+        "scoreLead": 15.114,
+        "pv": [
+          "O9",
+          "P10",
+          "S5",
+          "S7"
+        ]
+      },
+      "played": {
+        "point": "N17",
+        "loss": -0.93,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N17",
+          "L17",
+          "O9",
+          "P10",
+          "N11",
+          "M11"
+        ]
+      },
+      "guessed": {
+        "point": "A6",
+        "loss": 0.09,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "A6",
+          "B7",
+          "O9",
+          "P9",
+          "P8",
+          "Q9"
+        ]
+      },
+      "natural": {
+        "point": "O9",
+        "prior": 0.2125,
+        "loss": -0.22
+      }
+    },
+    {
+      "move": 190,
+      "rootScoreLead": 14.59,
+      "rootVisits": 55,
+      "best": {
+        "point": "O9",
+        "scoreLead": 14.922,
+        "pv": [
+          "O9",
+          "P9",
+          "P8",
+          "Q9",
+          "S5"
+        ]
+      },
+      "played": {
+        "point": "O9",
+        "loss": -0.33,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "O9",
+          "P9",
+          "P8",
+          "Q9",
+          "S5"
+        ]
+      },
+      "guessed": {
+        "point": "S5",
+        "loss": -0.6,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "S5",
+          "S7",
+          "O9",
+          "P10",
+          "N11",
+          "M11"
+        ]
+      },
+      "natural": {
+        "point": "O9",
+        "prior": 0.2379,
+        "loss": -0.33
+      }
+    },
+    {
+      "move": 192,
+      "rootScoreLead": 14.627,
+      "rootVisits": 55,
+      "best": {
+        "point": "P8",
+        "scoreLead": 15.134,
+        "pv": [
+          "P8",
+          "Q9",
+          "S5",
+          "S7",
+          "J13",
+          "G8"
+        ]
+      },
+      "played": {
+        "point": "J13",
+        "loss": -0.33,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "J13",
+          "O10",
+          "K9",
+          "L9",
+          "S5"
+        ]
+      },
+      "guessed": {
+        "point": "O10",
+        "loss": -0.31,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "O10",
+          "O11",
+          "P8",
+          "Q8",
+          "P10",
+          "O8"
+        ]
+      },
+      "natural": {
+        "point": "P8",
+        "prior": 0.1962,
+        "loss": -0.51
+      }
+    },
+    {
+      "move": 194,
+      "rootScoreLead": 17.245,
+      "rootVisits": 54,
+      "best": {
+        "point": "K10",
+        "scoreLead": 18.186,
+        "pv": [
+          "K10",
+          "J9",
+          "K9",
+          "J8"
+        ]
+      },
+      "played": {
+        "point": "M11",
+        "loss": 0.04,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "M11",
+          "O10",
+          "L9",
+          "M8",
+          "K9",
+          "G8"
+        ]
+      },
+      "guessed": {
+        "point": "J9",
+        "loss": 1.78,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "J9",
+          "K10",
+          "K9",
+          "L9",
+          "M11"
+        ]
+      },
+      "natural": {
+        "point": "K10",
+        "prior": 0.203,
+        "loss": -0.94
+      }
+    },
+    {
+      "move": 196,
+      "rootScoreLead": 18.192,
+      "rootVisits": 55,
+      "best": {
+        "point": "L9",
+        "scoreLead": 19.421,
+        "pv": [
+          "L9",
+          "M8",
+          "K9",
+          "G8"
+        ]
+      },
+      "played": {
+        "point": "L9",
+        "loss": -1.23,
+        "visits": 12,
+        "forced": false,
+        "pv": [
+          "L9",
+          "M8",
+          "K9",
+          "G8"
+        ]
+      },
+      "guessed": {
+        "point": "P8",
+        "loss": -0.48,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "P8",
+          "O10",
+          "O8",
+          "Q9",
+          "K9",
+          "L9"
+        ]
+      },
+      "natural": {
+        "point": "L9",
+        "prior": 0.2045,
+        "loss": -1.23
+      }
+    },
+    {
+      "move": 198,
+      "rootScoreLead": 18.69,
+      "rootVisits": 55,
+      "best": {
+        "point": "N5",
+        "scoreLead": 19.802,
+        "pv": [
+          "N5",
+          "K9",
+          "O10",
+          "O11",
+          "N8"
+        ]
+      },
+      "played": {
+        "point": "N5",
+        "loss": -1.11,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "N5",
+          "K9",
+          "O10",
+          "O11",
+          "N8"
+        ]
+      },
+      "guessed": {
+        "point": "N5",
+        "loss": -1.11,
+        "visits": 15,
+        "forced": false,
+        "pv": [
+          "N5",
+          "K9",
+          "O10",
+          "O11",
+          "N8"
+        ]
+      },
+      "natural": {
+        "point": "N5",
+        "prior": 0.5157,
+        "loss": -1.11
+      }
+    },
+    {
+      "move": 200,
+      "rootScoreLead": 18.897,
+      "rootVisits": 55,
+      "best": {
+        "point": "O10",
+        "scoreLead": 19.452,
+        "pv": [
+          "O10",
+          "O11",
+          "N8",
+          "N11"
+        ]
+      },
+      "played": {
+        "point": "N8",
+        "loss": -5.71,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "N8",
+          "N11",
+          "M8",
+          "L10",
+          "L8",
+          "L11"
+        ]
+      },
+      "guessed": {
+        "point": "K10",
+        "loss": 0.69,
+        "visits": 50,
+        "forced": true,
+        "pv": [
+          "K10",
+          "L10",
+          "O10",
+          "O11",
+          "P8",
+          "N11"
+        ]
+      },
+      "natural": {
+        "point": "K10",
+        "prior": 0.1877,
+        "loss": 0.97
+      }
+    }
+  ],
+  "sgf": "(;GM[1]FF[4]SZ[19]CA[utf-8]AP[SmartGo One:3.1.6]GN[2024-07-09d]PW[Ichiriki Ryo]WR[9d]PB[Ke Jie]BR[9d]EV[10th Ing Cup]RO[Semi-final, Game 3]DT[2024-07-09]PC[Courtyard Mansion, Cicheng Old Town, Ningbo City, Zhejiang Prov.]KM[8]RE[W+R]RU[Ing Goe];B[qd];W[dd];B[pq];W[cp];B[oc];W[qo];B[pm];W[oo];B[np];W[lp];B[no];W[on];B[mn];W[qq];B[qr];W[rq];B[om];W[qn];B[eq];W[iq];B[dn];W[ep];B[fp];W[eo];B[dq];W[co];B[cq];W[oq];B[nq];W[or];B[op];W[pr];B[cl];W[el];B[ci];W[nm];B[hp];W[gr];B[fq];W[jo];B[fm];W[mm];B[kn];W[jn];B[jm];W[im];B[jl];W[nn];B[hq];W[hn];B[jq];W[ir];B[ip];W[jp];B[kq];W[lq];B[lr];W[mr];B[kr];W[kp];B[nr];W[mq];B[hr];W[ls];B[is];W[fn];B[qi];W[cg];B[em];W[gm];B[fl];W[hk];B[cc];W[dc];B[cd];W[ce];B[be];W[bf];B[de];W[cf];B[db];W[eb];B[bb];W[fc];B[ee];W[fd];B[id];W[gf];B[oi];W[nd];B[lc];W[nc];B[ob];W[ng];B[le];W[pe];B[qe];W[pg];B[mh];W[lf];B[me];W[ne];B[qg];W[mf];B[kf];W[kg];B[jf];W[lh];B[jg];W[jh];B[ih];W[ji];B[eg];W[da];B[ca];W[cb];B[go];W[gn];B[db];W[dh];B[ea];W[fh];B[di];W[eh];B[mj];W[ek];B[cn];W[fk];B[bh];W[nb];B[lk];W[qh];B[ph];W[qf];B[rh];W[rf];B[rb];W[nh];B[qm];W[fa];B[os];W[pp];B[ps];W[pq];B[ms];W[ns];B[gg];W[hg];B[ms];W[sd];B[rd];W[ns];B[ge];W[he];B[gd];W[gc];B[hd];W[fe];B[ms];W[da];B[ns];W[kb];B[hc];W[ib];B[ff];W[hf];B[hb];W[lb];B[ea];W[gb];B[ha];W[da];B[jc];W[jb];B[ea];W[fg];B[ef];W[da];B[kd];W[cb];B[md];W[ba];B[rn];W[ln];B[bq];W[bo];B[bn];W[mc];B[kc];W[nk];B[ok];W[ig];B[ij];W[li];B[mk];W[kk];B[lm];W[mo];B[jk];W[ml])"
+}

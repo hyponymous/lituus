@@ -410,6 +410,22 @@ function colorName(color: Color): string {
   return color === BLACK ? 'Black' : 'White';
 }
 
+/**
+ * Points from the guessing player's side: positive is good, negative is lost.
+ *
+ * The convention `experiments/katago/review.ts` settled on against a reader:
+ * `+0.4` is four tenths of a point to the good, `-3.1` is three points thrown
+ * away. "Lost 3.1" in prose is unambiguous and unreadable in a column of thirty.
+ *
+ * The `+ 0` is not decoration. Negating a loss of exactly zero gives negative
+ * zero, which `toFixed` faithfully renders as `-0.0` — so every move the engine
+ * thought was perfect would be printed as though it had lost something.
+ */
+export function signed(loss: number): string {
+  const value: number = -loss + 0;
+  return `${value < -0.05 ? '-' : '+'}${Math.abs(value).toFixed(1)}`;
+}
+
 /** A percentage for display. Rounded to whole numbers; nobody needs decimals. */
 export function percent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
@@ -660,10 +676,7 @@ export function toText(summary: Summary): string {
   lines.push('', 'Moves:');
   for (const row of summary.rows) {
     const mark: string = row.hit ? 'hit ' : 'miss';
-    // Signed from your side, as the annotated SGF does it: +0.4 is four tenths
-    // to the good, -3.1 is three points thrown away. A loss reads more
-    // naturally as a number to avoid than as a quantity to accumulate.
-    const cost: string = row.loss === null ? '' : `  ${(-row.loss).toFixed(1).padStart(6)}`;
+    const cost: string = row.loss === null ? '' : `  ${signed(row.loss).padStart(6)}`;
     const beat: string = row.beat ? '  beat the game' : '';
     lines.push(
       `  ${String(row.moveNumber).padStart(4)}  ${mark}  ${row.guess} / ${row.actual}${cost}${beat}`,
