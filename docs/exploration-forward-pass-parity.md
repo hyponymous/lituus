@@ -132,6 +132,30 @@ But the tensors have been dumped and both match `fillRowV7`:
 
 Both are what the specification calls for. That is the contradiction.
 
+### 5.1 What this costs on a real game
+
+The same comparison over six positions of the committed professional record,
+after the liberty fix, against the FP32 reference:
+
+| Turn | to play | policy Δmax | winrate Δ | lead Δ |
+| --- | --- | --- | --- | --- |
+| 0 | B | 0.000001 | 0.000106 | 0.0000 |
+| 1 | W | 0.010325 | 0.048990 | 0.8789 |
+| 40 | B | 0.032411 | 0.028085 | 0.4484 |
+| 79 | W | 0.000012 | 0.019003 | 1.0246 |
+| 120 | B | 0.011475 | 0.003980 | 0.0917 |
+| 199 | W | 0.021101 | 0.000164 | 0.5396 |
+
+Two things to read from this. The worst lead error is **1.02 points**, which is
+nowhere near good enough: `BEAT_MARGIN` is half a point and the blunder
+threshold is eight, so an error of this size moves verdicts. And the
+Black-to-play rows are *not* exact here, unlike the synthetic sequence in §5 —
+turn 40 is off by 0.45. Those positions have real groups in them, so the most
+likely explanation is the missing ladder planes (§7), which the synthetic
+sequence of four isolated stones could never exercise. That is consistent, but
+it is inference rather than measurement, and it should be confirmed once the
+ladders exist.
+
 **A loose end worth pulling first.** An empty board with *White* to play was
 measured exact — but through the analysis engine with `initialPlayer`, not
 through `kata-raw-nn`. If that holds under the better instrument, the rule is
@@ -158,7 +182,35 @@ case, but they are needed for real positions and are the largest remaining port
 (`searchIsLadderCaptured` and its helpers, roughly 400 lines). Until they exist,
 parity on a real game cannot be claimed even once the colour problem is solved.
 
-## 8. Method note
+## 8. Reproducing
+
+Everything below needs the network, which is git-ignored. The commands are
+recorded because the inputs they produce are ignored too, and a cold start
+should not have to rediscover them.
+
+    NET=experiments/nets/g170e-b15c192-s1672170752-d466197061.bin.gz
+
+    # The committed ground-truth fixture (FP32, so it measures the network
+    # rather than KataGo's FP16 backend).
+    node experiments/katago/groundtruth.ts --net $NET       --turns 0,1,40,79,120,199 --config experiments/katago/analysis-fp32.cfg       --out test/fixtures/net-b15c192.json test/fixtures/2024-07-09d.sgf
+
+    # Our forward pass against it.
+    node experiments/katago/verify-forward.ts --net $NET       --truth test/fixtures/net-b15c192.json test/fixtures/2024-07-09d.sgf
+
+    # The stronger reference: raw network output, no search in the path.
+    node experiments/katago/raw-parity.ts
+
+The AI-scoring fixture `test/fixtures/result-ai.json` comes from a different
+chain, over the same record, and is regenerated the same way its inputs were:
+
+    node experiments/katago/analyze.ts --net $NET --visits 50 --label fixture-v50       --out experiments/out/fixture/ref.jsonl test/fixtures/2024-07-09d.sgf
+    node experiments/katago/backfill.ts --net $NET --visits 50       --ref experiments/out/fixture/ref.jsonl       --out experiments/out/fixture/backfill.jsonl test/fixtures/2024-07-09d.sgf
+    node experiments/katago/guesses.ts --net $NET --visits 50       --play test/fixtures/result.json --ref experiments/out/fixture/ref.jsonl       --out experiments/out/fixture/guesses.jsonl test/fixtures/2024-07-09d.sgf
+
+Those three are joined by `joinRecorded` and driven through the replay
+evaluator; `test/fixture-ai.test.ts` pins the figures they produced.
+
+## 9. Method note
 
 Two corrections worth carrying forward, both made by the reader rather than by
 the measurement:
