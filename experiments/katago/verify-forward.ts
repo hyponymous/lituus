@@ -34,6 +34,13 @@ import {
   type Stone,
 } from '../../src/engine/board.ts';
 import {
+  createLadderInputs,
+  createLadderScratch,
+  ladderInputs,
+  type LadderInputs,
+  type LadderScratch,
+} from '../../src/engine/ladder.ts';
+import {
   buildFeatures,
   createFeatureScratch,
   type FeatureScratch,
@@ -128,6 +135,9 @@ async function main(): Promise<void> {
   const model = new ModelV8(tf, parsed);
   console.log(`${model.name}, version ${model.version}\n`);
 
+  const ladderScratch: LadderScratch = createLadderScratch(board);
+  const ladders: LadderInputs = createLadderInputs(board);
+
   let worstPolicy = 0;
   let worstWinrate = 0;
   let worstLead = 0;
@@ -137,6 +147,15 @@ async function main(): Promise<void> {
     const state: BoardState = fromPosition(board, move.before);
     const toPlay: Stone = move.color === 1 ? BLACK : WHITE;
 
+    // Planes 14-17. The two earlier boards are the positions this game was in
+    // one and two moves ago; before the third move there are none, and
+    // `ladderInputs` falls back the way KataGo does.
+    const prev: BoardState | undefined =
+      expected.turn >= 1 ? fromPosition(board, game.moves[expected.turn - 1].before) : undefined;
+    const prevPrev: BoardState | undefined =
+      expected.turn >= 2 ? fromPosition(board, game.moves[expected.turn - 2].before) : undefined;
+    ladderInputs(board, state, prev, prevPrev, toPlay, ladderScratch, ladders);
+
     const inputs: Inputs = buildFeatures(
       {
         board,
@@ -145,6 +164,7 @@ async function main(): Promise<void> {
         history: historyBefore(game, board, expected.turn),
         komi: truth.komi,
         ruleset: 'territory',
+        ladders,
       },
       scratch,
     );

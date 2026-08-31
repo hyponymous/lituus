@@ -1,7 +1,7 @@
 # lituus — Forward-pass parity with KataGo
 
-**Status:** open · one bug found and fixed, one unexplained
-**Last updated:** 2026-08-30
+**Status:** open · two bugs found and fixed, one unexplained
+**Last updated:** 2026-08-31
 
 Step 4 of [the AI-scoring design](design-ai-scoring.md) §12 builds a forward
 pass and has to show it reproduces the network it claims to be running. This
@@ -11,8 +11,16 @@ than from the beginning.
 
 The short version: **the network runs correctly when Black is to play and
 incorrectly when White is to play, and the input tensors for both cases have
-been verified correct against KataGo's own source.** Those two facts are in
-direct contradiction and the contradiction is not yet resolved.
+been verified correct against KataGo's own committed test output.** Those two
+facts are in direct contradiction and the contradiction is not yet resolved.
+
+Since the last revision the split has become clean rather than approximate.
+Implementing the ladder planes (§7) removed the entire Black-to-play error on a
+real game, so every Black position now agrees to 1e-6 and every White position
+still does not — on positions with two hundred stones, not just the synthetic
+ones. The most useful new evidence is in §5.1: at one White position the policy
+is exact while the winrate and lead are wrong, which an incorrect input tensor
+cannot produce.
 
 ## 1. Why parity matters here
 
@@ -40,6 +48,17 @@ returns the raw network output — policy, `whiteWin`, `whiteLead`,
 `whiteScoreSelfplay` — with no search in the path at all, so it removes the
 assumption that `rootInfo` at one visit equals the network's own answer.
 `experiments/katago/raw-parity.ts` drives it over a move sequence.
+
+**KataGo's own golden input dumps** are the strongest instrument for the input
+side, and were found last. `cpp/tests/results/runOutputTests.txt` is committed
+expected output for KataGo's own test suite: for a battery of positions it
+prints every input plane as a grid with the board drawn beside it, plus every
+global feature. It is a machine-readable specification of `fillRowV7` that
+needs no compiler, no GPU and no network to consult.
+`experiments/katago/golden-inputs.ts` lifts two of those positions into
+`test/fixtures/golden-v7.json`, and `test/golden-v7.test.ts` checks our encoder
+against them. This is what §6 wanted a hand-built dumper for; upstream had
+already written it.
 
 **The primary source.** KataGo is cloned at `~/src/katago`;
 `cpp/neuralnet/nninputs.cpp`'s `NNInputs::fillRowV7` is the authoritative
@@ -89,6 +108,37 @@ gap to our own account. The ground-truth fixture is now generated with
 FP32 the empty board is exact — our earlier turn-0 error was *precisely*
 KataGo's own FP16 delta, 0.001782.
 
+### 3.3 The input planes are right, for both colours
+
+Checked against KataGo's golden dumps on two positions — a 19x19 position 145
+moves into a professional game with **White** to play, and a 7x7 position with
+**Black** to play:
+
+| Planes | Result |
+| --- | --- |
+| 0 (board), 1, 2 (stones) | exact, both positions |
+| 3, 4, 5 (liberties) | exact, both positions |
+| 9-13 (move history) | exact, both positions |
+| 14, 17 (ladders) | exact, both positions — see §7 |
+
+Planes 15 and 16 are not checked here: they are the ladder search run on the
+two previous boards, and a printed position does not record what was captured,
+so the earlier boards cannot be recovered from the fixture. `test/ladder.test.ts`
+covers them instead.
+
+This matters more for what it eliminates than for what it confirms. Liberties
+and history were live suspects, and on a position far richer than the isolated
+stones of §5 they are exact — *including with White to play*. Whatever the §5
+discrepancy is, it is not the stone, liberty or history encoding, and it is not
+something that goes wrong merely because White is to move.
+
+Two smaller things fell out of the same reading:
+
+- `rowGlobal[5] = selfKomi/20.0f` is what the source says, and what we do. The
+  komi scale was never wrong.
+- `hist.currentSelfKomi` applies a draw-equivalence adjustment we do not
+  implement. It moves nothing at 6.5 or 7.5 komi, and would at integer komi.
+
 ## 4. Ruled out by experiment
 
 Each of these was tested by perturbing the input and measuring; every one made
@@ -135,39 +185,56 @@ Both are what the specification calls for. That is the contradiction.
 ### 5.1 What this costs on a real game
 
 The same comparison over six positions of the committed professional record,
-after the liberty fix, against the FP32 reference:
+against the FP32 reference, **with ladder planes 14-17 implemented**:
 
 | Turn | to play | policy Δmax | winrate Δ | lead Δ |
 | --- | --- | --- | --- | --- |
-| 0 | B | 0.000001 | 0.000106 | 0.0000 |
+| 0 | B | 0.000001 | 0.000106 | **0.0000** |
 | 1 | W | 0.010325 | 0.048990 | 0.8789 |
-| 40 | B | 0.032411 | 0.028085 | 0.4484 |
-| 79 | W | 0.000012 | 0.019003 | 1.0246 |
-| 120 | B | 0.011475 | 0.003980 | 0.0917 |
-| 199 | W | 0.021101 | 0.000164 | 0.5396 |
+| 40 | B | 0.000001 | 0.000103 | **0.0000** |
+| 79 | W | 0.000024 | 0.024538 | 1.3443 |
+| 120 | B | 0.000001 | 0.000060 | **0.0000** |
+| 199 | W | 0.003321 | 0.000273 | 1.1167 |
 
-Two things to read from this. The worst lead error is **1.02 points**, which is
-nowhere near good enough: `BEAT_MARGIN` is half a point and the blunder
-threshold is eight, so an error of this size moves verdicts. And the
-Black-to-play rows are *not* exact here, unlike the synthetic sequence in §5 —
-turn 40 is off by 0.45. Those positions have real groups in them, so the most
-likely explanation is the missing ladder planes (§7), which the synthetic
-sequence of four isolated stones could never exercise. That is consistent, but
-it is inference rather than measurement, and it should be confirmed once the
-ladders exist.
+**Ladders were the whole of the Black-to-play error.** Before they existed the
+same three rows read 0.032411 / 0.4484 (turn 40), 0.011475 / 0.0917 (turn 120)
+and were exact only at turn 0. Every one is now exact to 1e-6 in policy and to
+four decimals in lead. §7's inference is confirmed by measurement.
 
-**A loose end worth pulling first.** An empty board with *White* to play was
-measured exact — but through the analysis engine with `initialPlayer`, not
-through `kata-raw-nn`. If that holds under the better instrument, the rule is
-not "White is wrong" but "White with at least one stone is wrong", which is a
-different and more specific shape. Re-measure it before anything else.
+What is left is White, and it is now a clean split rather than a tendency:
+every Black row exact, every White row wrong, on positions with two hundred
+stones on them. The confound suspected earlier — that "White" was standing in
+for stone count or history depth — does not survive this table, because the
+Black rows here are just as rich as the White ones.
+
+The worst lead error is **1.34 points**, which is worse than the 1.02 measured
+before ladders. That is not a regression from the ladder work: the Black rows
+that used to contribute error now contribute none, so the worst case is simply
+a White row that was always this wrong and was previously not the maximum.
+`BEAT_MARGIN` is half a point, so this still moves verdicts.
+
+**The sharpest clue in the table.** At turn 79 the policy is exact to 2.4e-5
+while the winrate is off by 0.025 and the lead by 1.34. A wrong input tensor
+cannot do that — it would move the policy too. At that position the network is
+being fed the right thing and we are reading its value and score heads wrong.
+That points at the conversion in §6, not at the encoder, and it is consistent
+with §3.3 finding the input planes correct for White. Turns 1 and 199 do carry
+some policy error, so this is not the whole story, but it is the first evidence
+that separates the two halves.
 
 ## 6. What has not been tried
 
-- **Compile a dumper against KataGo's own `board.cpp`, `boardhistory.cpp` and
-  `nninputs.cpp`** and print the true input tensor for these positions, then
-  diff field by field. This is the definitive instrument and removes the last
-  place a wrong assumption can hide. It should probably have been step one.
+- ~~**Compile a dumper against KataGo's own `board.cpp`, `boardhistory.cpp` and
+  `nninputs.cpp`**~~ — unnecessary. KataGo ships the dumps already (§2, §3.3).
+  What remains of this idea is the *outputs*, not the inputs: no committed
+  fixture gives the network's answer for these positions, so a tensor built by
+  us and a tensor built by KataGo still cannot be compared downstream of the
+  encoder without running one.
+- **Feed KataGo's golden tensor through our graph.** The golden dumps give an
+  input tensor we know is correct; running it through `model-v8.ts` and
+  comparing against `kata-raw-nn` on the same position splits the remaining
+  discrepancy cleanly into "our features" or "our graph". After §3.3 the
+  features look sound, which makes the graph the more likely half.
 - **Read `nneval.cpp`'s conversion** of the network's player-to-move output into
   `whiteWin` / `whiteLead`, to confirm it is only a sign flip and carries no
   komi or perspective adjustment.
@@ -175,14 +242,38 @@ different and more specific shape. Re-measure it before anything else.
   negated must give an identical player-to-move answer. If ours does not, the
   fault is ours and is isolated to colour handling.
 
-## 7. Not a cause, but still required
+## 7. Ladders: implemented, and they mattered
 
-**Ladder planes 14-17 are not implemented.** They cannot explain the one-stone
-case, but they are needed for real positions and are the largest remaining port
-(`searchIsLadderCaptured` and its helpers, roughly 400 lines). Until they exist,
-parity on a real game cannot be claimed even once the colour problem is solved.
+**Ladder planes 14-17 are implemented**, in `src/engine/ladder.ts` — a port of
+`Board::searchIsLadderCaptured`, `searchIsLadderCapturedAttackerFirst2Libs` and
+`iterLadders`, following upstream's move ordering and its 25,000-node budget
+rather than improving on them. A cleverer search that finds one more ladder
+would be a worse input, not a better one.
+
+They were never a candidate for the one-stone case in §5 — a lone stone has
+four liberties and `iterLadders` only looks at groups with one or two — but
+they were the entire Black-to-play error on a real game. §5.1 has the numbers:
+three Black rows that were off by up to 0.45 points are now exact.
+
+Verified two ways. `test/golden-v7.test.ts` checks planes 14 and 17 against
+KataGo's own committed output on both fixture positions. `test/ladder.test.ts`
+covers what a single position cannot: that the search takes its moves back,
+that reusing its scratch does not change its answers, that a ladder breaker
+flips the verdict, and that planes 15 and 16 read the boards they are named for
+and fall back to the current board when there is no history, as upstream does.
+
+Cost is 0.15 ms per 19x19 position, three passes per evaluation — negligible
+beside a forward pass.
 
 ## 8. Reproducing
+
+The golden-input fixture is the exception: it needs only a KataGo checkout, no
+network and no binary, and `test/golden-v7.test.ts` runs it as part of
+`npm test`. Regenerate it after a KataGo upgrade with
+
+    node experiments/katago/golden-inputs.ts > test/fixtures/golden-v7.json
+
+which reads `$KATAGO_SRC`, defaulting to a checkout in `~/src/katago`.
 
 Everything below needs the network, which is git-ignored. The commands are
 recorded because the inputs they produce are ignored too, and a cold start
