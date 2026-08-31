@@ -220,6 +220,48 @@ export function libertiesAt(board: Board, state: BoardState, point: number, max 
   return collectGroup(board, state.stones, point, color as Stone, max).liberties;
 }
 
+/**
+ * Liberties for every stone on the board, capped at `max`, written into `out`.
+ *
+ * Input plane material: the network is shown where the one-, two- and
+ * three-liberty stones are. The cap is nonetheless **four**, and that is not an
+ * off-by-one to tidy away — it is the difference between "three liberties" and
+ * "more than three". Capping at three stores three for a group with ten, and
+ * the plane that means *in some danger* then lights up under half the stones on
+ * the board. Nothing raises; the network simply answers a different question.
+ * (Found exactly that way: the empty board matched the reference to 1e-6 and
+ * every position with stones on it did not.)
+ *
+ * One fill per group rather than one per stone — the whole group's count is
+ * known as soon as it has been walked, so writing it to every member costs
+ * nothing and saves walking the group again from each of its stones.
+ */
+export function libertyMap(
+  board: Board,
+  state: BoardState,
+  out: Uint8Array,
+  max = 4,
+): Uint8Array {
+  out.fill(0);
+  const { scratch } = board;
+  const seen: Int32Array = scratch.processed;
+  const stamp: number = ++scratch.processedStamp;
+
+  for (let point = 0; point < board.area; point++) {
+    const color: number = state.stones[point];
+    if (color === EMPTY || seen[point] === stamp) continue;
+
+    const group = collectGroup(board, state.stones, point, color as Stone, max);
+    const liberties: number = group.liberties;
+    for (let i = 0; i < group.size; i++) {
+      const member: number = scratch.group[i];
+      seen[member] = stamp;
+      out[member] = liberties;
+    }
+  }
+  return out;
+}
+
 /** What `undoMove` needs to put a move back. */
 export interface Undo {
   readonly koPointBefore: number;

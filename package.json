@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@tensorflow/tfjs-backend-cpu": "^4.22.0",
     "@types/node": "^25.5.0",
     "@webgpu/types": "^0.1.72",
     "playwright": "^1.62.1",
