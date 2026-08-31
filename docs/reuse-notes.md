@@ -172,12 +172,46 @@ the deployment spike validate a downloaded network before any backend exists.
 Only the type declarations have come across; the graph itself has not been
 adapted yet. See the split above for why they are separated at all.
 
+### `fastBoard.ts` (move half) → `src/engine/board.ts`
+
+Adapted, 334 lines against upstream's ~200 for the same job. Three divergences,
+all deliberate.
+
+**No module-level mutable state.** Upstream keeps the board size, the neighbour
+tables and every scratch buffer in module `let`s, reinitialized by
+`setBoardSize`. Two boards of different sizes then quietly corrupt one another.
+That is a live hazard here rather than a theoretical one: the tests replay 7x7
+through 19x19 in a single process, and a session can load a second game without
+a reload. A `Board` owns its tables and scratch instead, built once per game.
+
+**Rectangular boards work.** Upstream indexes by one dimension. `rules.ts`
+reads rectangular `SZ`, supporting it costs a second field, and it lets the
+differential test cover records upstream could not represent. The *network* is
+still square-only — its input planes really are indexed that way — which is a
+separate limit recorded in `docs/prd-ai-scoring.md` §12.
+
+**An illegal move returns null instead of throwing.** A search asks constantly
+and an exception is the wrong instrument for an expected answer. Upstream
+throws, which is right for a UI and wrong in a loop that runs millions of times
+a second. A refused move also leaves no trace, so there is nothing for the
+caller to undo.
+
+Retained exactly: the stamped flood fill (clearing 361 entries per liberty
+query would be most of its cost), the liberty cap at two, the processed-group
+stamp that stops one group being captured twice through two neighbours, and the
+ko condition — which is character-for-character the same rule `rules.ts`
+implements, and is the thing `test/engine-board.test.ts` exists to keep true.
+
+Stones use KataGo's 0/1/2 rather than `rules.ts`'s 1/-1, since everything
+downstream in the engine reads that encoding; converting here is one pass per
+evaluation instead of one per feature build.
+
 ### Deliberately not taken
 
-- **`fastBoard.ts`'s move logic.** `src/rules.ts` already owns legality. Its
-  *feature* half — liberty maps, pass-alive area, ladders — has no counterpart
-  here and will have to come across; `docs/design-ai-scoring.md` §4.2 records
-  the sizing, and the correction to it.
+- **`fastBoard.ts`'s feature half** — liberty maps, pass-alive area, ladders —
+  has not come across yet. It has no counterpart in `rules.ts` and will have to;
+  `docs/design-ai-scoring.md` §4.2 records the sizing and the correction to it.
+  The move half is above.
 - **`worker.ts` / `client.ts`.** Their lifecycle serves an analysis product with
   tree reuse, cancellation and progressive reporting. lituus queues one search
   at a time behind a session and needs a much smaller one.
