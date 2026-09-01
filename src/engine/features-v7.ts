@@ -9,8 +9,9 @@
  * below is fixed by the network file; there is nothing here to improve and one
  * thing to get exactly right. A wrong plane does not raise anything — the
  * network answers a different question, confidently, and the mistake surfaces
- * as point losses that are merely a bit off. `test/engine-network.test.ts`
- * exists because that failure has no other symptom.
+ * as point losses that are merely a bit off. `test/golden-v7.test.ts` and
+ * `test/features-komi.test.ts` exist because that failure has no other
+ * symptom.
  *
  * Twenty-two spatial channels in NHWC order and nineteen globals. Channels 7,
  * 8, 20 and 21 are never written: they carry Japanese-encore state that a
