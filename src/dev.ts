@@ -13,6 +13,12 @@
  * be diffed against the pasted one, which turns a saved result into a
  * regression test for every number on the page.
  *
+ * It also *scores* what the result cannot. Any prediction with no verdict is
+ * put to the real engine and the summary fills in as the searches land, which
+ * is what makes the dogfood exports — played before there was an in-browser
+ * engine, their numbers joined to KataGo offline — worth looking at on a
+ * screen. See `beginScoring`.
+ *
  * Dev-only. `main.ts` reaches this module solely under `import.meta.env.DEV`,
  * so the production build drops it. It is self-contained on purpose: deleting
  * this file and its two call sites removes the feature.
@@ -23,15 +29,26 @@ import { parse } from './sgf-parser.ts';
 import { readGame, type Game, type GameMove } from './game.ts';
 import { finalPosition, type Guess, type Session } from './session.ts';
 import { summarize, toJSON, type Summary } from './summary.ts';
-import { renderSummary } from './views.ts';
+import { refreshSummaryAnalysis, renderSummary } from './views.ts';
 import { BLACK, WHITE, type Color, type Position } from './rules.ts';
 import {
   emptyAnalysis,
+  sameEngine,
+  verdictFor,
   withVerdict,
   type Analysis,
   type MoveVerdict,
   type NaturalMove,
+  type Verdict,
 } from './analysis.ts';
+import {
+  engineConfig,
+  startEngine,
+  unscorableReason,
+  type EngineHandle,
+  type EngineStatus,
+} from './engine-client.ts';
+import { createQueue, type Prompt, type Queue } from './evaluator.ts';
 
 /** Raised when the pasted text is not a result this can rebuild. */
 export class RestoreError extends Error {
@@ -364,6 +381,143 @@ export function driftFrom(exported: string, summary: Summary): string[] {
   return lines;
 }
 
+// ── Scoring a restored result ────────────────────────────────────────────────
+
+/**
+ * Score a restored session with the real engine, filling in what the export
+ * does not carry.
+ *
+ * The exports that most need looking at are the ones made before there was an
+ * engine — `experiments/out/dogfood/*-play.json` has `ai: null` and no
+ * verdicts at all, and its numbers were joined to KataGo's offline, in a
+ * spreadsheet nobody can see on a summary screen. Rebuilding the session and
+ * asking the browser engine the same questions puts them there.
+ *
+ * Only the gaps are asked about. A result that already carries verdicts keeps
+ * them and pays for nothing, which is the same rule `main.ts` uses during a
+ * session and the reason the store is keyed by position (design §3).
+ *
+ * Everything lands through `refreshSummaryAnalysis`, so a search finishing
+ * repaints two lines and the strip's cells and touches nothing else. Rendering
+ * the screen again would throw the reader back to the final position, which is
+ * the bug design §5.4 exists to record.
+ */
+interface Scoring {
+  /** Stop the worker and the queue. Safe to call twice. */
+  readonly stop: () => void;
+}
+
+interface ScoringHandlers {
+  /** One line about what the engine is doing, for the banner. */
+  readonly onStatus: (line: string) => void;
+}
+
+function beginScoring(
+  session: Session,
+  restored: Analysis | null,
+  handlers: ScoringHandlers,
+): Scoring {
+  const unscorable: string | null = unscorableReason(session.game);
+  if (unscorable !== null) {
+    handlers.onStatus(`Not scoring: ${unscorable}`);
+    return { stop: () => {} };
+  }
+
+  /*
+   * Recorded verdicts from a *different* engine are left alone rather than
+   * topped up. Mixing two configurations inside one set of point losses is
+   * exactly what PRD §9 forbids, and it would be invisible afterwards: the
+   * summary carries one engine line, and it would name whichever store won.
+   */
+  const config = engineConfig();
+  if (restored !== null && !sameEngine(restored.config, config)) {
+    handlers.onStatus(
+      `Not scoring: this result carries verdicts from a different engine, ` +
+        `and mixing two into one point loss is worse than leaving the gaps.`,
+    );
+    return { stop: () => {} };
+  }
+
+  let analysis: Analysis = restored ?? emptyAnalysis(config);
+  let status: EngineStatus = { state: 'idle' };
+
+  const line = (): string => {
+    switch (status.state) {
+      case 'idle':
+        return 'Scoring: starting up.';
+      case 'downloading': {
+        if (status.total === null) {
+          return `Scoring: downloading the engine, ${(status.received / 1_000_000).toFixed(0)} MB.`;
+        }
+        const percent: number = Math.min(100, Math.round((status.received / status.total) * 100));
+        return `Scoring: downloading the engine, ${percent}%.`;
+      }
+      case 'warming':
+        return 'Scoring: starting the engine.';
+      case 'ready': {
+        const waiting: number = queue?.pending() ?? 0;
+        const done: number = session.guesses.length - waiting;
+        return waiting === 0
+          ? `Scoring: done, ${done} of ${session.guesses.length} predictions.`
+          : `Scoring: ${done} of ${session.guesses.length}, ${waiting} to go.`;
+      }
+      case 'failed':
+        return `Scoring failed, so the summary shows what it had. ${status.reason}`;
+    }
+  };
+
+  const engine: EngineHandle = startEngine(session.game, {
+    onStatus: (next: EngineStatus): void => {
+      status = next;
+      handlers.onStatus(line());
+    },
+  });
+
+  const queue: Queue = createQueue(engine.evaluator, {
+    onVerdict: (verdict: Verdict): void => {
+      analysis = withVerdict(analysis, verdict);
+      refreshSummaryAnalysis(summarize(session, analysis));
+      handlers.onStatus(line());
+    },
+    // One prompt failing is not fatal, exactly as in a live session.
+    onError: (): void => handlers.onStatus(line()),
+  });
+
+  let asked = 0;
+  for (const made of session.guesses) {
+    const known: Verdict | null = verdictFor(analysis, made.moveNumber);
+    if (known && known.guessed?.point === made.guess) continue;
+
+    const move: GameMove | undefined = session.game.moves[made.moveNumber - 1];
+    if (!move) continue;
+
+    const prompt: Prompt = {
+      moveNumber: made.moveNumber,
+      position: move.before,
+      color: move.color,
+      played: made.actual,
+      guess: made.guess,
+    };
+    queue.submit(prompt);
+    asked++;
+  }
+
+  if (asked === 0) {
+    engine.stop();
+    queue.stop();
+    handlers.onStatus('Every prediction in this result already has a verdict.');
+    return { stop: () => {} };
+  }
+
+  handlers.onStatus(line());
+  return {
+    stop: (): void => {
+      queue.stop();
+      engine.stop();
+    },
+  };
+}
+
 // ── The screen ───────────────────────────────────────────────────────────────
 
 export interface DevProps {
@@ -405,12 +559,27 @@ function driftBanner(drift: readonly string[]): HTMLElement {
  * it should not outlive the page.
  */
 export function renderDev(root: HTMLElement, props: DevProps, initial?: string): void {
+  /*
+   * One engine at a time, and it does not outlive the summary it was started
+   * for. Every route off this screen goes through `showForm` or a callback in
+   * `props`, so stopping here is enough to guarantee that a worker is never
+   * left holding the GPU behind a screen nobody is looking at.
+   */
+  let scoring: Scoring | null = null;
+  const stopScoring = (): void => {
+    scoring?.stop();
+    scoring = null;
+  };
+
   const showForm = (error?: string): void => {
+    stopScoring();
     const area: HTMLTextAreaElement = document.createElement('textarea');
     area.className = 'sgf-input';
     area.rows = 12;
     area.spellcheck = false;
-    area.placeholder = 'Paste the JSON from "Copy as JSON", or drop a .json file on the page.';
+    area.placeholder =
+      'Paste the JSON from "Copy as JSON", or drop a .json file on the page — ' +
+      'experiments/out/dogfood/*-play.json included.';
 
     const load = document.createElement('button');
     load.type = 'button';
@@ -432,7 +601,9 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
         'p',
         'muted',
         'Rebuilds the session the result came from and renders the real summary ' +
-          'screen, then reports any field a fresh export no longer agrees on.',
+          'screen, then reports any field a fresh export no longer agrees on. ' +
+          'Any prediction the result has no verdict for is put to the engine, ' +
+          'so a result exported before there was one still gets its point losses.',
       ),
       area,
       actions,
@@ -454,12 +625,14 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
 
     let session: Session;
     let summary: Summary;
+    let restored: Analysis | null = null;
     try {
       session = restoreSession(text);
       // Recomputed from the restored verdicts, never read back from the
       // export's own `ai` block: reading the figures back would make the diff
       // below compare a file with itself.
-      summary = summarize(session, restoreAnalysis(text, session.game) ?? undefined);
+      restored = restoreAnalysis(text, session.game);
+      summary = summarize(session, restored ?? undefined);
     } catch (error: unknown) {
       const detail: string = error instanceof Error ? error.message : String(error);
       showForm(detail);
@@ -471,11 +644,29 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
     renderSummary(root, {
       summary,
       session,
-      onReplay: (color: Color): void => props.onReplay(session.game, color),
+      onReplay: (color: Color): void => {
+        stopScoring();
+        props.onReplay(session.game, color);
+      },
       onRestart: () => showForm(),
       challengeLink: (): Promise<string> => link,
     });
-    root.prepend(driftBanner(driftFrom(text, summary)));
+
+    /*
+     * The drift report is measured against the export as it was pasted, before
+     * any scoring, and stays that way: a healed result legitimately no longer
+     * matches the file it came from, and reporting that as drift would bury
+     * the differences the report exists to catch.
+     */
+    const status: HTMLElement = element('p', 'note', '');
+    root.prepend(driftBanner(driftFrom(text, summary)), status);
+
+    stopScoring();
+    scoring = beginScoring(session, restored, {
+      onStatus: (line: string): void => {
+        status.textContent = line;
+      },
+    });
   };
 
   // A dropped file arrives as `initial` and skips the form entirely; anything
