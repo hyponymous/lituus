@@ -9,18 +9,17 @@ records what has been established, what has been ruled out, and the one
 discrepancy still standing — so the next session starts from evidence rather
 than from the beginning.
 
-The short version: **the network runs correctly when Black is to play and
-incorrectly when White is to play, and the input tensors for both cases have
-been verified correct against KataGo's own committed test output.** Those two
-facts are in direct contradiction and the contradiction is not yet resolved.
+The short version: **the discrepancy is not about colour.** It was called a
+White-to-play bug for most of this investigation; a colour-mirror experiment
+(§5.2) has now shown that to be a proxy. The error tracks the *move number*:
+positions with an odd number of stones played disagree, positions with an even
+number are exact to 1e-6, and mirroring every colour in the game leaves the
+errors exactly where they were.
 
-Since the last revision the split has become clean rather than approximate.
-Implementing the ladder planes (§7) removed the entire Black-to-play error on a
-real game, so every Black position now agrees to 1e-6 and every White position
-still does not — on positions with two hundred stones, not just the synthetic
-ones. The most useful new evidence is in §5.1: at one White position the policy
-is exact while the winrate and lead are wrong, which an incorrect input tensor
-cannot produce.
+Implementing the ladder planes (§7) removed the entire error on even turns of a
+real game. What remained looked like a clean Black/White split only because
+Black moves first, so in that record "White to play" and "odd turn" are the same
+set of positions. §5.2 separates them.
 
 ## 1. Why parity matters here
 
@@ -108,7 +107,7 @@ gap to our own account. The ground-truth fixture is now generated with
 FP32 the empty board is exact — our earlier turn-0 error was *precisely*
 KataGo's own FP16 delta, 0.001782.
 
-### 3.3 The input planes are right, for both colours
+### 3.3 The input planes are right, on both fixtures
 
 Checked against KataGo's golden dumps on two positions — a 19x19 position 145
 moves into a professional game with **White** to play, and a 7x7 position with
@@ -196,33 +195,84 @@ against the FP32 reference, **with ladder planes 14-17 implemented**:
 | 120 | B | 0.000001 | 0.000060 | **0.0000** |
 | 199 | W | 0.003321 | 0.000273 | 1.1167 |
 
-**Ladders were the whole of the Black-to-play error.** Before they existed the
-same three rows read 0.032411 / 0.4484 (turn 40), 0.011475 / 0.0917 (turn 120)
-and were exact only at turn 0. Every one is now exact to 1e-6 in policy and to
-four decimals in lead. §7's inference is confirmed by measurement.
+**Ladders were the whole of the even-turn error.** Before they existed the same
+three rows read 0.032411 / 0.4484 (turn 40), 0.011475 / 0.0917 (turn 120) and
+were exact only at turn 0. Every one is now exact to 1e-6 in policy and to four
+decimals in lead. §7's inference is confirmed by measurement.
 
-What is left is White, and it is now a clean split rather than a tendency:
-every Black row exact, every White row wrong, on positions with two hundred
-stones on them. The confound suspected earlier — that "White" was standing in
-for stone count or history depth — does not survive this table, because the
-Black rows here are just as rich as the White ones.
+The rows are labelled by colour because that is what the harness prints, and at
+this point the split was read as a Black/White one. §5.2 shows it is not: Black
+moves first, so every even turn here is Black to play and every odd turn is
+White, and the variable is the turn.
 
-The worst lead error is **1.34 points**, which is worse than the 1.02 measured
-before ladders. That is not a regression from the ladder work: the Black rows
-that used to contribute error now contribute none, so the worst case is simply
-a White row that was always this wrong and was previously not the maximum.
-`BEAT_MARGIN` is half a point, so this still moves verdicts.
+The worst lead error is **1.34 points**, worse than the 1.02 measured before
+ladders. That is not a regression from the ladder work: the even rows that used
+to contribute error now contribute none, so the worst case is simply an odd row
+that was always this wrong and was previously not the maximum. `BEAT_MARGIN` is
+half a point, so this still moves verdicts.
 
-**The sharpest clue in the table.** At turn 79 the policy is exact to 2.4e-5
+**One row worth keeping in view.** At turn 79 the policy is exact to 2.4e-5
 while the winrate is off by 0.025 and the lead by 1.34. A wrong input tensor
-cannot do that — it would move the policy too. At that position the network is
-being fed the right thing and we are reading its value and score heads wrong.
-That points at the conversion in §6, not at the encoder, and it is consistent
-with §3.3 finding the input planes correct for White. Turns 1 and 199 do carry
-some policy error, so this is not the whole story, but it is the first evidence
-that separates the two halves.
+should move the policy too, so this looked at the time like evidence that the
+encoder was fine and the value and score heads were being read wrong. Turns 1
+and 199 do carry policy error, so it was never the whole story, and §5.2's
+eliminations have not settled which half is at fault. It remains the one
+position where the two halves come apart most sharply, and worth revisiting
+once the minimal repro (§6) names a cause.
+
+### 5.2 Colour is not the variable
+
+`experiments/katago/raw-parity-game.ts` replays a real record through
+`kata-raw-nn`, and with `--mirror` it replays the same game with **every move's
+colour swapped and komi negated**. That is an exact symmetry of Go, and because
+the network is shown "player to move" and "opponent" rather than black and
+white, it produces a bit-identical input tensor. KataGo must return the same
+numbers for a game and its mirror.
+
+It does. And so do the errors:
+
+| Turn | normal | mirrored | lead Δ |
+| --- | --- | --- | --- |
+| 40 | B to play, exact | W to play, exact | 0.0001 both |
+| 79 | W to play, wrong | B to play, wrong | 1.3442 both |
+| 120 | B to play, exact | W to play, exact | 0.0005 both |
+| 199 | W to play, wrong | B to play, wrong | 1.1164 both |
+
+The error follows the position, not the colour. Black moves first, so in this
+record "White to play" is exactly "odd turn number", and the colour reading was
+a coincidence of that. Consecutive turns confirm it — 40 through 47 alternate
+perfectly, every even turn exact and every odd turn wrong.
+
+(Turn 0 mirrored is not a valid comparison: with no moves to replay, GTP still
+has Black to move, so the mirror cannot take effect. That row is an artifact of
+the harness.)
+
+**What this rules out, and what it leaves.** The invariant that survives
+mirroring is that the player to move is the *second* player — equivalently, an
+odd number of stones have been played. Three further eliminations:
+
+- **Komi.** At `--komi 0`, where `currentSelfKomi` is zero for both players and
+  global 5 is identical, the alternation persists unchanged. Global 5 was the
+  only colour-dependent input, and it is not the cause.
+- **The analysis engine.** `kata-raw-nn` is the raw network with no search
+  anywhere in the path, and it agrees with the committed fixture to four or five
+  decimals. The ground truth is not at fault.
+- **Plane 17.** It correlates with the alternation perfectly — a laddered chain
+  sits on the board through turns 40-47, and plane 17 lights up exactly when it
+  belongs to the opponent of the player to move — but forcing it to zero barely
+  moves the numbers (turn 41 lead Δ 0.6632 becomes 0.6842). A correlate, not a
+  cause. It is also the reason the alternation is not merely an artifact of the
+  ladder work: the same pattern predates ladders entirely.
+
+The rules override was verified applied (`kata-get-rules` reports TERRITORY,
+SEKI, SIMPLE), so globals 9 and 10 are right.
+
+This leaves a genuine contradiction. The network cannot see colour or move
+number. Every input that could encode either has been checked. Yet the output
+alternates.
 
 ## 6. What has not been tried
+
 
 - ~~**Compile a dumper against KataGo's own `board.cpp`, `boardhistory.cpp` and
   `nninputs.cpp`**~~ — unnecessary. KataGo ships the dumps already (§2, §3.3).
@@ -238,9 +288,19 @@ that separates the two halves.
 - **Read `nneval.cpp`'s conversion** of the network's player-to-move output into
   `whiteWin` / `whiteLead`, to confirm it is only a sign flip and carries no
   komi or perspective adjustment.
-- **A colour-mirror check**: the same position with colours swapped and komi
-  negated must give an identical player-to-move answer. If ours does not, the
-  fault is ours and is isolated to colour handling.
+- ~~**A colour-mirror check**~~ — done, §5.2. It retired the colour hypothesis
+  entirely.
+- **Brute-force the minimal repro.** One stone on the board with White to play
+  is wrong; two stones with Black to play is exact; and a setup stone with *no*
+  move history is equally wrong. That last case has a tensor with about five
+  non-zero entries — the board mask, one opponent stone, and globals 5, 9 and
+  10. Perturbing each in turn until the output matches would name the culprit
+  outright, and the search space is small enough to exhaust rather than sample.
+- **Dump KataGo's tensor after all.** Struck out in favour of the golden fixture,
+  which was the right call for the planes it covers, but the fixture cannot
+  produce a tensor for *our* positions. Now that everything cheaper has been
+  eliminated, building against `nninputs.cpp` to print the true tensor for turn
+  41 and diffing field by field is the instrument that cannot fail to answer.
 
 ## 7. Ladders: implemented, and they mattered
 
