@@ -176,6 +176,10 @@ function bestBranch(
   if (!verdict) return null;
   const best: BestMove = verdict.best;
   if (best.point === guess || best.point === actual) return null;
+  // A pass is numbered past the last intersection, so it has no SGF value and
+  // `pointValue` would invent one. The engine preferring to pass at a prompted
+  // position also teaches a reader nothing, so the branch is simply left out.
+  if (best.point >= board.rows * board.cols) return null;
 
   const cost: number | null = lossOf(verdict.played);
   const mine: number | null = lossOf(verdict.guessed);

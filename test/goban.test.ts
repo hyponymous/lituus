@@ -35,6 +35,17 @@ test('point names skip the letter I, as the convention requires', () => {
   assert.equal(pointName(pos, toIndex(pos, 0, 8)), 'J19', 'column 9 is J, not I');
 });
 
+test('an index that is not a point is named "pass", not invented', () => {
+  // A pass is numbered just past the last intersection. The arithmetic used to
+  // name it "A0" — a plausible name for no point at all — and a variation
+  // exported with one in it came back shorter than it went out, since the
+  // reader below correctly refuses it. "pass" is refused by the same reader and
+  // says what it is.
+  const pos: Position = createPosition(9, 9);
+  assert.equal(pointName(pos, pos.rows * pos.cols), 'pass');
+  assert.equal(pointFromName(pos, 'pass'), null, 'and does not read back as a point');
+});
+
 test('point names read back to the index they came from', () => {
   const pos: Position = createPosition(19, 19);
   for (let index = 0; index < pos.rows * pos.cols; index++) {

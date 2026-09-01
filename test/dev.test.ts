@@ -14,7 +14,7 @@ import { parse } from '../src/sgf-parser.ts';
 import { readGame, type Game } from '../src/game.ts';
 import { advance, canGuess, guess, startSession, type Session } from '../src/session.ts';
 import { summarize, toJSON, type Summary } from '../src/summary.ts';
-import { RestoreError, driftFrom, restoreSession } from '../src/dev.ts';
+import { RestoreError, driftFrom, restoreAnalysis, restoreSession } from '../src/dev.ts';
 import { BLACK, WHITE } from '../src/rules.ts';
 
 const GAME =
@@ -311,4 +311,35 @@ test('the saved result survives a second trip through the export', () => {
   const twice: string = toJSON(summarize(restoreSession(once)));
 
   assert.equal(twice, once);
+});
+
+test('a verdict whose best move is a pass reads back rather than being rejected', () => {
+  /*
+   * A pass is never a guess or a played move — prompts skip them — but it can
+   * be the move the engine would make, and it is named "pass" because it is
+   * not a point. Rejecting the file would throw away a whole result over one
+   * late-game verdict, and naming it as a point is what produced the "A0"
+   * that shortened every exported variation it appeared in.
+   */
+  const session: Session = play(GAME, BLACK, new Set([1]));
+  const game: Game = session.game;
+  const area: number = game.cols * game.rows;
+  const exported = JSON.parse(toJSON(summarize(session))) as Record<string, unknown>;
+
+  exported.engine = { network: 'b15c192', visits: 50, backend: 'webgpu' };
+  exported.verdicts = [
+    {
+      move: 1,
+      rootScoreLead: 0.5,
+      rootVisits: 55,
+      best: { point: 'pass', scoreLead: 0.5, pv: [] },
+      played: null,
+      guessed: null,
+      natural: null,
+    },
+  ];
+
+  const analysis = restoreAnalysis(JSON.stringify(exported), game);
+  assert.ok(analysis, 'the result restores');
+  assert.equal(analysis.verdicts.get(1)?.best.point, area, 'the pass keeps its index');
 });

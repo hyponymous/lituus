@@ -65,6 +65,8 @@ function at(name: string): number {
 interface Opinion {
   readonly policy?: ReadonlyMap<number, number>;
   readonly lead?: number;
+  /** The policy logit for passing. Low enough to be ignored unless raised. */
+  readonly pass?: number;
 }
 
 /**
@@ -92,7 +94,7 @@ function stubNetwork(opine: (stones: Map<number, Stone>, white: boolean) => Opin
       if (opinion.policy) for (const [point, logit] of opinion.policy) policy[point] = logit;
       return {
         policy,
-        policyPass: -10,
+        policyPass: opinion.pass ?? -10,
         value: Float32Array.from([0, 0, -30]),
         scoreValue: Float32Array.from([
           (opinion.lead ?? 0) / POST_PROCESS.scoreMeanMultiplier,
@@ -229,4 +231,29 @@ test('a search that finds nothing to say raises rather than inventing a verdict'
     () => evaluate(network, 999, 'C6', 'C6'),
     /not in this record/,
   );
+});
+
+test('a variation stops at a pass instead of naming it as a point', () => {
+  /*
+   * A pass is numbered just past the last intersection, so it is not a point
+   * and has no name. Left in a variation it was exported as "A0", which reads
+   * back as nothing at all — every late-game line in a saved result came back
+   * shorter than it went out, and the drift report was the only thing that
+   * noticed.
+   */
+  const network: Network = stubNetwork(() => ({ pass: 6 }));
+  const verdict: Verdict = evaluate(network, 5, 'C3', 'G7');
+
+  assert.equal(verdict.best.point, AREA, 'the stub makes passing the best move');
+  assert.deepEqual(verdict.best.pv, [], 'a line that opens with a pass carries nothing');
+
+  for (const [what, pv] of [
+    ['played', verdict.played?.pv ?? []],
+    ['guessed', verdict.guessed?.pv ?? []],
+  ] as const) {
+    assert.ok(
+      pv.every((point: number) => point < AREA),
+      `${what}'s variation names only points on the board`,
+    );
+  }
 });

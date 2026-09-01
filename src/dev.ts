@@ -127,7 +127,7 @@ function restoreMove(board: Position, value: unknown, what: string): MoveVerdict
   const row: Record<string, unknown> = asRecord(value, what);
 
   const name: string = asString(row.point, `${what}.point`);
-  const point: number | null = pointFromName(board, name);
+  const point: number | null = pointOrPass(board, name);
   if (point === null) throw new RestoreError(`"${name}" is not a point on this board.`);
 
   return {
@@ -137,6 +137,20 @@ function restoreMove(board: Position, value: unknown, what: string): MoveVerdict
     forced: row.forced === true,
     pv: restoreLine(board, row.pv),
   };
+}
+
+/**
+ * A point, or the pass that sits just past the last intersection.
+ *
+ * A pass is never a guess or a played move — prompts skip them — but it can be
+ * the move the *engine* would make, and a result carrying one has to read back
+ * or the harness rejects a perfectly good file. Lines are a separate question:
+ * `restoreLine` stops at a pass rather than carrying it, which is what the
+ * evaluators do too.
+ */
+function pointOrPass(board: Position, name: string): number | null {
+  if (name === 'pass') return board.rows * board.cols;
+  return pointFromName(board, name);
 }
 
 /** A principal variation, stopping at anything this board does not name. */
@@ -183,7 +197,7 @@ export function restoreAnalysis(text: string, game: Game): Analysis | null {
     const row: Record<string, unknown> = asRecord(entry, `verdicts[${at}]`);
     const best: Record<string, unknown> = asRecord(row.best, `verdicts[${at}].best`);
     const bestName: string = asString(best.point, `verdicts[${at}].best.point`);
-    const bestPoint: number | null = pointFromName(board, bestName);
+    const bestPoint: number | null = pointOrPass(board, bestName);
     if (bestPoint === null) {
       throw new RestoreError(`"${bestName}" is not a point on this board.`);
     }
@@ -210,7 +224,9 @@ function restoreNatural(board: Position, value: unknown, what: string): NaturalM
   if (value === null || value === undefined) return null;
   const row: Record<string, unknown> = asRecord(value, what);
   const name: string = asString(row.point, `${what}.point`);
-  const point: number | null = pointFromName(board, name);
+  // The policy's own favourite can be a pass, same as the engine's (see
+  // `pointOrPass`), and dropping the signal would show up as drift.
+  const point: number | null = pointOrPass(board, name);
   if (point === null) return null;
   return {
     point,

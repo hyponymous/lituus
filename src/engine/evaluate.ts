@@ -132,6 +132,26 @@ export function evaluatePrompt(
     throw new EvaluationError(`The search found no legal move at move ${prompt.moveNumber}.`);
   }
 
+  /*
+   * A variation stops at the first pass.
+   *
+   * `MoveVerdict.pv` promises this and the replay evaluator has always kept it
+   * — KataGo writes "pass" into its analysis output, which does not name a
+   * point and so ends the line there. The search hands back a board index for
+   * a pass instead, which nothing downstream recognizes: `pointName` turned it
+   * into "A0", a name for no point at all, and reading that export back
+   * silently shortened every late-game line it appeared in.
+   *
+   * Truncating rather than dropping the pass is the same decision replay.ts
+   * records: a line that continues through one tells a reader nothing, and
+   * removing it in place would misrepresent whose move each later ply is.
+   */
+  const pass: number = passMove(board);
+  const line = (pv: readonly number[]): readonly number[] => {
+    const at: number = pv.indexOf(pass);
+    return at === -1 ? pv : pv.slice(0, at);
+  };
+
   const rootLead: number = root.rootScoreLead;
   const found = (point: number): MoveAnalysis | undefined =>
     root.moves.find((move: MoveAnalysis) => move.point === point);
@@ -158,7 +178,7 @@ export function evaluatePrompt(
         loss: rootLead - direct.scoreLead,
         visits: direct.visits,
         forced: false,
-        pv: direct.pv,
+        pv: line(direct.pv),
       };
     }
     const forcedResult: SearchResult = search.run({ ...base, allowedRootMoves: [point] });
@@ -169,7 +189,7 @@ export function evaluatePrompt(
       loss: rootLead - forced.scoreLead,
       visits: forced.visits,
       forced: true,
-      pv: forced.pv,
+      pv: line(forced.pv),
     };
   };
 
@@ -177,7 +197,7 @@ export function evaluatePrompt(
   const best: BestMove = {
     point: bestMove.point,
     scoreLead: bestMove.scoreLead,
-    pv: bestMove.pv,
+    pv: line(bestMove.pv),
   };
 
   // The move the policy liked before any reading, and what reading made of it.
