@@ -99,7 +99,7 @@ function parseArgs(argv: readonly string[]): Args {
   return { net, komi, turns, file: rest[0], mirror };
 }
 
-interface Raw {
+export interface Raw {
   readonly policy: number[];
   readonly pass: number;
   readonly whiteWin: number;
@@ -108,7 +108,7 @@ interface Raw {
 }
 
 /** Raw network output after a sequence of GTP moves. */
-function rawNN(net: string, komi: number, size: number, moves: readonly string[]): Raw {
+export function rawNN(net: string, komi: number, size: number, moves: readonly string[]): Raw {
   const commands: string =
     [
       `boardsize ${size}`,
@@ -153,6 +153,14 @@ function colourOf(colour: number, mirror: boolean): Stone {
   return black !== mirror ? BLACK : WHITE;
 }
 
+/** Mirroring swaps which player has played which stones. */
+function mirrorCounts(
+  counts: { black: number; white: number },
+  mirror: boolean,
+): { black: number; white: number } {
+  return mirror ? { black: counts.white, white: counts.black } : counts;
+}
+
 /** Swap the stones on a board, for the mirrored replay. */
 function swap(state: BoardState, mirror: boolean): BoardState {
   if (!mirror) return state;
@@ -161,6 +169,24 @@ function swap(state: BoardState, mirror: boolean): BoardState {
     if (stone !== 0) state.stones[point] = stone === BLACK ? WHITE : BLACK;
   }
   return state;
+}
+
+/**
+ * How many stones each player has placed before `turn`, passes excluded.
+ *
+ * Territory scoring folds this difference into the komi; see `features-v7.ts`
+ * on `movesPlayed`.
+ */
+function movesBefore(game: Game, turn: number): { black: number; white: number } {
+  let black = 0;
+  let white = 0;
+  for (let i = 0; i < turn; i++) {
+    const move: GameMove = game.moves[i];
+    if (move.index === null) continue;
+    if (move.color === 1) black++;
+    else white++;
+  }
+  return { black, white };
 }
 
 /** The five moves before `turn`, chronological, as the history planes want them. */
@@ -239,6 +265,7 @@ async function main(): Promise<void> {
         toPlay,
         history: historyBefore(game, turn, mirror),
         komi,
+        movesPlayed: mirrorCounts(movesBefore(game, turn), mirror),
         ruleset: 'territory',
         ladders,
       },
@@ -276,7 +303,10 @@ async function main(): Promise<void> {
   model.dispose();
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.stack : String(error));
-  process.exit(1);
-});
+// Guarded so `rawNN` can be imported by other instruments without this running.
+if (process.argv[1]?.endsWith('raw-parity-game.ts')) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.stack : String(error));
+    process.exit(1);
+  });
+}

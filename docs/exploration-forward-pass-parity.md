@@ -1,7 +1,7 @@
 # lituus — Forward-pass parity with KataGo
 
-**Status:** open · two bugs found and fixed, one unexplained
-**Last updated:** 2026-08-31
+**Status:** **closed** · three bugs found and fixed, parity reached
+**Last updated:** 2026-09-01
 
 Step 4 of [the AI-scoring design](design-ai-scoring.md) §12 builds a forward
 pass and has to show it reproduces the network it claims to be running. This
@@ -9,17 +9,20 @@ records what has been established, what has been ruled out, and the one
 discrepancy still standing — so the next session starts from evidence rather
 than from the beginning.
 
-The short version: **the discrepancy is not about colour.** It was called a
-White-to-play bug for most of this investigation; a colour-mirror experiment
-(§5.2) has now shown that to be a proxy. The error tracks the *move number*:
-positions with an odd number of stones played disagree, positions with an even
-number are exact to 1e-6, and mirroring every colour in the game leaves the
-errors exactly where they were.
+The short version: **the forward pass now matches KataGo.** Over six positions
+of a professional record, against the raw network with no search in the path:
+policy within 2e-6, winrate within 1e-4, score lead within 0.0005 of a point,
+for both colours and at every move number.
 
-Implementing the ladder planes (§7) removed the entire error on even turns of a
-real game. What remained looked like a clean Black/White split only because
-Black moves first, so in that record "White to play" and "odd turn" are the same
-set of positions. §5.2 separates them.
+Three bugs, in the order they were found: the liberty map capped at three
+instead of four (§3.1), the ladder planes were not implemented (§7), and the
+self-komi omitted territory scoring's **chill** (§5.4). The last one is the
+interesting one, and it is why this document is long: it presented as a
+White-to-play bug, was not about colour at all, and survived a dozen sound
+arguments that each proved it had to be somewhere else.
+
+The method lesson is in §9, and it is short. Four sessions of inference kept
+producing contradictions. Twenty minutes of printing the actual tensor ended it.
 
 ## 1. Why parity matters here
 
@@ -271,36 +274,123 @@ This leaves a genuine contradiction. The network cannot see colour or move
 number. Every input that could encode either has been checked. Yet the output
 alternates.
 
-## 6. What has not been tried
+### 5.3 The minimal repro, and what it narrows
 
+`experiments/katago/minimal-repro.ts` walks a six-move opening against
+`kata-raw-nn` on a small network, so the whole comparison runs in a minute and
+the positions are small enough to reason about entry by entry.
 
-- ~~**Compile a dumper against KataGo's own `board.cpp`, `boardhistory.cpp` and
-  `nninputs.cpp`**~~ — unnecessary. KataGo ships the dumps already (§2, §3.3).
-  What remains of this idea is the *outputs*, not the inputs: no committed
-  fixture gives the network's answer for these positions, so a tensor built by
-  us and a tensor built by KataGo still cannot be compared downstream of the
-  encoder without running one.
-- **Feed KataGo's golden tensor through our graph.** The golden dumps give an
-  input tensor we know is correct; running it through `model-v8.ts` and
-  comparing against `kata-raw-nn` on the same position splits the remaining
-  discrepancy cleanly into "our features" or "our graph". After §3.3 the
-  features look sound, which makes the graph the more likely half.
-- **Read `nneval.cpp`'s conversion** of the network's player-to-move output into
-  `whiteWin` / `whiteLead`, to confirm it is only a sign flip and carries no
-  komi or perspective adjustment.
-- ~~**A colour-mirror check**~~ — done, §5.2. It retired the colour hypothesis
-  entirely.
-- **Brute-force the minimal repro.** One stone on the board with White to play
-  is wrong; two stones with Black to play is exact; and a setup stone with *no*
-  move history is equally wrong. That last case has a tensor with about five
-  non-zero entries — the board mask, one opponent stone, and globals 5, 9 and
-  10. Perturbing each in turn until the output matches would name the culprit
-  outright, and the search space is small enough to exhaust rather than sample.
-- **Dump KataGo's tensor after all.** Struck out in favour of the golden fixture,
-  which was the right call for the planes it covers, but the fixture cannot
-  produce a tensor for *our* positions. Now that everything cheaper has been
-  eliminated, building against `nninputs.cpp` to print the true tensor for turn
-  41 and diffing field by field is the instrument that cannot fail to answer.
+    stones  to play   policy Δ    winrate Δ   lead Δ    ours / theirs
+         0  B         0.000001    0.000068    0.0005    -0.599 / -0.599
+         1  W         0.001109    0.014096    0.4027     0.381 /  0.784
+         2  B         0.000002    0.000086    0.0002    -0.230 / -0.230
+         3  W         0.000472    0.013772    0.3993     0.631 /  1.030
+         4  B         0.000001    0.000109    0.0004    -0.459 / -0.459
+         5  W         0.001818    0.013383    0.4142     1.283 /  1.697
+         6  B         0.000001    0.000094    0.0002     2.363 /  2.363
+
+Three things this pins down.
+
+**The trigger is unequal stone counts.** Not colour (§5.2), and not move number
+as such: turn 6 has five history planes exactly as turn 5 does, and is exact.
+What separates the exact rows from the wrong ones is that the two players have
+the same number of stones on the board. The real game agrees — the plane sums at
+turns 40 to 43 run 20/20, 20/21, 21/21, 21/22, and the exact turns are the equal
+ones.
+
+**Komi is not a scale factor on the error.** The lead offset is ~0.40 at komi 8,
+~0.95 at komi 0 and ~1.06 at komi 16 — not monotonic, so the ~0.40 that looked
+like `komi/20` at komi 8 was a coincidence worth catching before it became a
+theory.
+
+**The policy is nearly right while the value and score are not.** Policy error
+is 1e-6 on exact rows and 1e-3 on wrong ones — small, but a thousand times
+larger, so the trunk output genuinely differs. The value and score heads then
+disagree far more, which is what one would expect of a head fed by global
+pooling. That made the pooling the natural suspect; its constants were checked
+against KataGo's and are right (`mean`, `mean·(√area−14)·0.1`, and for the value
+head `mean·((√area−14)²·0.01−0.1)`, which is 0.15 at 19x19).
+
+**What did not work.** A perturbation sweep over every global and every spatial
+channel at the stone. Nothing collapsed the error: the best single change
+improved the lead while making the policy thirteen times worse, and the
+untouched baseline had the smallest policy error of any trial. The input is not
+one entry away from correct, and the sweep is exactly the instrument that
+fabricates a plausible answer here — see §9.
+
+### 5.4 The cause: territory scoring's chill
+
+`experiments/katago/dump-inputs.cpp` links against KataGo's own `board.cpp`,
+`boardhistory.cpp`, `rules.cpp` and `nninputs.cpp`, builds a position, calls
+`NNInputs::fillRowV7` — the same function the engine calls — and prints the
+tensor as JSON. Diffed against ours for one black stone with White to play, it
+returned a single line:
+
+    global 5: ours 0.4000000059604645  theirs 0.449999988
+
+0.45 x 20 is 9, not 8. KataGo's self-komi for White was komi **plus one**. From
+`boardhistory.cpp`:
+
+```cpp
+//Territory scoring - chill 1 point per move in main phase and first encore
+if(rules.scoringRule == Rules::SCORING_TERRITORY && encorePhase <= 1 && moveLoc != Board::PASS_LOC && !wasPassForKo) {
+  if(movePla == P_BLACK)      whiteBonusScore += 1.0f;
+  else if(movePla == P_WHITE) whiteBonusScore -= 1.0f;
+}
+```
+
+Under territory scoring a stone you place fills your own territory, so it is
+worth a point less than the same stone under area scoring. KataGo folds that
+into the komi rather than the board: `whiteKomiAdjusted = komi + (black moves -
+white moves)`, and the self-komi is that value, negated for Black.
+
+Every measurement in this document follows from it:
+
+| Observation | Why |
+| --- | --- |
+| Exact when stone counts are level | The chill is zero, so our komi was right |
+| Wrong when they are not | Off by exactly one point of komi |
+| Looked like "White to play" | Black moves first, so White is to play precisely when Black is a stone ahead |
+| Survived colour mirroring | The chill is about move counts, not colour |
+| Survived komi 0 | The chill is added regardless of komi |
+| Not proportional to komi | It is an addend, not a factor |
+| Never caught by the golden fixture | Both fixture positions are Tromp-Taylor — **area** scoring, where there is no chill — and §3.3 does not compare globals anyway |
+
+The asymmetry is the part worth remembering. With komi 8 and Black one stone
+ahead, White's self-komi is +9 and Black's is -8. `currentSelfKomi` *is* a plain
+negation, exactly as §4 recorded — but of a quantity that already contains the
+move-count difference. Reading the negation and concluding "therefore symmetric
+in colour" was the false step, and it survived four sessions because it is true
+of the function and false of the number.
+
+Fixed in `src/engine/features-v7.ts`, where `movesPlayed` is a **required**
+field: a default of zero is right half the time and silently wrong the other
+half, which is the failure mode that produced this document.
+`test/features-komi.test.ts` pins the numbers, KataGo's own, including the
+asymmetric case.
+
+## 6. The hypotheses, and how each ended
+
+Kept as a record of what the search cost, since most of it was spent on ideas
+that were reasonable and wrong.
+
+| Hypothesis | Ended by |
+| --- | --- |
+| Colour handling | Colour mirror, §5.2 — the errors do not move |
+| Komi sign or scale | `komi 0` still alternates, §5.2; `/20.0f` verified in source |
+| The analysis engine's ground truth | `kata-raw-nn` agrees with it to five decimals, §5.2 |
+| The ladder planes | Fixed a real bug (§7) but not this one; the pattern predates them |
+| Plane 17 specifically | Correlates perfectly, causes nothing — §5.2 |
+| A single wrong tensor entry | Exhaustive perturbation found none, §5.3 |
+| Global pooling constants | Checked against KataGo's, correct, §5.3 |
+| `nneval.cpp`'s output conversion | Never needed; the fault was upstream of it |
+| Compiling a dumper | **This one.** §5.4 |
+
+The dumper was proposed early, struck out in favour of KataGo's committed
+golden fixtures, and reinstated last. Striking it was defensible — the fixtures
+are excellent for the planes they cover, and they found the ladder gap — but
+they cannot produce a tensor for *our* position, and that turned out to be the
+whole question.
 
 ## 7. Ladders: implemented, and they mattered
 
@@ -327,8 +417,25 @@ beside a forward pass.
 
 ## 8. Reproducing
 
-The golden-input fixture is the exception: it needs only a KataGo checkout, no
-network and no binary, and `test/golden-v7.test.ts` runs it as part of
+**The tensor dumper** (§5.4) needs a KataGo checkout and a C++ compiler, and no
+network, no GPU and no backend — it compiles only the files `fillRowV7`
+transitively needs:
+
+    K=$KATAGO_SRC/cpp          # a KataGo checkout, e.g. ~/src/katago
+    c++ -std=c++17 -O1 -I"$K" -I"$K/external/filesystem-1.5.8/include" \
+      -o dump-inputs experiments/katago/dump-inputs.cpp \
+      "$K"/game/{board,boardhistory,rules}.cpp "$K"/neuralnet/nninputs.cpp \
+      "$K"/core/{hash,rand,global,sha2,test,timer,logger,config_parser}.cpp \
+      "$K"/core/{fileutils,datetime,makedir,rand_helpers,bsearch}.cpp \
+      "$K"/core/{fancymath,base64,md5,threadsafequeue}.cpp -lz
+
+    ./dump-inputs 8 B:Q16      # komi, then the moves
+
+The checkout is v1.18.2 and the binary that produced the ground truth is
+v1.13.2; §3 established that the V7 encoding did not change between them.
+
+The golden-input fixture is the other cheap one: it needs only a KataGo
+checkout, no network and no binary, and `test/golden-v7.test.ts` runs it as part of
 `npm test`. Regenerate it after a KataGo upgrade with
 
     node experiments/katago/golden-inputs.ts > test/fixtures/golden-v7.json
@@ -363,11 +470,28 @@ evaluator; `test/fixture-ai.test.ts` pins the figures they produced.
 
 ## 9. Method note
 
-Two corrections worth carrying forward, both made by the reader rather than by
-the measurement:
+Three lessons, in increasing order of how much they cost.
 
 - **Go to the primary source before black-box probing.** KataGo is open source
   and its input encoding is a readable function. Several hours of perturbation
   sweeps answered less than twenty minutes of reading `fillRowV7`.
-- **Do not re-test what has been settled.** Once `currentSelfKomi` was read and
-  shown to be a plain negation, sweeping komi values could only fit noise.
+
+- **A perturbation sweep on a deep network fits noise.** Run on the minimal
+  repro (§5.3), the best single change improved the score lead while making the
+  policy thirteen times worse, and the untouched baseline had the smallest
+  policy error of any trial. Had the lead been the only figure watched, that
+  would have looked like an answer.
+
+- **Reading a function is not the same as knowing its value.** This is the one
+  that cost four sessions. `currentSelfKomi` was read early and correctly
+  described as a plain negation, and from that came "the self-komi is symmetric
+  in colour", which was false — because the quantity being negated already
+  carried the move-count difference. Every later argument inherited it, and each
+  contradiction was resolved by discarding a *different* hypothesis rather than
+  by questioning the shared premise.
+
+  The corollary to "do not re-test what a source has settled" is that a source
+  settles what it says, not what was concluded from it. When a chain of sound
+  arguments keeps producing contradictions, the fault is a premise, and the way
+  out is to observe the quantity itself rather than reason about it once more.
+  `dump-inputs.cpp` cost about twenty minutes to build and answered in one line.

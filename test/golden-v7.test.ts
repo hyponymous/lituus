@@ -169,6 +169,13 @@ function check(record: GoldenRecord, channels: readonly number[]): void {
       toPlay,
       history,
       komi: 7.5,
+      // Globals are not compared here (see the header), so this only has to be
+      // something; the stones on the board are the honest reading of a drawing
+      // that does not record captures.
+      movesPlayed: {
+        black: [...state.stones].filter((s) => s === BLACK).length,
+        white: [...state.stones].filter((s) => s === WHITE).length,
+      },
       ruleset: 'territory',
       ladders: { captured: planes.captured, workingMoves: planes.workingMoves },
     },

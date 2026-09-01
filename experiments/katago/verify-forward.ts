@@ -75,6 +75,24 @@ function parseArgs(argv: readonly string[]): { net: string; truth: string; file:
   return { net, truth, file: rest[0] };
 }
 
+/**
+ * How many stones each player has placed before `turn`, passes excluded.
+ *
+ * Territory scoring folds this difference into the komi; see `features-v7.ts`
+ * on `movesPlayed`.
+ */
+function movesBefore(game: Game, turn: number): { black: number; white: number } {
+  let black = 0;
+  let white = 0;
+  for (let i = 0; i < turn; i++) {
+    const move: GameMove = game.moves[i];
+    if (move.index === null) continue;
+    if (move.color === 1) black++;
+    else white++;
+  }
+  return { black, white };
+}
+
 /** The five moves before `turn`, chronological, as the history planes want them. */
 function historyBefore(game: Game, board: Board, turn: number): RecentMove[] {
   const out: RecentMove[] = [];
@@ -163,6 +181,7 @@ async function main(): Promise<void> {
         toPlay,
         history: historyBefore(game, board, expected.turn),
         komi: truth.komi,
+        movesPlayed: movesBefore(game, expected.turn),
         ruleset: 'territory',
         ladders,
       },

@@ -31,6 +31,9 @@ import {
 export const SPATIAL_CHANNELS = 22;
 export const GLOBAL_CHANNELS = 19;
 
+/** `NNPos::KOMI_CLIP_RADIUS`: how far past the board area a komi may still go. */
+const KOMI_CLIP_RADIUS = 20;
+
 /**
  * Rulesets, as the network is told about them.
  *
@@ -94,6 +97,22 @@ export interface FeatureRequest {
   readonly history: readonly RecentMove[];
   /** Komi as the record gives it, from Black's point of view. */
   readonly komi: number;
+  /**
+   * How many moves each player has played, passes excluded.
+   *
+   * Territory scoring does not score a played stone the way area scoring does:
+   * a stone you place fills your own territory, so it costs you a point
+   * relative to area counting. KataGo folds that into the komi rather than the
+   * board, adding a point to White's komi for every Black move and removing one
+   * for every White move — "chilling", in `boardhistory.cpp`. Without it the
+   * komi is wrong by exactly one point whenever the two players have played a
+   * different number of moves, which is every other position in a game.
+   *
+   * Required rather than defaulted, because zero is a plausible-looking value
+   * that is silently wrong half the time. It cost a long investigation to find
+   * once; see `docs/exploration-forward-pass-parity.md` §5.4.
+   */
+  readonly movesPlayed: { readonly black: number; readonly white: number };
   readonly ruleset: Ruleset;
   /**
    * Ladder planes 14-17, if computed. Absent leaves them zero, which is what
@@ -115,7 +134,7 @@ export interface FeatureRequest {
  * evaluation. The result is only valid until the next call.
  */
 export function buildFeatures(request: FeatureRequest, scratch: FeatureScratch): Inputs {
-  const { board, state, toPlay, history, komi, ruleset } = request;
+  const { board, state, toPlay, history, komi, movesPlayed, ruleset } = request;
 
   if (board.cols !== board.rows) {
     // The planes themselves would encode fine; the network's own geometry is
@@ -188,10 +207,24 @@ export function buildFeatures(request: FeatureRequest, scratch: FeatureScratch):
     else spatial[move.move * SPATIAL_CHANNELS + 9 + i] = 1;
   }
 
-  // Komi from the point of view of the player to move, scaled the way the
-  // network was trained to read it.
-  const selfKomi: number = toPlay === BLACK ? -komi : komi;
-  global[5] = selfKomi / 20;
+  /*
+   * Komi from the point of view of the player to move, scaled the way the
+   * network was trained to read it.
+   *
+   * The chill is not an adjustment to the komi so much as the rest of it: under
+   * territory scoring KataGo carries the move-count difference in the same
+   * number, so a komi of 8 with Black one stone ahead is a self-komi of 9 for
+   * White and -8 for Black. It is deliberately *not* symmetric between the
+   * players, which is what made this hard to find by reasoning about colour.
+   */
+  const chill: number = movesPlayed.black - movesPlayed.white;
+  const whiteKomi: number = komi + chill;
+  const selfKomi: number = toPlay === BLACK ? -whiteKomi : whiteKomi;
+
+  // Bounded as upstream bounds it. Unreachable in a real game, but the network
+  // was never shown anything outside this range.
+  const limit: number = board.area + KOMI_CLIP_RADIUS;
+  global[5] = Math.max(-limit, Math.min(limit, selfKomi)) / 20;
 
   // Territory scoring with a seki tax, which is what Japanese and Korean mean.
   global[9] = 1;

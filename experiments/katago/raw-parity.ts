@@ -72,7 +72,13 @@ for (const c of cases) {
   const t = rawNN(c.gtp);
   const state = emptyState(board);
   for (const [p, col] of c.stones) state.stones[p] = col;
-  const inputs = buildFeatures({ board, state, toPlay: c.toPlay, history: c.history, komi: 8, ruleset: 'territory' }, scratch);
+  const inputs = buildFeatures({
+    board, state, toPlay: c.toPlay, history: c.history, komi: 8, ruleset: 'territory',
+    movesPlayed: {
+      black: c.history.filter((m) => m.player === BLACK).length,
+      white: c.history.filter((m) => m.player === WHITE).length,
+    },
+  }, scratch);
   const ev = model.evaluate(inputs.spatial, inputs.global, 19);
 
   const logits = [...ev.policy, ev.policyPass];
