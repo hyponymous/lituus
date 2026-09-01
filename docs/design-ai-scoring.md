@@ -233,6 +233,83 @@ PRD's thresholds were set against. **They get copied with their names intact
 and a comment saying where they came from**, so a future reader can tell a
 transcription from a decision.
 
+#### 4.3.1 The defaults are not in the header
+
+Written before the transcription and short because of it. `SearchParams()` in
+`cpp/search/searchparams.h` reads like the list of KataGo's defaults and is not:
+its comment says it is kept mostly fixed over time to preserve the behaviour of
+tests. `cpp/command/analysis.cpp` calls
+`Setup::loadSingleParams(cfg, SETUP_FOR_ANALYSIS, ...)`, and `setup.cpp`
+supplies its own answer for every key the config file leaves unset. The configs
+that recorded `experiments/out/` set only threading and FP32 flags, so
+`setup.cpp` is where the reference runs' parameters actually came from.
+
+The two disagree on a dozen keys, and on three that the list above does not
+mention at all:
+
+| | header | `SETUP_FOR_ANALYSIS` |
+| --- | --- | --- |
+| `cpuctExplorationLog` | 0.0 | 0.45 |
+| `cpuctUtilityStdevScale` / `Prior` / `PriorWeight` | 0 / 0.25 / 1.0 | 0.85 / 0.40 / 2.0 |
+| `staticScoreUtilityFactor` | 0.3 | 0.1 |
+| `dynamicScoreUtilityFactor` | 0.0 | 0.3 |
+| `valueWeightExponent` | 0.5 | 0.25 |
+| `useNoisePruning` | false | true |
+| `fpuParentWeightByVisitedPolicy` | false | true, pow 2.0 |
+| `rootFpuReductionMax` | 0.2 | 0.1 |
+| `useLcbForSelection` | false | true, 5.0 stdevs |
+| `useGraphSearch` | false | true |
+| `subtreeValueBiasFactor` | 0.0 | 0.45 |
+| `rootEndingBonusPoints` | 0.0 | 0.5 |
+
+A cPUCT scale of zero switches dynamic exploration off entirely, so reading the
+header would have produced a search that behaves plausibly and is calibrated
+against nothing. That is §11's risk arriving through a door this section did not
+name, and the reason `search-params.ts` cites a file and a line for every value
+rather than only a name.
+
+**Read the sources at the tag that made the numbers.** The reference runs used
+KataGo v1.13.2; a fresh clone is at v1.18.2. No constant changed between them
+and no transcribed function changed in substance — the diffs are human-SL
+plumbing, the eval cache, and a refactor passing `sqrtBoardArea` where a
+`Board&` used to go — but the line numbers moved by about eighty, and nothing
+would have said so.
+
+#### 4.3.2 Two of the frightening defaults are inert on the shipping network
+
+`setup.cpp` also turns on `policyOptimism = 1.0` and `useUncertainty`, which
+between them imply an optimistic policy head and per-leaf uncertainty weights.
+Neither applies to `g170e-b15c192`, and that is a property of the file rather
+than a judgement: it has one policy output channel, and `openclbackend.cpp`
+blends in an optimistic head only at two or four; it is model version 8 with
+four score-value channels, and `computeWeightFromNNOutput` returns 1.0 unless
+`supportsShorttermError()`, which is `modelVersion >= 9`. Upstream reads no
+optimistic policy and weights every leaf 1 on this network too.
+
+#### 4.3.3 What is deferred, and what each deferral costs
+
+Graph search, subtree value bias and the root ending bonus are all on by default
+and are all left out of the first search, to be decided by §9.1 rather than
+guessed at: at fifty visits the tree is shallow, so transpositions are rare and
+most bias entries would hold a single node's own contribution. Deferring graph
+search buys a real simplification — a child's *edge* visits and its *node*
+visits can only differ when two paths share a node, so upstream's
+`getChildWeight(edgeVisits, childVisits)` becomes `weightSum` throughout.
+
+The ending bonus is the deferral to watch. It needs the ownership map, which
+§4.3 said lituus would not need, and Benson's pass-alive algorithm, which does
+not exist here. It never touches a reported `scoreLead` directly — it perturbs
+which root children get visits — so its effect on a point loss is second order,
+but the endgame is where it bites and the endgame rows of the conformance run
+are where it would show.
+
+One further limit is worth stating because it is a silence rather than a
+setting: **no node is ever terminal**. Under territory scoring two passes send
+KataGo into the encore rather than to a result, and the encore is a large part
+of `boardhistory.cpp` with ko rules of its own. At fifty visits from a prompted
+position the case is unreachable, which is why it is left unhandled rather than
+approximated.
+
 The search is also where the one genuinely new capability goes:
 
 **Forced evaluation of the guess.** PRD §8b and feasibility §5b make this
@@ -389,6 +466,75 @@ the Playwright harness that already exists there. It runs headed, for the
 reason that harness documents: a headless Chromium will answer
 `requestAdapter()` with a software adapter and return plausible timings that
 measure the CPU.
+
+"Needs the browser" turned out to be a measurement rather than a preference. A
+CPU forward pass of `b15c192` under `@tensorflow/tfjs-backend-cpu` in Node takes
+**4.5 seconds**, so a single fifty-visit search is about four minutes and a
+two-hundred-position run is over a week. The same search on WebGPU is a couple
+of seconds. Node can spot-check one position; it cannot carry this.
+
+Unit-testing the *search* is a separate job and does not want a network at all.
+`test/search.test.ts` supplies its own `Network` — a few dozen lines that state
+an opinion about a position — which runs in milliseconds and lets a test choose
+the position that produces a given answer instead of hunting for one. Writing
+those stubs turned up something worth keeping: an evaluator that says "whoever
+is to move is ten points ahead" at every node is not an opinion about a position
+but a contradiction, and the search correctly reports every move as handing ten
+points to the opponent. A stub has to flip with the colour, exactly as the value
+head does.
+
+The harness is `experiments/browser/run-conformance.ts`, and it reports the one
+figure the bar is actually about: how many verdicts change *band* — fine,
+costly, blunder — between the two searches. Two searches disagreeing by a tenth
+of a point is expected; one calling a move a blunder that the other calls fine
+is a transcription bug. It compares against the committed professional record
+and the reference in `experiments/out/fixture/`, so it publishes nothing new
+and needs no private game.
+
+#### 9.1.1 What the first run found
+
+Two hundred positions of the committed record, `b15c192` at 50 visits, WebGPU
+on an `apple/metal-3` adapter, about 2.3 seconds a position:
+
+| | median | p90 | max |
+| --- | --- | --- | --- |
+| point loss, \|Δ\| | 0.183 | 1.07 | 4.55 |
+| root score lead, \|Δ\| | 0.164 | 0.94 | 2.64 |
+
+The best move agreed on 153 of 200, and 23 verdicts changed band — **none of
+them across the eight-point blunder line**. The search is deterministic: single
+positions re-run reproduce the full run's figures exactly.
+
+That passes the bar with room, and the yardstick is §5b of the feasibility doc
+rather than a number chosen here. §5b measured the spread between the shipping
+configuration and the reference at a median of 0.60 points over 576 forced
+guesses, and the PRD's thresholds were set knowing it. At 0.183 this
+transcription is three times tighter than a disagreement the product already
+lives with. Most of the band changes sit on `BEAT_MARGIN`, half a point — finer
+than that 0.60 spread — so they are the expected noise rather than findings.
+
+The finding is *where* the error is. Split by whether the reference had to
+force the move with `allowMoves`:
+
+| | n | median \|Δ loss\| | p90 | max |
+| --- | --- | --- | --- | --- |
+| forced | 77 | 0.394 | 1.51 | 4.55 |
+| unrestricted root search | 123 | 0.102 | 0.47 | 4.04 |
+
+— while the *root* lead agrees equally well in both groups (0.149 against
+0.205). The root search is in good shape; the forced query is where the
+divergence lives, on the same fifty-visit budget on both sides. Since forcing is
+what §8b's recall numbers were measured with, that is the half worth chasing
+first, and it is a much narrower question than the one this run was built to
+ask.
+
+A second pattern is visible and is *not* yet separable from the first: the
+disagreement grows through the game, with a median of 0.101, 0.171 and 0.334
+over turns 0–59, 60–119 and 120–199. The deferred root ending bonus (§4.3.3)
+only acts on near-settled points and would predict exactly this, but so would
+the plain fact that endgame positions have wider score distributions — and the
+backfilled positions cluster late, so the two splits overlap. Whichever gets
+tested first has to control for the other.
 
 ### 9.2 Unit tests, no engine
 
