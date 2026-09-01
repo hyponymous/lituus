@@ -210,6 +210,15 @@ Net: roughly **2,600 lines lifted or adapted, plus a search we write**. That is
 several times the figure I offered when this route was chosen, and it should be
 the number the schedule is built on.
 
+**Afterwards, two dispositions in that table turned out wrong, both in the same
+direction.** `scoreValue.ts` and the ladder half of `fastBoard.ts` are marked
+lift and adapt, and neither came from web-katrain in the end: both follow
+KataGo's C++ directly, because a port is only as good as the parity you can
+check it against and the parity work sent us to the primary source every time
+(`docs/exploration-forward-pass-parity.md`). The line counts were about right;
+the *source* was not. `docs/reuse-notes.md` records file by file which upstream
+each one actually followed.
+
 ### 4.3 The search
 
 `analyzeMcts.ts` is 2,836 lines because it serves an analysis product:
@@ -344,6 +353,13 @@ is driven by `session`, which has no reference to the evaluator. There is no
 code path in which a verdict can delay a reveal, because there is no code path
 from one to the other.
 
+That is half of the guarantee, and building the lifecycle found the other half
+(§5.4). A session that cannot be delayed by a verdict can still be *redrawn* by
+one: the view layer was re-rendering the whole screen on every analysis event,
+so the reveal was being interrupted by analysis after all. The structural claim
+above is true and was not sufficient. Its second half — **analysis never
+redraws a screen** — belongs beside it.
+
 ### 5.2 Download, warmup, cache
 
 The worker is spawned when AI scoring is switched on, not before, and it
@@ -379,6 +395,75 @@ silently reporting a median over half the game.
 Jobs for prompts already in the store are dropped, which is what makes a same
 colour replay nearly free (§3).
 
+### 5.4 What building it found
+
+Everything above survived contact. What follows is what building it added to
+the design rather than confirmed in it.
+
+**The bundle split holds, measured rather than intended.** `main` is 42.4 kB
+with no TF.js reference and no preload; the worker is 1,059 kB as a chunk of
+its own. A session with AI off downloads none of it, which is the same finding
+the spike reported (§10b.3) now checked against the real thing.
+
+**WebGPU or nothing.** Pages cannot set COOP/COEP, so there is no
+`SharedArrayBuffer`, so `tfjs-backend-wasm` is single-threaded — and a
+single-threaded wasm search of a 15-block net delivers its losses well after
+the reader has left the summary. No WebGPU degrades to exact match, the same
+path as a failed download, which already exists. The wasm fallback is not worth
+offering.
+
+**Analysis never redraws a screen.** Analysis events were calling `draw()`,
+which is `replaceChildren` on the whole screen, and that one cause produced
+three bugs of which exactly one was visible:
+
+1. the board was rebuilt mid-animation, so a stone drop or a reveal beat in
+   flight restarted — the artifact that led here;
+2. `drawSession` arms the auto-advance timer whenever the phase is `reveal`,
+   and `draw()`, unlike `show()`, did not clear the previous one. Download
+   progress fires many times a second, so every reveal stacked a pile of timers
+   and all of them fired. **This skipped prompts**, and nobody had noticed;
+3. on the summary it reset the review cursor, throwing a reader back to the
+   final position because a search happened to finish.
+
+So: two live regions — `#engine-status` and `#engine-findings` with
+`#summary-subhead` — found by id and written in place, and everything else
+stays a pure function of its props, redrawn wholesale. With a `MutationObserver`
+watching an idle session through an entire download: 0 board rebuilds against
+2,555 engine-line updates, every one of which used to rebuild the board, and
+prompts that advance 1, 3, 5, 7, 9 — one per guess. The one-timer invariant
+moved *into* `drawSession` rather than living in `show()`, so it holds whoever
+calls.
+
+**§3's cheap replay had to be built, not merely designed.** Keying the store by
+position makes a replay nearly free only if the store survives the replay, and
+"Same again" was tearing down the engine and dropping every verdict — so a
+second run cost exactly what the first did. The worker and the store now
+survive a replay of the same record, and `enqueue` skips a move whose existing
+verdict already covers this guess: a replay opens at "6 scored", repeated
+guesses add no work, and a changed guess adds exactly one job. The *queue* is
+still rebuilt per session on purpose, since it remembers every move number it
+was ever handed, which is right within a session and wrong across one.
+
+**Degradation is verified by aborting the download**, and the summary that
+results is byte-identical to a no-AI one. That exercise paid for itself: a
+failed fetch throws a bare `TypeError: Failed to fetch`, which reads to a user
+like a bug in the page, so `net-cache.ts` now distinguishes a connection
+failure, a non-ok status and an interrupted body, and says something that can
+be acted on. `AbortError` is re-thrown rather than reworded.
+
+It also exposed a pre-existing bug that only a live region could show:
+`engineFindings` returned null when there was nothing to report, taking
+`describeEngine` with it — and that line is the only place on screen naming
+the engine behind the point loss, which PRD §9 requires a score to carry. On a
+clean game the whole section simply vanished from under the reader as the last
+verdicts landed. It now stands with "Nothing stood out" plus the attribution.
+
+**Not done, and known:** root-search reuse inside the worker. A changed guess
+on a replay currently re-runs the unrestricted root search as well as the
+forced one. §3 promises only that the *store* is keyed by position, and it is,
+but the worker could cache a `SearchResult` by move number and make a changed
+guess cost just its forced search.
+
 ## 6. What the summary gains
 
 Mostly arithmetic over `Analysis`, and mostly not novel. The parts worth
@@ -389,11 +474,13 @@ naming as design rather than implementation:
   screen leads with the number the user can check by eye.
 - **Median and sum, not mean**, for the same reason `timing` already reports a
   median: one catastrophe should not swallow the figure.
-- **The PV is truncated to two or three plies in the view.** The evaluator
-  returns six, matching `experiments/katago/analyze.ts`; showing all six would
-  imply a confidence a 50-visit search does not have. Truncating in the view
-  rather than the record keeps the extra plies available to the SGF export,
-  which is read at leisure and can afford them.
+- **The PV is a record, not yet a display.** The evaluator returns six plies,
+  matching `experiments/katago/analyze.ts`, and they travel into the JSON export
+  and the annotated SGF — which are read at leisure and can afford them. No
+  screen shows a PV today, at the reveal or in the summary. When one does it is
+  truncated to two or three plies, and the truncation belongs in the view rather
+  than in the record: six plies on screen would imply a confidence a fifty-visit
+  search does not have.
 - **PRD §6.4's runs are per colour** and are a group-by over the store. Pure,
   cheap, and the highest-value sentence in the review — build it early, since
   it needs no view work beyond a line of text.
@@ -528,13 +615,28 @@ what §8b's recall numbers were measured with, that is the half worth chasing
 first, and it is a much narrower question than the one this run was built to
 ask.
 
+**What would answer it**, in the order the questions get cheaper. Our forcing is
+a mask on the root's new-child loop in `selectChild`; KataGo's `allowMoves`
+fills `avoidMoveUntilByLoc` with depth 1 for every move but the allowed one, and
+consults it in `getPlaySelectionValues`' `isOkayRawPolicyMoveAtRoot` and in the
+symmetry-duplication path as well — so the first thing to check is whether one
+place is doing what upstream does in three. Then the degenerate case: with a
+single allowed move the root has one child, and the pruned root value is
+`(w·childLead + ownLead) / (w + 1)`, which is worth checking against
+`getPrunedNodeValues` directly. And there is a controlled experiment already
+recorded — `experiments/out/fixture/guesses.jsonl` is 100 positions forced by
+`allowMoves` with the played move as the guess, so the conformance run can be
+pointed at forcing alone.
+
 A second pattern is visible and is *not* yet separable from the first: the
 disagreement grows through the game, with a median of 0.101, 0.171 and 0.334
 over turns 0–59, 60–119 and 120–199. The deferred root ending bonus (§4.3.3)
 only acts on near-settled points and would predict exactly this, but so would
 the plain fact that endgame positions have wider score distributions — and the
 backfilled positions cluster late, so the two splits overlap. Whichever gets
-tested first has to control for the other.
+tested first has to control for the other. The cheap separation is to stub the
+ending bonus as a pass-only penalty — two thirds of a point of score against a
+pass, which needs no ownership map — and see whether the 120–199 rows move.
 
 ### 9.2 Unit tests, no engine
 
@@ -780,20 +882,29 @@ roughly 37 MB per cold visitor, whichever way it is served.
 - **A search that is fast, correct, and differently calibrated.** §4.1. The
   numbers would look entirely plausible and every threshold in the PRD would
   quietly mean something else. §9.1 is the only defense and should be built
-  before the search is finished, not after.
+  before the search is finished, not after. **It was, and it paid**: §9.1.1
+  passes the bar overall and still isolated a forced path four times worse than
+  the root search, which no amount of looking at plausible point losses would
+  have shown. The risk is reduced, not retired — the run judges 200 positions of
+  one record.
 - **Feature planes are wrong in a way nothing reports.** Area maps and ladders
   are the likely places. A network fed slightly wrong inputs still returns
   confident numbers. §9.1 catches this too, which is most of why it comes
-  early.
+  early. **This one happened, twice**: a liberty map capped at three, and a komi
+  that omitted territory scoring's chill. Neither raised anything; both were
+  found by diffing against KataGo's own inputs, not by the search behaving
+  oddly (`docs/exploration-forward-pass-parity.md`). Area planes are still
+  unported and refused at the door rather than approximated.
 - **The adaptation is larger than it looks.** This is the PoC design doc's
   renderer risk repeating: `fastBoard.ts` was estimated as "we already have
   that" and is 1,100 lines of things we do not (§4.2). Estimate the remainder
   from measured line counts, not from what a file's name suggests.
-- **Everything measured so far was served from `localhost`.** The engine work
-  is the visible risk; the deployment is the one that looks solved and is not.
-  Two upstream hosts have already turned out to be unfetchable (§10b), and
-  content-encoding, base paths and worker bundling all behave differently in
-  `vite build` on a real origin. §10b.1 is the answer and it comes first.
+- ~~**Everything measured so far was served from `localhost`.**~~ **Retired by
+  §10b.3.** It was the right risk: two upstream hosts turned out to be
+  unfetchable, and the two hosts we do use disagree about `Content-Encoding`, so
+  a build that trusted either would have passed its own tests and broken on the
+  other. Base paths and worker bundling behaved as the spike predicted, and §5.4
+  found the shipped lifecycle no new hosting surprises.
 - **Mobile.** PRD §7 rests on unforced measurements, and feasibility §5b says
   forcing flattered the large network several-fold. §7 of the PRD should not be
   implemented until that table is re-run forced (`TODO.md` has the ticket), and
@@ -833,3 +944,12 @@ dogfood games' existing verdicts viewable in the product, which is the cheapest
 possible check on whether PRD §5's summary is the right summary. Step 0 is
 worth doing first regardless, because it is the only step whose failure mode is
 discovering in step 6 that the shape of steps 4 and 5 was wrong.
+
+**Where it stands.** Steps 0 through 6 are built, in that order and without
+reordering; a session in a browser downloads the network, scores its own
+predictions and reports them. What is outstanding is step 7 — rank parsing for
+PRD §4's setup recommendation, the one row of §2's module sketch with nothing
+behind it — and two follow-ups the earlier steps opened rather than closed: the
+forced-path divergence in §9.1.1, and root-search reuse inside the worker
+(§5.4). `TODO.md` carries them with their evidence; this section is the plan,
+not the ledger.
