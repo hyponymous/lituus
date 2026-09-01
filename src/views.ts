@@ -8,7 +8,7 @@
  * is why they replace their container's contents rather than patching.
  */
 
-import { renderGoban, type Marker } from './goban.ts';
+import { pointName, renderGoban, type Marker } from './goban.ts';
 import { describe, type Game, type GameMeta, type GameMove } from './game.ts';
 import {
   canGuess,
@@ -21,16 +21,19 @@ import {
   type Session,
 } from './session.ts';
 import {
+  costBand,
   duration,
   longestStreak,
   percent,
   tenukiAgreement,
   toJSON,
   toText,
+  type CostBand,
   type Streak,
   type Summary,
+  type SummaryRow,
 } from './summary.ts';
-import { BLUNDER_LOSS, describeEngine } from './analysis.ts';
+import { BEAT_MARGIN, BLUNDER_LOSS, describeEngine, type Verdict } from './analysis.ts';
 import { annotatedFilename, annotatedSgf } from './annotate.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
@@ -268,6 +271,33 @@ export interface SessionProps {
  * id and written in place, and analysis never redraws a screen.
  */
 const ENGINE_LINE_ID = 'engine-status';
+const STRIP_ID = 'review-strip';
+
+/**
+ * The most recent summary the screen has been given, for the parts of it that
+ * outlive a render.
+ *
+ * The summary screen is drawn once and then *updated in place* as late
+ * verdicts land (design §5.4), so anything that reads its props at click time
+ * rather than at render time is reading a value that has since moved on. The
+ * exports were doing exactly that: a session whose searches finished after the
+ * summary appeared exported the summary as it looked before they did — every
+ * point loss null, no engine block — which is indistinguishable from a session
+ * that never had an engine at all.
+ *
+ * Module-level because `refreshSummaryAnalysis` is a free function: it finds
+ * its live regions by id and has no closure to write into. Set on every render
+ * so it cannot outlive the screen it describes.
+ */
+let latestSummary: Summary | null = null;
+
+/** The current summary, falling back to whatever this render was handed. */
+function current(fallback: Summary): Summary {
+  return latestSummary ?? fallback;
+}
+
+/** Redraw the review's selected position, when a verdict for it arrives. */
+let refreshReview: (() => void) | null = null;
 const FINDINGS_ID = 'engine-findings';
 const SUBHEAD_ID = 'summary-subhead';
 
@@ -307,11 +337,11 @@ function sessionAnimate(session: Session): number[] {
 
 function sessionStatus(session: Session): string {
   const result: Score = score(session);
-  const running = `${result.hits}/${result.guessed} correct`;
+  const running = `${result.hits}/${result.guessed} matched`;
 
   if (session.phase === 'reveal' && session.lastGuess) {
     const verdict: string = session.lastGuess.hit
-      ? 'Correct.'
+      ? 'The same move.'
       : 'Not this time — the played move is circled.';
     return `${verdict} ${running}.`;
   }
@@ -626,22 +656,44 @@ function engineFindings(summary: Summary): HTMLElement | null {
 /**
  * Fill in the summary's engine figures as late verdicts land (design §5.3).
  *
- * Only the two nodes the analysis actually changes — the subhead's point-loss
- * clause and the findings section. The review panel is deliberately untouched:
- * its cursor is a closure that does not survive a re-render, and a reader
- * walking a run of misses should not be thrown back to the final position
- * because a search finished.
+ * Three live regions, and no re-render: the subhead's point-loss clause, the
+ * findings section, and the strip's cells, which are repainted in place. The
+ * review's cursor is a closure over those cells, so a reader walking a run of
+ * misses is not thrown back to the final position because a search finished.
+ * Nothing else on the screen is touched.
  */
 export function refreshSummaryAnalysis(summary: Summary): void {
+  latestSummary = summary;
+
   const subhead: HTMLElement | null = document.getElementById(SUBHEAD_ID);
   if (subhead) {
     subhead.replaceChildren(
-      `${summary.score.hits} of ${summary.score.guessed} correct`,
+      `${summary.score.hits} of ${summary.score.guessed} matched`,
       streakNote(summary),
       timingNote(summary),
       engineNote(summary),
     );
   }
+
+  /*
+   * The cells are repainted in place rather than rebuilt. The review's cursor
+   * is a closure over these nodes, so replacing them would throw a reader back
+   * to the final position because a search happened to finish — the third of
+   * the three bugs design §5.4 records.
+   */
+  const strip: HTMLElement | null = document.getElementById(STRIP_ID);
+  if (strip) {
+    const scored: boolean = summary.ai !== null;
+    const cells: NodeListOf<HTMLElement> = strip.querySelectorAll('.cell');
+    cells.forEach((cell, index) => {
+      const row: SummaryRow | undefined = summary.rows[index];
+      if (row) dressCell(cell, row, scored);
+    });
+  }
+
+  // Only if the verdict that just landed is the one being looked at; see
+  // `refreshReview`.
+  refreshReview?.();
 
   const slot: HTMLElement | null = document.getElementById(FINDINGS_ID);
   if (!slot) return;
@@ -774,7 +826,145 @@ function shortcutFor(event: KeyboardEvent): NavButton['key'] | undefined {
 }
 
 /**
- * The summary's board, its caption, its navigation, and the hit/miss strip —
+ * What one strip cell says on hover, and to a screen reader.
+ *
+ * The numbers are in the label rather than only in the colour: a band is five
+ * possible colours and a reader who wants to know *how much* worse has nowhere
+ * else to look until they select the cell.
+ */
+function cellLabel(row: SummaryRow, scored: boolean): string {
+  const where = `Move ${row.moveNumber}: you ${row.guess}, played ${row.actual}`;
+  if (!scored) return where;
+
+  const { loss, playedLoss } = row;
+  if (loss === null || playedLoss === null) return `${where} — not scored`;
+
+  const delta: number = loss - playedLoss;
+  const band: CostBand = costBand(row);
+  if (band === 'better') return `${where} — ${(-delta).toFixed(1)} points better than the game`;
+  if (band === 'even') {
+    return row.hit ? `${where} — the same move` : `${where} — the same cost, within half a point`;
+  }
+  return `${where} — ${delta.toFixed(1)} points worse than the game`;
+}
+
+/**
+ * Paint one cell, preserving whatever the review has done to it.
+ *
+ * Called both when the strip is built and as late verdicts land, so it may not
+ * touch the cursor: `selected` belongs to the panel and survives a repaint.
+ */
+function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
+  const selected: boolean = cell.classList.contains('selected');
+  const match: string = row.hit ? 'hit' : 'miss';
+  const band: CostBand | null = scored ? costBand(row) : null;
+
+  /*
+   * A cell the engine cannot speak for still shows hit or miss, faintly, under
+   * the dashed border. Dropping to a blank cell would throw away something the
+   * session does know — and a summary opened while searches are still running
+   * would begin as a row of empty squares and *gain* information as it filled,
+   * which is not how it should read.
+   */
+  const shown: string =
+    band === null || band === 'unscored' ? `${band ?? ''} ${match}`.trim() : band;
+  const label: string = cellLabel(row, scored);
+
+  cell.className = `cell ${shown}${row.hit ? ' exact' : ''}${selected ? ' selected' : ''}`;
+  cell.title = label;
+  cell.setAttribute('aria-label', label);
+}
+
+/**
+ * A point loss as a reader should see it.
+ *
+ * A negative loss is search noise, not a move that beat perfect play
+ * (`analysis.ts`), and "you gave up -0.1 points" reads as a broken engine
+ * rather than as a rounding error. Anything inside the half-point floor the
+ * product already trusts (`BEAT_MARGIN`) is reported as zero. A *larger*
+ * negative is left visible: that would be a real anomaly, and hiding it would
+ * be the same mistake in the other direction.
+ */
+function points(loss: number): string {
+  const noise: boolean = loss < 0 ? loss > -BEAT_MARGIN : loss < 0.05;
+  return noise ? '0.0 points' : `${loss.toFixed(1)} points`;
+}
+
+/**
+ * What the engine made of one prediction, as a sentence under the caption.
+ *
+ * Three facts, in the order a reader asks for them: what your move cost, what
+ * the game's move cost, and what the engine would have played instead. The
+ * first two are the comparison the whole review is built on and the third is
+ * the only one that is new information — so the engine's move comes last, and
+ * only when it is neither of the two moves already on the board.
+ *
+ * A missing number is said rather than skipped. "Not scored" and "cost
+ * nothing" are different claims, and a blank would be read as the second.
+ */
+function costLine(summary: Summary, row: SummaryRow, verdict: Verdict | undefined): string {
+  // With an engine running, silence about one move is worth saying: the line
+  // fills itself in when that prompt's search lands. With no engine there is
+  // nothing to wait for, and the line stays out of the way.
+  if (!verdict) return summary.ai === null ? '' : 'The engine has not scored this move.';
+
+  const { loss, playedLoss } = row;
+  const yours: string =
+    loss === null ? 'your move was not scored' : `you gave up ${points(loss)}`;
+  const theirs: string =
+    playedLoss === null
+      ? `${colorName(summary.color)}\u2019s move was not scored`
+      : `${colorName(summary.color)} gave up ${points(playedLoss)}`;
+
+  // On a hit the two clauses are the same move, and saying it twice reads as
+  // an engine that cannot make up its mind.
+  const cost: string = row.hit
+    ? loss === null
+      ? 'That move was not scored.'
+      : `That move gave up ${points(loss)}.`
+    : `${yours[0].toUpperCase()}${yours.slice(1)}; ${theirs}.`;
+
+  const best: number = verdict.best.point;
+  const guessed: number | undefined = verdict.guessed?.point;
+  const played: number | undefined = verdict.played?.point;
+
+  let engine: string;
+  if (best === guessed) engine = 'That was the engine\u2019s own move.';
+  else if (best === played) engine = 'The engine agreed with the move played.';
+  else engine = `The engine would have played ${pointName(summary.board, best)}.`;
+
+  return `${cost} ${engine}`;
+}
+
+/**
+ * Five colours need a key, and only when the engine gave them meaning.
+ *
+ * With no engine the strip is hit and miss as it always was, which needs no
+ * explaining — and drawing a key over two self-evident colours would suggest
+ * the two strips are the same measurement (`docs/design-ai-scoring.md` §8).
+ */
+function stripLegend(): HTMLElement {
+  const keys: readonly (readonly [string, string])[] = [
+    ['better', 'better than the game'],
+    ['even', 'within half a point'],
+    ['worse', 'worse'],
+    ['blunder', `${BLUNDER_LOSS}+ points worse`],
+    ['unscored', 'not scored'],
+    // Last, because it is a mark on a band rather than a band of its own.
+    ['even exact', 'exact match'],
+  ];
+
+  return el(
+    'p',
+    { class: 'legend muted' },
+    keys.map(([band, label]) =>
+      el('span', { class: 'key' }, [el('span', { class: `cell ${band}` }), label]),
+    ),
+  );
+}
+
+/**
+ * The summary's board, its caption, its navigation, and the strip —
  * one component, because all four read and write the same cursor.
  *
  * The board opens on the final position: the session ends mid-reveal, and a
@@ -789,22 +979,39 @@ function shortcutFor(event: KeyboardEvent): NavButton['key'] | undefined {
  * rather than becoming a screen main.ts has to hold.
  */
 function reviewPanel(session: Session, summary: Summary): HTMLElement {
+  const scored: boolean = summary.ai !== null;
   const board: HTMLElement = el('div', { class: 'board' });
   const caption: HTMLElement = el('p', { class: 'caption muted' });
+  const cost: HTMLElement = el('p', { class: 'caption cost muted' });
   const nav: HTMLElement = el('div', { class: 'nav' });
-  const strip: HTMLElement = el('div', { class: 'strip' });
-  const panel: HTMLElement = el('div', { class: 'review' }, [board, caption, nav, strip]);
+  const strip: HTMLElement = el('div', { class: 'strip', id: STRIP_ID });
+  const panel: HTMLElement = el('div', { class: 'review' }, [
+    board,
+    caption,
+    cost,
+    nav,
+    strip,
+    ...(scored ? [stripLegend()] : []),
+  ]);
+
+  /**
+   * Verdicts by move number, rebuilt from the *current* summary on every draw.
+   *
+   * Not built once: this panel is never re-rendered — its cursor is a closure
+   * and a rebuild would lose it — so a map captured here would still be the
+   * empty one an hour into a heal. `summary.verdicts` holds only the answered
+   * prompts, which is exactly the set that grows.
+   */
+  const verdictsNow = (): Map<number, Verdict> =>
+    new Map((current(summary).verdicts ?? []).map((one) => [one.moveNumber, one]));
 
   let at: Cursor = null;
+  /** The verdict the caption was last drawn from, so a redraw can be skipped. */
+  let shown: Verdict | undefined;
 
   const cells: HTMLElement[] = summary.rows.map((row, index) => {
-    const label = `Move ${row.moveNumber}: you ${row.guess}, played ${row.actual}`;
-    const cell: HTMLElement = el('button', {
-      type: 'button',
-      class: `cell ${row.hit ? 'hit' : 'miss'}`,
-      title: label,
-      'aria-label': label,
-    });
+    const cell: HTMLElement = el('button', { type: 'button' });
+    dressCell(cell, row, scored);
     // Clicking the cell already showing steps back out to the final position,
     // so the strip is a toggle and there is no dead end to click out of.
     cell.addEventListener('click', () => go(at === index ? null : index));
@@ -836,28 +1043,38 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
       caption.textContent = result
         ? `Final position — ${result}`
         : 'Final position — the record does not give a result.';
+      cost.textContent = '';
       return;
     }
 
-    const row = summary.rows[at];
+    const row = current(summary).rows[at];
     const made: Guess = session.guesses[at];
     const move: GameMove = session.game.moves[row.moveNumber - 1];
+    const verdict: Verdict | undefined = verdictsNow().get(row.moveNumber);
+    shown = verdict;
 
-    renderGoban(move.after, board, {
-      showCoordinates: true,
-      markers: made.hit
-        ? [{ index: made.actual, kind: 'hit' }]
-        : [
-            { index: made.actual, kind: 'actual' },
-            { index: made.guess, kind: 'guess' },
-          ],
-    });
+    const marks: Marker[] = made.hit
+      ? [{ index: made.actual, kind: 'hit' }]
+      : [
+          { index: made.actual, kind: 'actual' },
+          { index: made.guess, kind: 'guess' },
+        ];
+
+    // The engine's move only when it is a third point. Drawing a triangle on
+    // top of the ring already there would be two marks saying one thing.
+    const best: number | undefined = verdict?.best.point;
+    if (best !== undefined && best !== made.actual && best !== made.guess) {
+      marks.push({ index: best, kind: 'best' });
+    }
+
+    renderGoban(move.after, board, { showCoordinates: true, markers: marks });
 
     const took: string = row.elapsedMs === null ? '' : ` (${duration(row.elapsedMs)})`;
     const where = `Move ${row.moveNumber} (${at + 1} of ${summary.rows.length})${took}`;
     caption.textContent = made.hit
       ? `${where} — you played ${row.actual}, and so did they.`
       : `${where} — you played ${row.guess}; ${colorName(summary.color)} played ${row.actual}.`;
+    cost.textContent = costLine(current(summary), row, verdict);
   };
 
   const go = (next: Cursor): void => {
@@ -901,6 +1118,24 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     follow(spec);
   };
   document.addEventListener('keydown', onKey);
+
+  /*
+   * Redraw the selected position when *its* verdict arrives, and only then.
+   * Redrawing on every verdict would rebuild the board a hundred times during
+   * a heal, restarting the marker animations under a reader who is not looking
+   * at the move that changed.
+   */
+  refreshReview = (): void => {
+    if (!panel.isConnected) {
+      refreshReview = null;
+      return;
+    }
+    if (at === null) return;
+    const row: SummaryRow | undefined = current(summary).rows[at];
+    if (!row) return;
+    if (verdictsNow().get(row.moveNumber) === shown) return;
+    drawBoard();
+  };
 
   go(null);
   return panel;
@@ -971,18 +1206,21 @@ function replayActions(props: SummaryProps): HTMLElement {
 
 /** Taking the result away. The rarer path, so it sits below the replays. */
 function exportActions(props: SummaryProps): HTMLElement {
-  const { summary } = props;
+  // Resolved at click time, never captured: see `latestSummary`. An export is
+  // the one thing on this screen that has to be right about verdicts which
+  // landed after it was drawn.
+  const now = (): Summary => current(props.summary);
 
   return el('div', { class: 'actions' }, [
     button('Download annotated SGF', () =>
       download(
-        annotatedFilename(summary),
-        annotatedSgf(props.session, summary),
+        annotatedFilename(now()),
+        annotatedSgf(props.session, now()),
         'application/x-go-sgf',
       ),
     ),
-    copyButton('Copy as text', () => toText(summary)),
-    copyButton('Copy as JSON', () => toJSON(summary)),
+    copyButton('Copy as text', () => toText(now())),
+    copyButton('Copy as JSON', () => toJSON(now())),
     // The plain record, never the annotated one: a challenge link that
     // carried the guesses would arrive with the answers already on it.
     copyButton('Copy challenge link', props.challengeLink),
@@ -992,6 +1230,7 @@ function exportActions(props: SummaryProps): HTMLElement {
 export function renderSummary(root: HTMLElement, props: SummaryProps): void {
   const { summary } = props;
   const result: Score = summary.score;
+  latestSummary = summary;
 
   const parts: Child[] = [
     el('h2', {}, ['Session summary']),
@@ -1004,7 +1243,7 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
     parts.push(
       el('p', { class: 'headline' }, [percent(result.rate)]),
       el('p', { id: SUBHEAD_ID, class: 'subhead' }, [
-        `${result.hits} of ${result.guessed} correct`,
+        `${result.hits} of ${result.guessed} matched`,
         streakNote(summary),
         timingNote(summary),
         engineNote(summary),

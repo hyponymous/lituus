@@ -12,7 +12,15 @@ import { parse } from '../src/sgf-parser.ts';
 import { readGame, type Game } from '../src/game.ts';
 import { advance, guess, startSession, type Session } from '../src/session.ts';
 import { pointFromName } from '../src/goban.ts';
-import { summarize, toJSON, toText, type Summary, type SummaryRow } from '../src/summary.ts';
+import {
+  costBand,
+  summarize,
+  toJSON,
+  toText,
+  type CostBand,
+  type Summary,
+  type SummaryRow,
+} from '../src/summary.ts';
 import { annotatedSgf } from '../src/annotate.ts';
 import { restoreAnalysis, restoreSession, driftFrom } from '../src/dev.ts';
 import {
@@ -418,4 +426,55 @@ test('the annotated record still parses back as a game', () => {
   );
   const reread: Game = readGame(parse(annotatedSgf(session, summary)));
   assert.equal(reread.moves[0].index, at('Q16'), 'the played game is still the main line');
+});
+
+// ── The cost band ────────────────────────────────────────────────────────────
+//
+// The axis the review is read on once there is an engine (`docs/prd-ai-scoring.md`
+// §5). Boundary cases are derived from BEAT_MARGIN and BLUNDER_LOSS rather than
+// written out, so moving a threshold moves these with it instead of quietly
+// defusing them.
+
+function bandOf(guessLoss: number, playedLoss: number | null): CostBand {
+  const played: MoveVerdict | null =
+    playedLoss === null ? null : move(at('Q16'), playedLoss);
+  const { summary } = play(
+    ['D16'],
+    [verdict({ moveNumber: 1, played, guessed: move(at('D16'), guessLoss) })],
+  );
+  return costBand(summary.rows[0]);
+}
+
+test('a guess that cost clearly less than the played move reads as better', () => {
+  assert.equal(bandOf(0.2, 0.2 + BEAT_MARGIN + 0.1), 'better');
+});
+
+test('a difference inside the noise floor reads as even, in either direction', () => {
+  assert.equal(bandOf(1, 1), 'even');
+  assert.equal(bandOf(1, 1 + BEAT_MARGIN - 0.01), 'even');
+  assert.equal(bandOf(1 + BEAT_MARGIN - 0.01, 1), 'even');
+});
+
+test('an exact match lands in even, since one move cannot cost two amounts', () => {
+  const { summary } = play([null], [verdict({ moveNumber: 1, guessed: move(at('Q16'), 0.2) })]);
+  assert.equal(summary.rows[0].hit, true);
+  assert.equal(costBand(summary.rows[0]), 'even');
+});
+
+test('costlier than the played move reads as worse, and past the blunder line as blunder', () => {
+  assert.equal(bandOf(1 + BEAT_MARGIN, 1), 'worse');
+  assert.equal(bandOf(1 + BLUNDER_LOSS - 0.01, 1), 'worse');
+  assert.equal(bandOf(1 + BLUNDER_LOSS, 1), 'blunder');
+});
+
+test('a comparison missing either half is unscored, never even', () => {
+  // The engine saying nothing about the played move is not the engine saying
+  // the two cost the same.
+  assert.equal(bandOf(1.2, null), 'unscored');
+});
+
+test('with no engine every row is unscored', () => {
+  const game: Game = readGame(parse(GAME));
+  const summary: Summary = summarize(advance(guess(startSession(game, 1), at('D16'), 1000)));
+  assert.equal(costBand(summary.rows[0]), 'unscored');
 });

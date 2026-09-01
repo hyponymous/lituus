@@ -12,6 +12,7 @@ import { serialize } from './sgf-writer.ts';
 import { describe, type Game } from './game.ts';
 import { countPrompts, score, type Guess, type Score, type Session } from './session.ts';
 import {
+  BEAT_MARGIN,
   BLUNDER_LOSS,
   aiResult,
   describeEngine,
@@ -292,6 +293,44 @@ function streaksOf(rows: readonly SummaryRow[]): Streak[] {
     start = i + 1;
   }
   return streaks;
+}
+
+/**
+ * How a prediction compares with the move the game actually played.
+ *
+ * The axis the review is read on once there is an engine. Hit and miss answer
+ * a question the engine has made less interesting: a miss that costs nothing
+ * and a miss that costs nine points are the same colour on a hit/miss strip,
+ * and they are not the same event. What a reader wants to see down a session
+ * is where they did better than the player and where they did worse.
+ *
+ * `even` is not equality but agreement within `BEAT_MARGIN`, the same half
+ * point that governs whether the summary is willing to say you beat the game.
+ * A hit lands here by construction — the same move cannot cost two different
+ * amounts — which is why exact matches are marked separately rather than given
+ * a band of their own.
+ *
+ * `unscored` covers both "no engine" and "the engine looked too briefly to
+ * quote a number", deliberately together: a comparison that cannot be made is
+ * a comparison that cannot be made, and either way it must not be drawn as
+ * agreement.
+ */
+export type CostBand = 'better' | 'even' | 'worse' | 'blunder' | 'unscored';
+
+/**
+ * Which band a row falls in.
+ *
+ * Both losses have to be quotable. Comparing a searched guess against an
+ * unsearched played move would manufacture a verdict out of the engine's
+ * silence, which is the same reason `beatPlayed` insists on both.
+ */
+export function costBand(row: SummaryRow): CostBand {
+  if (row.loss === null || row.playedLoss === null) return 'unscored';
+
+  const delta: number = row.loss - row.playedLoss;
+  if (delta <= -BEAT_MARGIN) return 'better';
+  if (delta < BEAT_MARGIN) return 'even';
+  return delta >= BLUNDER_LOSS ? 'blunder' : 'worse';
 }
 
 /** The best run, or null if nothing reached STREAK_MIN. Ties go to the earliest. */
@@ -591,7 +630,7 @@ export function toText(summary: Summary): string {
     `lituus — ${summary.game}`,
     `Played as ${colorName(summary.color)}`,
     '',
-    `${result.hits} / ${result.guessed} correct (${percent(result.rate)})`,
+    `${result.hits} / ${result.guessed} matched (${percent(result.rate)})`,
   ];
 
   if (summary.abandoned) {

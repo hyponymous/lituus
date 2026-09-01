@@ -536,7 +536,7 @@ test('the text export leads with the score and lists every move', () => {
 
   assert.match(text, /Ada 3d vs Bo 4d/);
   assert.match(text, /Played as Black/);
-  assert.match(text, /1 \/ 2 correct \(50%\)/);
+  assert.match(text, /1 \/ 2 matched \(50%\)/);
   assert.equal(text.split('\n').filter((line) => /hit |miss/.test(line)).length, 2);
 });
 

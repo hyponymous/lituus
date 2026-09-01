@@ -29,12 +29,13 @@ const WHITE_EDGE = '#888';
 const ACTUAL_MARK = '#1e6fd9';
 const GUESS_MARK = '#d94f4f';
 const HIT_MARK = '#1faa5f';
+const BEST_MARK = '#7d4fd9';
 
 /**
  * `last` marks the stone most recently played, as a board would by memory.
  * The others belong to the reveal: where the move went, where you guessed.
  */
-export type MarkerKind = 'actual' | 'guess' | 'hit' | 'last';
+export type MarkerKind = 'actual' | 'guess' | 'hit' | 'last' | 'best';
 
 export interface Marker {
   readonly index: number;
@@ -233,6 +234,27 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
     const fill: string = stoneAt(pos, marker.index) === BLACK ? WHITE_STONE : BLACK_STONE;
     svg.appendChild(
       svgEl('circle', { cx: x, cy: y, r: CELL * 0.13, fill, class: 'mark mark-last' }),
+    );
+    return;
+  }
+
+  if (marker.kind === 'best') {
+    /*
+     * A triangle, and deliberately not a ring: `actual` is already the blue
+     * one, and an engine's move drawn as a second blue circle would be read as
+     * the move played by anyone who glanced. The shape carries the meaning
+     * where the colour cannot.
+     */
+    const points = `${x},${y - size} ${x + size},${y + size * 0.8} ${x - size},${y + size * 0.8}`;
+    svg.appendChild(
+      svgEl('polygon', {
+        points,
+        fill: 'none',
+        stroke: BEST_MARK,
+        'stroke-width': 2.5,
+        'stroke-linejoin': 'round',
+        class: 'mark mark-best',
+      }),
     );
     return;
   }

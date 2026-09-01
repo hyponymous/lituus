@@ -7,6 +7,15 @@
   --accent: #7a5c2e;
   --hit: #2f6b3a;
   --miss: #8f3a2f;
+
+  /* The review strip's cost axis: how a prediction compared with the move the
+     game played. Cool for cheaper, warm for costlier, so the two directions
+     differ in hue *and* lightness rather than in red-against-green, which is
+     the one pair a colour-blind reader cannot separate. */
+  --cost-better: #2b6b74;
+  --cost-even: #c9c0ae;
+  --cost-worse: #c08a2e;
+  --cost-blunder: #8f3a2f;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,6 +28,14 @@
     --accent: #c9a86a;
     --hit: #7fbf8c;
     --miss: #d98b7d;
+
+    /* On a dark ground severity has to read as *more* intensity, so the
+       blunder red is stronger than the amber rather than the paler --miss:
+       a washed-out pink beside a bright amber says the wrong thing. */
+    --cost-better: #6fb6c0;
+    --cost-even: #5a5349;
+    --cost-worse: #d9a54e;
+    --cost-blunder: #e2604a;
   }
 }
 
@@ -335,6 +352,14 @@ button.primary {
   animation: mark-in 200ms ease-out var(--reveal-beat) backwards;
 }
 
+/* The beat belongs to the session, where the answer is not yet known. In the
+   review it is only a delay: the reader is stepping through results they have
+   already seen, and holding the played move back by half a second makes every
+   arrow key feel slow. Marks land together here. */
+.review .board .mark-actual {
+  animation: mark-in 150ms ease-out;
+}
+
 /* The last-move dot is orientation, not an event; animating it every prompt
    would compete with the stone that actually moved. */
 .board .mark-last {
@@ -429,7 +454,7 @@ section .muted {
   font-size: 0.95rem;
 }
 
-/* ── Review board and hit/miss strip ─────────────────────────────────────── */
+/* ── Review board and strip ──────────────────────────────────────────────── */
 
 .review {
   max-width: 32rem;
@@ -444,6 +469,13 @@ section .muted {
   min-height: 1.5em;
   margin: 0;
   font-size: 0.9rem;
+}
+
+/* The engine's line under the caption. It keeps its height whether or not
+   there is a verdict, so landing on an unscored move does not shuffle the
+   board and the strip up the page. */
+.caption.cost {
+  margin-bottom: 0.2rem;
 }
 
 /* Sits between the board and the strip: the board says where you are, these
@@ -476,22 +508,88 @@ section .muted {
   margin: 0 0 1.5rem;
 }
 
-/* Cells are buttons, so they have to shed every button style they inherit. */
-.strip .cell {
+/* Cells are buttons, so they have to shed every button style they inherit.
+   The legend draws the same cells at the same size, so the shape and the band
+   colours are shared and the key cannot drift from the thing it explains. */
+.strip .cell,
+.legend .cell {
+  position: relative;
   width: 14px;
   height: 14px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 2px;
+  background: transparent;
 }
 
-.strip .cell.hit {
+/* With no engine, the strip is hit and miss as it always was. */
+.cell.hit {
   background: var(--hit);
 }
 
-.strip .cell.miss {
+.cell.miss {
   background: var(--miss);
   opacity: 0.4;
+}
+
+/* With one, it is what the guess cost against what the game's move cost. */
+.cell.better {
+  background: var(--cost-better);
+}
+
+.cell.even {
+  background: var(--cost-even);
+}
+
+.cell.worse {
+  background: var(--cost-worse);
+}
+
+.cell.blunder {
+  background: var(--cost-blunder);
+}
+
+/* Absent, not neutral: a comparison that could not be made must not read as
+   one that came out even. The hit/miss underneath stays, at a fraction of its
+   strength — it is still known, and the dashed border is what says the engine
+   has not spoken. */
+.cell.unscored {
+  border-color: var(--line);
+  border-style: dashed;
+}
+
+.cell.unscored.hit {
+  background: color-mix(in srgb, var(--hit) 30%, transparent);
+}
+
+.cell.unscored.miss {
+  background: color-mix(in srgb, var(--miss) 20%, transparent);
+}
+
+/* An exact match sits in `even` by construction — the same move cannot cost
+   two different amounts — so it is marked by shape rather than by a band of
+   its own, which also keeps it legible without colour. */
+.cell.exact::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 1px;
+  background: var(--bg);
+  opacity: 0.8;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+  margin: -1rem 0 1.5rem;
+  font-size: 0.78rem;
+}
+
+.legend .key {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .strip .cell:hover,

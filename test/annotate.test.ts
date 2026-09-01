@@ -172,7 +172,7 @@ test('the session summary lands in the root comment', () => {
   const comment: string = root.nodes[0].props.C?.[0] ?? '';
 
   assert.match(comment, /Ada vs Bo/);
-  assert.match(comment, /correct/);
+  assert.match(comment, /matched/);
   assert.match(comment, /lituus/);
 });
 
