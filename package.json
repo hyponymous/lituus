@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "fetch:net": "node scripts/fetch-network.ts dist",
+    "fetch:net:dev": "node scripts/fetch-network.ts src/public",
     "preview": "vite preview",
     "test": "node --test 'test/*.test.ts'",
     "typecheck": "tsc --noEmit"

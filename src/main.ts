@@ -16,11 +16,30 @@ import {
 } from './session.ts';
 import { summarize } from './summary.ts';
 import {
+  emptyAnalysis,
+  verdictCount,
+  verdictFor,
+  withVerdict,
+  type Analysis,
+  type Verdict,
+} from './analysis.ts';
+import { createQueue, type Prompt, type Queue } from './evaluator.ts';
+import {
+  DOWNLOAD_BYTES,
+  engineConfig,
+  startEngine,
+  unscorableReason,
+  type EngineHandle,
+  type EngineStatus,
+} from './engine-client.ts';
+import {
   acceptDroppedFiles,
+  refreshSummaryAnalysis,
   renderLanding,
   renderSession,
   renderSetup,
   renderSummary,
+  updateEngineLine,
 } from './views.ts';
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
 import { SPIKE_HASH } from './engine/spike-hash.ts';
@@ -79,6 +98,179 @@ let pending: ReturnType<typeof setTimeout> | null = null;
  */
 let promptedAt: number | null = null;
 let promptedCursor: number | null = null;
+
+/*
+ * AI scoring.
+ *
+ * `analysis` is a value held *beside* the session, never inside it: a session
+ * is immutable and its transitions are pure, and a verdict arriving four
+ * seconds after the guess — or never — would break that outright. The two are
+ * joined only when a summary is computed (design §3).
+ *
+ * `wanted` outlives any one session so that a replay keeps the setting, and the
+ * store is keyed by move number rather than by guess, which is what makes a
+ * same-colour replay reuse every search it already paid for.
+ */
+let aiWanted = false;
+let engine: EngineHandle | null = null;
+let engineStatus: EngineStatus = { state: 'idle' };
+let analysis: Analysis | null = null;
+let queue: Queue | null = null;
+/** Which record the engine and the store belong to, so a replay can keep both. */
+let analysisGame: Game | null = null;
+
+/** Tear down any running engine and forget what it found. */
+function stopEngine(): void {
+  engine?.stop();
+  queue?.stop();
+  engine = null;
+  queue = null;
+  analysis = null;
+  analysisGame = null;
+  engineStatus = { state: 'idle' };
+}
+
+/**
+ * Start the engine for this game, if the user asked for it and it can run.
+ *
+ * Deliberately not awaited anywhere. The session begins while the network is
+ * still arriving; scoring only has to be ready before the summary, and if it
+ * never becomes ready the summary says so (PRD §4, design §5.2).
+ */
+function startEngineFor(game: Game): void {
+  if (!aiWanted || unscorableReason(game) !== null) {
+    stopEngine();
+    return;
+  }
+
+  /*
+   * A replay of the same record keeps the engine *and* the store.
+   *
+   * Both halves matter. Keeping the worker skips a re-parse and a fresh upload
+   * of the network to the GPU; keeping the store is what design §3 means by
+   * verdicts being keyed by position rather than by guess — the searches
+   * already paid for are still answers about the same positions, whichever
+   * colour is being replayed and whatever the user guesses this time. Throwing
+   * them away made "Same again" cost exactly as much as the first run.
+   *
+   * The queue is rebuilt regardless: it remembers every move number it has ever
+   * been handed, which is right within a session and wrong across one, since a
+   * changed guess at the same position is a genuinely new question.
+   */
+  const sameRecord: boolean = analysisGame === game && engine !== null;
+  queue?.stop();
+
+  if (!sameRecord) {
+    stopEngine();
+    analysis = emptyAnalysis(engineConfig());
+    analysisGame = game;
+  }
+
+  const handle: EngineHandle = engine ?? startEngine(game, {
+    onStatus: (status: EngineStatus): void => {
+      engineStatus = status;
+      showEngineProgress(false);
+    },
+  });
+  engine = handle;
+  queue = createQueue(handle.evaluator, {
+    onVerdict: (verdict: Verdict): void => {
+      if (analysis === null) return;
+      analysis = withVerdict(analysis, verdict);
+      showEngineProgress(true);
+    },
+    // A single failed prompt is not fatal. The summary reports what it has.
+    // Nothing new to show, but the count of outstanding work changed.
+    onError: (): void => showEngineProgress(false),
+  });
+}
+
+/**
+ * Show what the engine is doing, **without redrawing the screen**.
+ *
+ * This is the whole of the contract between analysis and the views, and it is
+ * narrow on purpose. Calling `draw()` here instead was wrong in three ways at
+ * once, all of them invisible until a download was running during a reveal:
+ *
+ * 1. `replaceChildren` rebuilds the board, so a stone-drop or a reveal beat in
+ *    flight restarted — the artifact that gave this away.
+ * 2. `drawSession` arms the auto-advance timer whenever the phase is `reveal`,
+ *    and `draw()`, unlike `show()`, does not clear the previous one. Progress
+ *    events arrive many times a second, so each reveal stacked a pile of
+ *    timers, every one of which fired. That skipped prompts.
+ * 3. On the summary it reset the review cursor, throwing a reader back to the
+ *    final position because a search happened to finish.
+ *
+ * PRD §3 promises analysis never blocks the reveal and design §5.1 says that
+ * promise is structural. It is structural in the session layer — `session.ts`
+ * has no reference to an evaluator — and this is the same promise kept in the
+ * view layer, where it had quietly been broken.
+ */
+function showEngineProgress(changedAnalysis: boolean): void {
+  if (screen.name !== 'session') return;
+  if (screen.session.phase === 'done') {
+    // The summary shows findings, not status, so a download tick changes
+    // nothing there — and `summarize` is a full recompute, not free.
+    if (changedAnalysis) {
+      refreshSummaryAnalysis(summarize(screen.session, analysis ?? undefined));
+    }
+    return;
+  }
+  updateEngineLine(engineLine(), engineStatus.state === 'failed');
+}
+
+/** Ask the engine about the position the user has just guessed at. */
+function enqueue(session: Session, moveNumber: number, played: number, guessed: number): void {
+  const move = session.game.moves.find((candidate) => candidate.number === moveNumber);
+  if (!queue || !move) return;
+
+  // Already answered, about this very guess. A replay that repeats a guess
+  // costs nothing; one that changes it pays for the change and no more.
+  const known: Verdict | null = analysis ? verdictFor(analysis, moveNumber) : null;
+  if (known && known.guessed?.point === guessed) return;
+
+  const prompt: Prompt = {
+    moveNumber,
+    position: move.before,
+    color: move.color,
+    played,
+    guess: guessed,
+  };
+  queue.submit(prompt);
+}
+
+/** One line about the engine for the session view, or null when scoring is off. */
+function engineLine(): string | null {
+  if (!engine) return null;
+  switch (engineStatus.state) {
+    case 'idle':
+      return 'Scoring: starting up.';
+    case 'downloading': {
+      const megabytes = (received: number): string => (received / 1_000_000).toFixed(0);
+      // The fraction can legitimately exceed 1 when a host inflates on the way
+      // in (`net-cache.ts`), so it is clamped here rather than at the source.
+      if (engineStatus.total === null) {
+        return `Scoring: downloading the engine, ${megabytes(engineStatus.received)} MB so far.`;
+      }
+      const percent: number = Math.min(
+        100, Math.round((engineStatus.received / engineStatus.total) * 100),
+      );
+      return `Scoring: downloading the engine, ${percent}%.`;
+    }
+    case 'warming':
+      return 'Scoring: starting the engine.';
+    case 'ready': {
+      const done: number = analysis ? verdictCount(analysis) : 0;
+      const waiting: number = queue?.pending() ?? 0;
+      if (waiting === 0) {
+        return done === 0 ? 'Scoring: ready.' : `Scoring: ${done} scored.`;
+      }
+      return `Scoring: ${done} scored, ${waiting} to go.`;
+    }
+    case 'failed':
+      return `Scoring is unavailable, so this session is scored on exact match only. ${engineStatus.reason}`;
+  }
+}
 
 function show(next: Screen): void {
   // Every transition cancels a pending advance. Without this, ending a session
@@ -167,6 +359,10 @@ function clearHash(): void {
 /** Back to the landing screen with no game, and no stale link in the bar. */
 function restart(): void {
   clearHash();
+  // Releasing the GPU on the way out matters more than it looks: the worker
+  // holds the whole network resident, and abandoning it would keep a phone's
+  // memory high-water mark up for a session nobody is playing.
+  stopEngine();
   show({ name: 'landing' });
 }
 
@@ -197,6 +393,7 @@ function looksLikeResult(text: string): boolean {
  */
 function startAt(game: Game, color: Color): Screen {
   promptedCursor = null;
+  startEngineFor(game);
   // Every session starts here, the dev harness's replays included, so this is
   // where the challenge link is guaranteed to be the game actually in play.
   useGame(game);
@@ -212,7 +409,7 @@ function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
     renderSummary(root, {
-      summary: summarize(session),
+      summary: summarize(session, analysis ?? undefined),
       session,
       onReplay: (color: Color): void => show(startAt(session.game, color)),
       onRestart: (): void => restart(),
@@ -230,12 +427,29 @@ function drawSession(session: Session): void {
 
   renderSession(root, {
     session,
-    onGuess: (index: number): void =>
-      show({ name: 'session', session: guess(session, index, elapsed()) }),
+    onGuess: (index: number): void => {
+      const next: Session = guess(session, index, elapsed());
+      // Enqueued from the guess rather than from the reveal, so the search
+      // starts at the earliest moment the guess is known. It cannot delay
+      // anything: `session` has no reference to the evaluator (design §5.1).
+      const made = next.lastGuess;
+      if (made) enqueue(session, made.moveNumber, made.actual, made.guess);
+      show({ name: 'session', session: next });
+    },
     onAdvance: next,
     onEnd: (): void => show({ name: 'session', session: endSession(session) }),
+    engine: engineLine(),
+    engineFailed: engineStatus.state === 'failed',
   });
 
+  // At most one auto-advance timer, and the invariant is kept here rather than
+  // only in `show()`. Any redraw of a reveal re-arms exactly one: leaving the
+  // old one running while arming another is how a reveal comes to advance
+  // twice, and it is not obvious from the call site that it could happen.
+  if (pending !== null) {
+    clearTimeout(pending);
+    pending = null;
+  }
   if (session.phase === 'reveal' && session.lastGuess) {
     pending = setTimeout(next, session.lastGuess.hit ? REVEAL_MS.hit : REVEAL_MS.miss);
   }
@@ -262,6 +476,13 @@ function draw(): void {
         onStart: (color: Color): void => show(startAt(game, color)),
         onBack: (): void => restart(),
         challengeLink: (): Promise<string> => challenge,
+        ai: aiWanted,
+        onToggleAi: (on: boolean): void => {
+          aiWanted = on;
+          draw();
+        },
+        aiUnavailable: unscorableReason(game),
+        aiDownloadBytes: DOWNLOAD_BYTES,
       });
       return;
     }

@@ -142,6 +142,13 @@ export interface SetupProps {
   readonly onBack: () => void;
   /** This record as a link, for handing the same game to someone else. */
   readonly challengeLink: () => Promise<string>;
+  /** Whether AI scoring is switched on. Off by default (PRD §4). */
+  readonly ai: boolean;
+  readonly onToggleAi: (on: boolean) => void;
+  /** Why this record cannot be scored, if it cannot. Disables the toggle. */
+  readonly aiUnavailable: string | null;
+  /** Roughly how large the one-time download is, in bytes. */
+  readonly aiDownloadBytes: number;
 }
 
 /**
@@ -165,6 +172,36 @@ function metaRows(meta: GameMeta): [string, string][] {
     .map(([label, value]) => [label, String(value)]);
 }
 
+/**
+ * The AI scoring toggle, with the price on it.
+ *
+ * Off by default and stated in megabytes, because that is the decision the user
+ * is actually making (PRD §4): a first visit should not silently pay for a
+ * 37 MB download to step through a professional record. The size is named
+ * before the download starts rather than discovered while it runs.
+ *
+ * When the record cannot be scored the toggle is disabled and the reason is
+ * given in the same place. Offering a control that fails afterwards would be
+ * worse than not offering it.
+ */
+function aiOption(props: SetupProps): HTMLElement {
+  const box = el('input', { type: 'checkbox', id: 'ai-toggle' }) as HTMLInputElement;
+  box.checked = props.ai && props.aiUnavailable === null;
+  box.disabled = props.aiUnavailable !== null;
+  box.addEventListener('change', () => props.onToggleAi(box.checked));
+
+  const megabytes: number = Math.round(props.aiDownloadBytes / 1_000_000);
+  const note: string =
+    props.aiUnavailable ??
+    `Adds a point-loss estimate to the review. One-time ${megabytes} MB download, ` +
+      'cached afterwards; the session starts straight away and scoring catches up.';
+
+  return el('div', { class: 'ai-option' }, [
+    el('label', { for: 'ai-toggle' }, [box, el('span', {}, ['Score my guesses against KataGo'])]),
+    el('p', { class: 'muted' }, [note]),
+  ]);
+}
+
 export function renderSetup(root: HTMLElement, props: SetupProps): void {
   const { game } = props;
   const rows: [string, string][] = metaRows(game.meta);
@@ -186,12 +223,15 @@ export function renderSetup(root: HTMLElement, props: SetupProps): void {
     }),
   ]);
 
+  const aiToggle: HTMLElement = aiOption(props);
+
   replace(
     root,
     el('h2', {}, [describe(game)]),
     el('p', { class: 'muted' }, [`${game.cols}×${game.rows} board, ${game.moves.length} moves`]),
     ...(rows.length > 0 ? [table] : []),
     ...notes,
+    aiToggle,
     el('p', {}, ['Which side do you want to predict?']),
     choices,
     el('div', { class: 'actions' }, [
@@ -208,6 +248,36 @@ export interface SessionProps {
   readonly onGuess: (index: number) => void;
   readonly onAdvance: () => void;
   readonly onEnd: () => void;
+  /** One line about the engine, or null when scoring is off. */
+  readonly engine?: string | null;
+  /** True while the engine is still failing, so the line can be styled as such. */
+  readonly engineFailed?: boolean;
+}
+
+/*
+ * Live regions: the two places the engine writes, and the only places in this
+ * file a caller may change without a re-render.
+ *
+ * Everything else here is a pure function of its props, redrawn wholesale on a
+ * state change, which is what keeps the views free of an incremental update
+ * path to get wrong. The engine is the one thing that does not fit that model:
+ * it reports many times a second, on a network timer, with no relation to
+ * anything the user did. Redrawing the screen for it was actively harmful —
+ * `replaceChildren` destroys the board mid-animation, restarts the reveal, and
+ * resets the review cursor a reader was using. So these two nodes are found by
+ * id and written in place, and analysis never redraws a screen.
+ */
+const ENGINE_LINE_ID = 'engine-status';
+const FINDINGS_ID = 'engine-findings';
+const SUBHEAD_ID = 'summary-subhead';
+
+/** Update the session's engine line, if a session is on screen. */
+export function updateEngineLine(text: string | null, failed: boolean): void {
+  const node: HTMLElement | null = document.getElementById(ENGINE_LINE_ID);
+  if (!node) return;
+  node.textContent = text ?? '';
+  node.className = failed ? 'note' : 'muted engine';
+  node.hidden = text === null;
 }
 
 function sessionMarkers(session: Session): Marker[] {
@@ -319,6 +389,19 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
     board,
     progressBar(session),
     el('p', { class: 'readout' }, [sessionStatus(session)]),
+    // Unobtrusive by construction: one muted line below the readout, never in
+    // the path between the board and the answer (PRD §4).
+    // Always present, so the engine has a node to write into without a
+    // re-render; hidden until there is something to say.
+    el(
+      'p',
+      {
+        id: ENGINE_LINE_ID,
+        class: props.engineFailed ? 'note' : 'muted engine',
+        ...(props.engine ? {} : { hidden: 'hidden' }),
+      },
+      [props.engine ?? ''],
+    ),
     el('div', { class: 'actions' }, controls),
   );
 }
@@ -517,12 +600,53 @@ function engineFindings(summary: Summary): HTMLElement | null {
     add(`Analysed ${ai.answered} of ${summary.rows.length} predictions.`, 'muted');
   }
 
-  if (notes.length === 0) return null;
+  /*
+   * The section stands even when there is nothing remarkable to say, because
+   * the line under it is not a finding — it is the attribution, and it is the
+   * only place on screen that says which engine produced the point loss the
+   * subhead is quoting. PRD §9 requires a score to carry its engine, and a
+   * clean game would otherwise show the figure with nothing behind it.
+   *
+   * Watching it happen live is what made this obvious: as the last verdicts
+   * landed, `answered` reached the number of predictions, the "analysed n of m"
+   * note dropped out, and the whole section vanished from under the reader.
+   */
+  const summarized: Child[] =
+    notes.length > 0
+      ? [el('ul', {}, notes)]
+      : [el('p', { class: 'muted' }, ['Nothing stood out: no blunders, no missed runs.'])];
+
   return el('section', { class: 'findings' }, [
     el('h3', {}, ['What the engine saw']),
-    el('ul', {}, notes),
+    ...summarized,
     el('p', { class: 'muted engine-note' }, [describeEngine(ai.config)]),
   ]);
+}
+
+/**
+ * Fill in the summary's engine figures as late verdicts land (design §5.3).
+ *
+ * Only the two nodes the analysis actually changes — the subhead's point-loss
+ * clause and the findings section. The review panel is deliberately untouched:
+ * its cursor is a closure that does not survive a re-render, and a reader
+ * walking a run of misses should not be thrown back to the final position
+ * because a search finished.
+ */
+export function refreshSummaryAnalysis(summary: Summary): void {
+  const subhead: HTMLElement | null = document.getElementById(SUBHEAD_ID);
+  if (subhead) {
+    subhead.replaceChildren(
+      `${summary.score.hits} of ${summary.score.guessed} correct`,
+      streakNote(summary),
+      timingNote(summary),
+      engineNote(summary),
+    );
+  }
+
+  const slot: HTMLElement | null = document.getElementById(FINDINGS_ID);
+  if (!slot) return;
+  const findings: HTMLElement | null = engineFindings(summary);
+  slot.replaceChildren(...(findings ? [findings] : []));
 }
 
 /**
@@ -879,7 +1003,7 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
     // in five is the headline number, and "of how many" is the qualifier.
     parts.push(
       el('p', { class: 'headline' }, [percent(result.rate)]),
-      el('p', { class: 'subhead' }, [
+      el('p', { id: SUBHEAD_ID, class: 'subhead' }, [
         `${result.hits} of ${result.guessed} correct`,
         streakNote(summary),
         timingNote(summary),
@@ -901,8 +1025,10 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
   parts.push(reviewPanel(props.session, summary));
 
   if (result.guessed > 0) {
+    // A wrapper rather than the section itself, so there is somewhere to write
+    // even when there are no findings yet.
     const findings: HTMLElement | null = engineFindings(summary);
-    if (findings) parts.push(findings);
+    parts.push(el('div', { id: FINDINGS_ID }, findings ? [findings] : []));
     parts.push(phaseBars(summary));
     if (tenukiAgreement(summary.tenuki).scored > 0) parts.push(tenukiMatrix(summary));
   }

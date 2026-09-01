@@ -2,6 +2,9 @@ TODO.md
 DONE.md
 node_modules/
 dist/
+# The network the dev server serves, put there by `npm run fetch:net:dev`.
+# 37 MB in git history is permanent and is paid by everyone who clones.
+src/public/
 experiments/nets/
 experiments/out/
 experiments/corpus/
