@@ -685,10 +685,11 @@ export function refreshSummaryAnalysis(summary: Summary): void {
   const strip: HTMLElement | null = document.getElementById(STRIP_ID);
   if (strip) {
     const scored: boolean = summary.ai !== null;
+    const found: Set<number> = engineMoves(summary);
     const cells: NodeListOf<HTMLElement> = strip.querySelectorAll('.cell');
     cells.forEach((cell, index) => {
       const row: SummaryRow | undefined = summary.rows[index];
-      if (row) dressCell(cell, row, scored);
+      if (row) dressCell(cell, row, scored, found.has(row.moveNumber));
     });
   }
 
@@ -855,7 +856,22 @@ function cellLabel(row: SummaryRow, scored: boolean): string {
  * Called both when the strip is built and as late verdicts land, so it may not
  * touch the cursor: `selected` belongs to the panel and survives a repaint.
  */
-function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
+/**
+ * The predictions that were the engine's own move, by move number.
+ *
+ * Not a field on `SummaryRow`, deliberately: it is a join between two verdict
+ * points that the exports already carry separately, and adding it to a row
+ * would change the shape of every saved result to save this one computation.
+ */
+function engineMoves(summary: Summary): Set<number> {
+  const found = new Set<number>();
+  for (const verdict of summary.verdicts ?? []) {
+    if (verdict.guessed?.point === verdict.best.point) found.add(verdict.moveNumber);
+  }
+  return found;
+}
+
+function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean, engine: boolean): void {
   const selected: boolean = cell.classList.contains('selected');
   const match: string = row.hit ? 'hit' : 'miss';
   const band: CostBand | null = scored ? costBand(row) : null;
@@ -869,6 +885,9 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
    */
   const shown: string =
     band === null || band === 'unscored' ? `${band ?? ''} ${match}`.trim() : band;
+  // Your move *was* the best move: worth seeing along the whole session, and
+  // it does not conflict with the bar, which still measures the comparison.
+  const found: string = engine ? ' engine' : '';
 
   /*
    * The bar's direction and height. Up is cheaper than the game, down is
@@ -884,7 +903,8 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
   cell.style.setProperty('--h', String(Math.min(1, Math.abs(delta ?? 0) / BLUNDER_LOSS)));
 
   const label: string = cellLabel(row, scored);
-  cell.className = `cell ${shown}${direction}${row.hit ? ' exact' : ''}${selected ? ' selected' : ''}`;
+  cell.className =
+    `cell ${shown}${found}${direction}${row.hit ? ' exact' : ''}${selected ? ' selected' : ''}`;
   cell.title = label;
   cell.setAttribute('aria-label', label);
 
@@ -892,6 +912,25 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
   // the click target and stays full height, while the bar is what the reader
   // measures.
   if (!cell.firstElementChild) cell.append(el('span', { class: 'bar' }));
+}
+
+/**
+ * What a move was worth against the one the game played, as the board writes
+ * it: "+0.8" for eight tenths better, "-1.2" for worse, "0" for a difference
+ * the product declines to resolve.
+ *
+ * The reference is the played move rather than the engine's best, because that
+ * is what the colour of the mark already measures, and what every bar in the
+ * strip below measures. Two scales on one board is one too many.
+ *
+ * Null when either side is missing: an unmarked ghost is honest about a
+ * comparison that cannot be made, where a "0" would not be.
+ */
+function gainOver(played: number | null, mine: number | null): string | null {
+  if (played === null || mine === null) return null;
+  const gain: number = played - mine;
+  if (Math.abs(gain) < BEAT_MARGIN) return '0';
+  return gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1);
 }
 
 /**
@@ -912,7 +951,9 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
  */
 function asChange(loss: number): string {
   const noise: boolean = loss < 0 ? loss > -BEAT_MARGIN : loss < 0.05;
-  return noise ? '0.0' : (-loss).toFixed(1);
+  // Plain "0", not "0.0": a decimal implies a measurement precise to a tenth,
+  // and this is the opposite — the figure the product declines to resolve.
+  return noise ? '0' : (-loss).toFixed(1);
 }
 
 /**
@@ -996,9 +1037,10 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
   /** The verdict the caption was last drawn from, so a redraw can be skipped. */
   let shown: Verdict | undefined;
 
+  const found: Set<number> = engineMoves(summary);
   const cells: HTMLElement[] = summary.rows.map((row, index) => {
     const cell: HTMLElement = el('button', { type: 'button' });
-    dressCell(cell, row, scored);
+    dressCell(cell, row, scored, found.has(row.moveNumber));
     // Clicking the cell already showing steps back out to the final position,
     // so the strip is a toggle and there is no dead end to click out of.
     cell.addEventListener('click', () => go(at === index ? null : index));
@@ -1050,18 +1092,49 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
      * cannot mean two things on the same board. Nothing is lost: a hit is the
      * position with a single ring on it, which is what a hit is.
      */
-    const marks: Marker[] = made.hit
-      ? [{ index: made.actual, kind: 'actual' }]
-      : [
-          { index: made.actual, kind: 'actual' },
-          { index: made.guess, kind: 'guess' },
-        ];
-
-    // The engine's move only when it is a third point. Drawing a triangle on
-    // top of the ring already there would be two marks saying one thing.
+    const live: Summary = current(summary);
     const best: number | undefined = verdict?.best.point;
+
+    /*
+     * Your move, in the colour of how it turned out: a ghost stone where you
+     * guessed a point nobody played, and a ring around the stone where you
+     * guessed the move the game made. Where it *was* the engine's move it
+     * takes the engine's blue, since the two are one move and how it compared
+     * with the game is the lesser fact.
+     *
+     * The number on it is measured against the move the game played, which is
+     * what the colour measures too — one question, asked once. It is not the
+     * loss against the engine's best: that is a second scale, and a mark
+     * carrying both leaves a reader no way to tell which they are reading. The
+     * losses are in the line under the board, where each is labelled.
+     */
+    const band: CostBand | 'engine' | null =
+      made.guess === best ? 'engine' : live.ai === null ? null : costBand(row);
+    const gained: string | null = gainOver(row.playedLoss, row.loss);
+    const yours: Marker = {
+      index: made.guess,
+      kind: 'guess',
+      ...(band === null ? {} : { band }),
+      ...(gained === null ? {} : { label: gained }),
+    };
+
+    /*
+     * The played move keeps its contrast ring even on a hit, where your own
+     * ring goes around the same stone. The two say different things — this is
+     * the move the game made, that is how yours compared — and they are
+     * concentric rather than competing.
+     */
+    const marks: Marker[] = [{ index: made.actual, kind: 'actual' }];
+    if (!made.hit || band !== null) marks.push(yours);
+
+    // The engine's move only when it is a third point: on the guess or on the
+    // played stone it is already the mark that is there.
+    
     if (best !== undefined && best !== made.actual && best !== made.guess) {
-      marks.push({ index: best, kind: 'best' });
+      // The engine's own move gave up nothing, so what it was worth against
+      // the game's move is simply what the game's move cost.
+      const better: string | null = gainOver(row.playedLoss, 0);
+      marks.push({ index: best, kind: 'best', ...(better === null ? {} : { label: better }) });
     }
 
     renderGoban(move.after, board, { showCoordinates: true, markers: marks });

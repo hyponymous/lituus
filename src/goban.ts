@@ -10,7 +10,7 @@
  * against the whole board and a cropped one would move under them as the game
  * spreads. See docs/reuse-notes.md.
  */
-import { BLACK, stoneAt, toIndex, toRowCol, type Position } from './rules.ts';
+import { BLACK, EMPTY, stoneAt, toIndex, toRowCol, type Position } from './rules.ts';
 
 const CELL = 30;
 const MARGIN = 34;
@@ -22,17 +22,45 @@ const BOARD_FILL = '#dcb483';
 const LINE = '#7a5230';
 const LABEL = '#5a3a1a';
 const BLACK_STONE = '#1a1a1a';
+/** Numbers inside a ghost stone, dark enough to read over any of its fills. */
+const LABEL_TEXT = '#241f18';
 const WHITE_STONE = '#f5f5f0';
 const WHITE_EDGE = '#888';
 
 /** Marker colors are chosen to read against wood, black, and white alike. */
-const GUESS_MARK = '#d94f4f';
 const HIT_MARK = '#1faa5f';
 /* Blue for the engine's move, drawn as a filled ghost stone rather than as a
    mark on the wood: that is AI Sensei's blue top move and OGS's suggestion
    circle, so a reader who has used either arrives already knowing it. */
 const BEST_MARK = '#1e6fd9';
-const BEST_FILL = 'rgba(30, 111, 217, 0.38)';
+
+/**
+ * A guess is drawn in the colour of how it turned out, matching the strip's
+ * bands below the board — one palette for one meaning, so a reader learns it
+ * once. The hues are the strip's, retuned for wood: the page's own values are
+ * chosen against a light or dark ground, and this one is neither.
+ *
+ * The undecided case is a plain grey ghost, which is what a guess looks like
+ * before an engine has an opinion about it — and what every guess looks like
+ * when there is no engine at all.
+ */
+const BAND_MARKS: Record<string, string> = {
+  better: '#2f8a55',
+  even: '#6f665a',
+  worse: '#c08a2e',
+  blunder: '#a5382a',
+  unscored: '#6f665a',
+  none: '#6f665a',
+  // A guess that *was* the engine's move takes the engine's blue: the two are
+  // one move, and colouring it by how it compared with the game would bury the
+  // better fact.
+  engine: BEST_MARK,
+};
+
+/** A ghost stone's fill: opaque enough to carry a number, not quite a stone. */
+function ghost(color: string): string {
+  return `${color}c4`;
+}
 
 /**
  * `last` marks the stone most recently played, as a board would by memory.
@@ -43,6 +71,18 @@ export type MarkerKind = 'actual' | 'guess' | 'hit' | 'last' | 'best';
 export interface Marker {
   readonly index: number;
   readonly kind: MarkerKind;
+  /**
+   * For a guess: how it compared with the move the game played, which decides
+   * its colour. Absent where nothing has judged it.
+   */
+  readonly band?: 'better' | 'even' | 'worse' | 'blunder' | 'unscored' | 'engine';
+  /**
+   * Points this move was worth against the one the game played, written inside
+   * the mark. The caller formats it: what the number means is the summary's
+   * business, and how it is drawn is this module's. Ignored on an occupied
+   * point, where there is a stone rather than a ghost to write on.
+   */
+  readonly label?: string;
 }
 
 export interface GobanOptions {
@@ -236,34 +276,62 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
     return;
   }
 
-  if (marker.kind === 'best') {
-    // Stone-sized, so it reads as the move that could have been played there
-    // rather than as an annotation about the point.
+  /*
+   * A move that was not played is a ghost stone, carrying what it was worth.
+   * This is the review tools' idiom and it says two things at once — where the
+   * move was, and what it cost — where a mark on the wood said only the first.
+   *
+   * The cross this replaces was a verdict: red, on the guess, whether or not
+   * the guess was any good. Once a guess can beat the game that reading is
+   * simply wrong, and the colour is better spent on the answer.
+   */
+  if (marker.kind === 'best' || marker.kind === 'guess') {
+    const color: string =
+      marker.kind === 'best' ? BEST_MARK : BAND_MARKS[marker.band ?? 'none'];
+
+    /*
+     * On an occupied point the ghost becomes a ring: the move is already there
+     * as a stone, and a translucent disc over it would only muddy the stone's
+     * own colour. That is what a hit looks like — your move and the game's
+     * move are one stone, ringed in the colour of how it turned out.
+     */
+    const played: boolean = stoneAt(pos, marker.index) !== EMPTY;
+
     svg.appendChild(
       svgEl('circle', {
         cx: x,
         cy: y,
-        r: CELL * 0.42,
-        fill: BEST_FILL,
-        stroke: BEST_MARK,
-        'stroke-width': 1.5,
-        class: 'mark mark-best',
+        r: CELL * STONE_SCALE,
+        fill: played ? 'none' : ghost(color),
+        stroke: color,
+        // Your move is the one you are looking for on the board, so it is the
+        // one drawn heavily. The engine's is an answer to it, and reads as one.
+        'stroke-width': marker.kind === 'guess' ? 3 : 1,
+        class: `mark mark-${marker.kind}`,
       }),
     );
-    return;
-  }
 
-  if (marker.kind === 'guess') {
-    // A cross, which reads clearly on an empty intersection where a ring
-    // could be mistaken for a stone.
-    const stroke = {
-      stroke: GUESS_MARK,
-      'stroke-width': 2.5,
-      'stroke-linecap': 'round',
-      class: 'mark mark-guess',
-    };
-    svg.appendChild(svgEl('line', { x1: x - size, y1: y - size, x2: x + size, y2: y + size, ...stroke }));
-    svg.appendChild(svgEl('line', { x1: x - size, y1: y + size, x2: x + size, y2: y - size, ...stroke }));
+    if (marker.label !== undefined && !played) {
+      /*
+       * As large as the label allows, which is the point of it: a number too
+       * small to read at a glance is a number the reader ignores. Long labels
+       * ("+10.5") step down rather than spilling the stone.
+       */
+      const scale: number = marker.label.length <= 2 ? 0.5 : marker.label.length <= 4 ? 0.42 : 0.34;
+      const text: SVGElement = svgEl('text', {
+        x,
+        y,
+        fill: LABEL_TEXT,
+        'font-size': CELL * scale,
+        'font-weight': 700,
+        'font-family': 'system-ui, sans-serif',
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central',
+        class: `mark mark-${marker.kind}-label`,
+      });
+      text.textContent = marker.label;
+      svg.appendChild(text);
+    }
     return;
   }
 

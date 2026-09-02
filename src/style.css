@@ -9,13 +9,16 @@
   --miss: #8f3a2f;
 
   /* The review strip's cost axis: how a prediction compared with the move the
-     game played. Cool for cheaper, warm for costlier, so the two directions
-     differ in hue *and* lightness rather than in red-against-green, which is
-     the one pair a colour-blind reader cannot separate. */
-  --cost-better: #2b6b74;
+     game played. Green up, amber and red down. It is the one pairing a
+     colour-blind reader cannot separate on hue alone, which is why the
+     direction of the bar carries the same information — the colours are the
+     redundant half here, not the load-bearing one. */
+  --cost-better: #2f8a55;
   --cost-even: #c9c0ae;
   --cost-worse: #c08a2e;
   --cost-blunder: #8f3a2f;
+  /* A prediction that was the engine's own move, in the engine's own blue. */
+  --cost-engine: #1e6fd9;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,10 +35,11 @@
     /* On a dark ground severity has to read as *more* intensity, so the
        blunder red is stronger than the amber rather than the paler --miss:
        a washed-out pink beside a bright amber says the wrong thing. */
-    --cost-better: #6fb6c0;
+    --cost-better: #62c188;
     --cost-even: #5a5349;
     --cost-worse: #d9a54e;
     --cost-blunder: #e2604a;
+    --cost-engine: #6aa6f0;
   }
 }
 
@@ -624,6 +628,12 @@ section .muted {
 
 .cell.blunder {
   --band: var(--cost-blunder);
+}
+
+/* Last, so it wins: whatever the comparison with the game says, a prediction
+   that was the engine's own move is that first. */
+.cell.engine {
+  --band: var(--cost-engine);
 }
 
 /* Absent, not neutral: a comparison that could not be made must not read as
