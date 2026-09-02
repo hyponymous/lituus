@@ -425,9 +425,13 @@ three bugs of which exactly one was visible:
 3. on the summary it reset the review cursor, throwing a reader back to the
    final position because a search happened to finish.
 
-So: two live regions — `#engine-status` and `#engine-findings` with
-`#summary-subhead` — found by id and written in place, and everything else
-stays a pure function of its props, redrawn wholesale. With a `MutationObserver`
+So: live regions found by id and written in place — `#engine-status` on the
+session, and on the summary `#summary-headline`, `#summary-subhead`,
+`#summary-phases`, `#engine-findings` and the strip's cells — with everything else a pure function of its props,
+redrawn wholesale. The same repaint serves a second caller: switching the
+baseline changes every figure on the screen without changing a verdict, and a
+re-render there would throw away the review's cursor exactly as a late search
+used to. With a `MutationObserver`
 watching an idle session through an entire download: 0 board rebuilds against
 2,555 engine-line updates, every one of which used to rebuild the board, and
 prompts that advance 1, 3, 5, 7, 9 — one per guess. The one-timer invariant
@@ -469,11 +473,47 @@ guess cost just its forced search.
 Mostly arithmetic over `Analysis`, and mostly not novel. The parts worth
 naming as design rather than implementation:
 
-- **Point loss is subordinate to hit rate**, per PRD §5, and that ordering
-  lives in the view, not in the data. `Summary` reports both; the summary
-  screen leads with the number the user can check by eye.
-- **Median and sum, not mean**, for the same reason `timing` already reports a
-  median: one catastrophe should not swallow the figure.
+- **Which figure leads is the view's decision, not the data's.** `Summary`
+  reports every figure either way; PRD §5 says which one a reader meets first,
+  and that has changed once already — the exact-match rate led until the
+  agreement counts gave it something to be read against.
+- **Totals, not medians, for anything compared with the played move.** On a hit
+  the guess *is* the played move, so with half the predictions matching both
+  medians are computed mostly over the same entries and their difference is
+  damped toward zero by construction; the median of the differences is 0.00
+  outright. Phase figures are means for the same reason. The median survives
+  where nothing is being subtracted — `timing`, and the session's own
+  `medianLoss` — because there one catastrophe should not swallow the figure.
+
+### 6.1 The sign convention, once, for every figure on screen
+
+A loss is **positive-is-worse everywhere inside the code**: it is a difference
+between two score leads, and that is the direction the arithmetic runs. Every
+figure the reader sees is **negated at the edge**, so that positive is good and
+a move that cost six points reads `-6.0`. This is what KataGo, OGS and AI
+Sensei all show, and a reader arrives already fluent in it.
+
+The rule, in full:
+
+- **A number on screen is signed and negated.** `signed()` in `summary.ts` is
+  the one place the flip happens (`asChange` is its per-move sibling on the
+  review board). Nothing else may print a raw `loss`.
+- **The unit is dropped from the figure** and named once nearby: `-6.0`, not
+  `-6.0 points`, with "points vs the engine's best" under the pair.
+- **Prose may carry the direction in a word instead**, and then the magnitude
+  is unsigned: "three points worse than the game", "5 guesses cost 8 points or
+  more". What prose may *not* do is mix the two — "White gave up -0.02" is a
+  double negative that means the opposite of how it reads.
+- **A figure that rounds to zero prints as `0`, not `-0.0`.** Negating zero
+  gives negative zero and `toFixed` renders it faithfully, so every perfect
+  move would otherwise be reported as having lost something.
+- **The sign is decided at the printed precision.** A figure that rounds to
+  zero must not be handed a minus sign it does not show, which is why `signed`
+  takes the number of digits it is about to print.
+
+The convention is easy to break in exactly one way: writing a new figure
+straight from `loss` because it happens to read plausibly. Both totals in the
+summary headline shipped that way for a day.
 - **The PV is a record, not yet a display.** The evaluator returns six plies,
   matching `experiments/katago/analyze.ts`, and they travel into the JSON export
   and the annotated SGF — which are read at leisure and can afford them. No

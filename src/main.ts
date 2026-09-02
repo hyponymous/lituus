@@ -16,7 +16,7 @@ import {
   type Guess,
   type Session,
 } from './session.ts';
-import { summarize } from './summary.ts';
+import { summarize, type Summary } from './summary.ts';
 import {
   emptyAnalysis,
   verdictCount,
@@ -217,11 +217,36 @@ function showEngineProgress(changedAnalysis: boolean): void {
     // The summary shows findings, not status, so a download tick changes
     // nothing there — and `summarize` is a full recompute, not free.
     if (changedAnalysis) {
-      refreshSummaryAnalysis(summarize(screen.session, analysis ?? undefined));
+      refreshSummaryAnalysis(summaryOf(screen.session));
     }
     return;
   }
   updateEngineLine(engineLine(), engineStatus.state === 'failed');
+}
+
+/**
+ * The summary as the screen should show it.
+ *
+ * Switching scoring off on the results page hides the engine's work; it does
+ * not throw it away. The store stays in memory, so switching back on is
+ * instant rather than a second four-minute pass over the same positions.
+ */
+function summaryOf(session: Session): Summary {
+  return summarize(session, aiWanted ? (analysis ?? undefined) : undefined);
+}
+
+/**
+ * Ask about every prediction that has no verdict yet.
+ *
+ * What scoring from the summary means: the session is over, so there is no
+ * reveal to stay out of the way of, and `enqueue` already declines to re-ask a
+ * question it has an answer to. Verdicts land through the same path a live
+ * session uses and the screen fills in as they arrive.
+ */
+function scoreEveryGap(session: Session): void {
+  for (const made of session.guesses) {
+    enqueue(session, made.moveNumber, made.actual, made.guess);
+  }
 }
 
 /** Ask the engine about the position the user has just guessed at. */
@@ -422,11 +447,24 @@ function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
     renderSummary(root, {
-      summary: summarize(session, analysis ?? undefined),
+      summary: summaryOf(session),
       session,
       onReplay: (color: Color): void => show(startAt(session.game, color)),
       onRestart: (): void => restart(),
       challengeLink: (): Promise<string> => challenge,
+      ai: aiWanted,
+      aiUnavailable: unscorableReason(session.game),
+      onToggleAi: (on: boolean): void => {
+        aiWanted = on;
+        setAiWanted(on);
+        if (on) {
+          startEngineFor(session.game);
+          scoreEveryGap(session);
+        }
+        // A full redraw, because the screen's shape changes: this is a choice
+        // the reader made, not a verdict arriving behind their back.
+        drawSession(session);
+      },
     });
     return;
   }

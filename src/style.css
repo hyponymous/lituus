@@ -414,11 +414,6 @@ button.primary {
 /* The cost sentence sits under the subhead's clauses rather than beside them:
    it is a sentence, and the clauses are labels. Same size and colour, so it
    reads as part of the same line of thought. */
-.cost-note {
-  display: block;
-  margin-top: 0.2rem;
-}
-
 /* Quiet by design. It answers "how much is left" for anyone who looks, and is
    not supposed to pull the eye away from the board while a prompt is open. */
 .progress {
@@ -463,6 +458,96 @@ h3 {
 }
 
 section .muted {
+  font-size: 0.9rem;
+}
+
+/* Two choices about how to read the screen, not about the session: they sit
+   above everything they change, and they are quiet, because neither is the
+   thing the reader came for. */
+.summary-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin: 0.75rem 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.summary-controls .toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.summary-controls input:disabled,
+.summary-controls .toggle:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.segments {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.segments-label {
+  margin-right: 0.15rem;
+}
+
+.segment {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.segment.on {
+  border-color: var(--accent);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* The headline is a pair, because one number cannot be read on its own: each
+   half is the other's reference. Position on a common baseline is the most
+   accurately decoded encoding there is, so the two figures share one. */
+.pair {
+  display: flex;
+  gap: 2.5rem;
+  align-items: baseline;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat .figure {
+  font-size: 2.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.stat .who {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.pair-unit {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.pair-aside {
+  margin: 0.15rem 0 0;
   font-size: 0.9rem;
 }
 
@@ -809,6 +894,7 @@ section .muted {
 }
 
 .bar-track {
+  position: relative;
   height: 10px;
   border-radius: 5px;
   background: var(--line);
@@ -818,6 +904,75 @@ section .muted {
 .bar-fill {
   height: 100%;
   background: var(--accent);
+}
+
+/* With an engine the phase bar is a diverging one, growing from the middle:
+   your predictions against the moves the game played over the same
+   predictions. Absolute points per phase would say mostly how expensive the
+   phase is — endgame moves are cheap, so the endgame would look strongest in
+   almost every session — and the difference cancels that out.
+
+   The ground is faint so the axis can be seen through it; the bar itself
+   carries the weight. */
+.bar-track.diverging {
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.bar-axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: 1px;
+  background: var(--line);
+}
+
+/* The bands are the strip's, read from the same tokens: green beat the game,
+   amber gave up more, and the even colour is the one that means "no claim". */
+.bar-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 2px;
+  background: var(--band);
+}
+
+.bar-edge.better {
+  --band: var(--cost-better);
+}
+
+.bar-edge.worse {
+  --band: var(--cost-worse);
+}
+
+/* Against the engine there is no edge to draw, so a phase is a pair of bars
+   from zero: yours over the game's, half height each. The game's is what makes
+   an absolute scale legible — alone, a short bar would only be saying that
+   endgame moves are cheap. */
+.bar-track.paired {
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+
+.bar-pair {
+  position: absolute;
+  left: 0;
+  height: 50%;
+  min-width: 2px;
+}
+
+.bar-pair.mine {
+  top: 0;
+  background: var(--accent);
+}
+
+.bar-pair.theirs {
+  bottom: 0;
+  background: color-mix(in srgb, var(--fg) 35%, transparent);
+}
+
+.bars-caption {
+  font-size: 0.85rem;
+  margin: -0.4rem 0 0.7rem;
 }
 
 .bar-value {

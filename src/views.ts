@@ -21,15 +21,19 @@ import {
   type Session,
 } from './session.ts';
 import {
+  costAgainst,
   costBand,
-  costDelta,
   duration,
   longestStreak,
   percent,
+  perPrediction,
+  signed,
   tenukiAgreement,
   toJSON,
   toText,
+  type Baseline,
   type CostBand,
+  type PhaseResult,
   type Streak,
   type Summary,
   type SummaryRow,
@@ -42,6 +46,7 @@ import {
   type Verdict,
 } from './analysis.ts';
 import { annotatedFilename, annotatedSgf } from './annotate.ts';
+import { baselineWanted, setBaselineWanted } from './settings.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
 type Attrs = Record<string, string>;
@@ -305,10 +310,28 @@ function current(fallback: Summary): Summary {
   return latestSummary ?? fallback;
 }
 
-/** Redraw the review's selected position, when a verdict for it arrives. */
-let refreshReview: (() => void) | null = null;
+/**
+ * Redraw the review's selected position, when a verdict for it arrives — or
+ * unconditionally, when what the board is measuring from has changed.
+ */
+let refreshReview: ((force?: boolean) => void) | null = null;
+
+/**
+ * What the summary is measuring from, for the whole screen at once.
+ *
+ * Module-level for the same reason `latestSummary` is: the parts that read it
+ * are repainted in place by free functions with no closure to reach into, and
+ * the alternative — threading it through every render path — would make the
+ * one thing the reader is switching the hardest thing in the file to follow.
+ * Set from the stored preference on every render, so it cannot outlive a
+ * screen with a stale value.
+ */
+let baseline: Baseline = 'played';
+
 const FINDINGS_ID = 'engine-findings';
+const PHASES_ID = 'summary-phases';
 const SUBHEAD_ID = 'summary-subhead';
+const HEADLINE_ID = 'summary-headline';
 
 /** Update the session's engine line, if a session is on screen. */
 export function updateEngineLine(text: string | null, failed: boolean): void {
@@ -483,6 +506,18 @@ export interface SummaryProps {
   /** This record as a link, for handing the same game to someone else. */
   readonly challengeLink: () => Promise<string>;
   readonly onRestart: () => void;
+  /**
+   * Whether scoring is on, and how to change it *from here*.
+   *
+   * The summary is where a reader finds out they wanted it: the session is
+   * over, the verdicts are the interesting part, and being told to play the
+   * game again to get them is the wrong answer. Turning it on asks about every
+   * prediction that has no verdict and fills the screen in as they land.
+   */
+  readonly ai: boolean;
+  readonly onToggleAi: (on: boolean) => void;
+  /** Why this session cannot be scored, if it cannot. Disables the toggle. */
+  readonly aiUnavailable: string | null;
 }
 
 /**
@@ -556,6 +591,25 @@ function tenukiMatrix(summary: Summary): HTMLElement {
 }
 
 /**
+ * The clauses under the headline.
+ *
+ * The exact-match count lives here whether or not an engine ran. Demoting it
+ * from the headline is the whole of the de-emphasis PRD §5 asks for: it is
+ * still the one number a reader can check by eye, and it should not have to be
+ * hunted for.
+ */
+function subheadNotes(summary: Summary): Child[] {
+  const clauses: string[] = [
+    `${summary.score.hits} of ${summary.score.guessed} matched`,
+    streakNote(summary),
+    timingNote(summary),
+  ];
+  // Joined here rather than by each clause carrying its own separator, so that
+  // dropping one does not leave a leading " · " behind.
+  return [clauses.filter((clause) => clause !== '').join(' · ')];
+}
+
+/**
  * The best run, with up to two more behind it. Subordinate to the rate on
  * purpose: a streak is the memorable part of a session, but it is a smaller
  * claim than the overall number and must not read as the score.
@@ -573,7 +627,8 @@ function streakNote(summary: Summary): string {
     others.length > 0
       ? `, then ${others.map((streak) => `${streak.length} at ${streak.firstMove}`).join(' and ')}`
       : '';
-  return ` · longest run ${best.length} (moves ${best.firstMove}–${best.lastMove})${rest}`;
+  const where = `(moves ${best.firstMove}–${best.lastMove})`;
+  return `longest run of ${best.length} matches ${where}${rest}`;
 }
 
 /**
@@ -586,65 +641,77 @@ function streakNote(summary: Summary): string {
  */
 function timingNote(summary: Summary): string {
   const { timing } = summary;
-  return timing === null ? '' : ` · ${duration(timing.medianMs)} a move`;
+  return timing === null ? '' : `${duration(timing.medianMs)} a move`;
 }
 
 /**
- * What the engine cost you, as a subordinate line under the hit rate.
+ * The session in one comparison, and what it is a comparison *with*.
  *
- * Subordinate deliberately, and not because engine numbers are unimportant: a
- * hit rate is a number the reader can check by eye and a point loss is not, so
- * exact match keeps the headline and this sits beneath it
+ * A bare figure is not a finding. "52%" says nothing without knowing how often
+ * the played move can be found at all, and "57.0 points" says nothing without
+ * knowing what the game's own moves cost over the same predictions — so the
+ * headline is a pair, each half the other's reference, with the unit and the
+ * number of predictions written under it.
+ *
+ * Which half is emphasised is the baseline's to say. Against the engine both
+ * sides are distances from perfect play and the pair leads. Against the played
+ * move the player is zero by definition, so the difference leads and the pair
+ * drops to the line beneath.
+ *
+ * With no engine the old headline comes back whole: the exact-match rate is
+ * the only signal a session has, and it is still one a reader can check by eye
  * (`docs/prd-ai-scoring.md` §5).
- *
- * Against the moves actually played, though, rather than alone. A total on its
- * own is a number with nothing to weigh it against — 168 points sounds ruinous
- * until you learn the game gave up 255 over the same moves — and what a reader
- * came to find out is whether they read the board better than the player did.
- * The median leads, for the same reason it does for timing: one catastrophe
- * should not swallow the figure. The difference in the totals follows it,
- * because that is the game's own currency and the more motivating number.
  */
-function engineNote(summary: Summary): Child {
-  const { ai } = summary;
-  if (!ai || ai.graded === 0) return '';
+function headline(summary: Summary): Child[] {
+  const { score, ai } = summary;
+  if (score.guessed === 0) return [el('p', { class: 'headline' }, ['No moves predicted.'])];
+
+  const against: Comparison | null = ai?.against ?? null;
+  if (!ai || against === null) return [el('p', { class: 'headline' }, [percent(score.rate)])];
+
+  const them: string = colorName(summary.color);
+  const across = `across ${against.moves} ${against.moves === 1 ? 'prediction' : 'predictions'}`;
+  // Negated, like every figure on this screen: these are losses, and a loss
+  // reads negative to a reader (design §6.1).
+  const pair: HTMLElement = el('div', { class: 'pair' }, [
+    stat(signed(against.yourLoss, 1), 'you'),
+    stat(signed(against.playedLoss, 1), them),
+  ]);
 
   /*
-   * A sentence on its own line, not a fourth clause hung off the subhead with
-   * a dot. The other clauses are labels a reader can decode from the number
-   * alone — "3.4s a move" needs no help — and this one is not: "0.3 points a
-   * move" says nothing about whose points, over what, or whether 0.3 is good.
-   * Numbers a reader cannot check by eye have to be told what they are.
+   * "Points vs the engine's best" rather than "points given up": a total can
+   * come out NEGATIVE — a strong player's moves beat a 50-visit search's own
+   * best often enough to show, and the fixture's -6.8 is exactly that — and
+   * "gave up -6.8 points" is a sentence that reads as a bug. Naming the
+   * comparison instead of the direction is true whichever way the sign falls.
    */
-  const { against } = ai;
-  const sentence: string =
-    against === null
-      ? `You gave up a median ${ai.medianLoss.toFixed(1)} points a move, ` +
-        `${ai.totalLoss.toFixed(0)} in all.`
-      : costSentence(against, summary.color);
-  return el('span', { class: 'cost-note' }, [sentence]);
+  const versus = `points vs the engine's best`;
+  if (baseline === 'engine') {
+    return [pair, el('p', { class: 'pair-unit' }, [`${versus}, ${across}`])];
+  }
+
+  /*
+   * Signed, and the words do not repeat the sign. "+86.5 points better than
+   * Black played" says the same thing twice; the sign is the direction and
+   * the phrase is the comparison. It also means a level session needs no
+   * special case: "+0.4 points vs Black's play" claims nothing.
+   */
+  const net: number = against.playedLoss - against.yourLoss;
+  return [
+    el('p', { class: 'headline' }, [signed(-net, 1)]),
+    el('p', { class: 'pair-unit' }, [`points vs ${them}'s play, ${across}`]),
+    el('p', { class: 'pair-aside muted' }, [
+      `${versus}: you ${signed(against.yourLoss, 1)}, ${them} ${signed(against.playedLoss, 1)}.`,
+    ]),
+  ];
 }
 
-/**
- * Your median against theirs, then the difference in the totals — signed so
- * that the good direction is the positive one, which is the only way round a
- * reader takes in at a glance.
- */
-function costSentence(against: Comparison, color: Color): string {
-  const net: number = against.playedLoss - against.yourLoss;
-  // Named by colour rather than as "the moves actually played": the reader
-  // knows which colour they sat behind, and the record is theirs, not an
-  // abstraction.
-  const lead: string =
-    `You gave up a median ${against.yourMedian.toFixed(1)} points a move, ` +
-    `against ${against.playedMedian.toFixed(1)} for ${color === BLACK ? 'Black' : 'White'}`;
-  // Under a point either way is a tie, not a result: the same noise floor the
-  // bands use, applied to the session rather than to one move.
-  if (Math.abs(net) < 1) return `${lead} — level over the session.`;
-  return (
-    `${lead} — ${Math.abs(net).toFixed(0)} points ` +
-    `${net > 0 ? 'fewer' : 'more'} over the session.`
-  );
+/** One half of the headline pair: the figure, and who it belongs to. */
+function stat(figure: string, who: string): HTMLElement {
+  return el('div', { class: 'stat' }, [
+    el('span', { class: 'figure' }, [figure]),
+    el('span', { class: 'who' }, [who]),
+  ]);
 }
 
 /**
@@ -733,24 +800,18 @@ function engineFindings(summary: Summary): HTMLElement | null {
 /**
  * Fill in the summary's engine figures as late verdicts land (design §5.3).
  *
- * Three live regions, and no re-render: the subhead's point-loss clause, the
- * findings section, and the strip's cells, which are repainted in place. The
+ * Every derived region, and no re-render: the headline, the subhead, the phase
+ * bars, the findings section, and the strip's cells, which are repainted in
+ * place. The
  * review's cursor is a closure over those cells, so a reader walking a run of
  * misses is not thrown back to the final position because a search finished.
  * Nothing else on the screen is touched.
  */
-export function refreshSummaryAnalysis(summary: Summary): void {
+export function refreshSummaryAnalysis(summary: Summary, remeasured = false): void {
   latestSummary = summary;
 
-  const subhead: HTMLElement | null = document.getElementById(SUBHEAD_ID);
-  if (subhead) {
-    subhead.replaceChildren(
-      `${summary.score.hits} of ${summary.score.guessed} matched`,
-      streakNote(summary),
-      timingNote(summary),
-      engineNote(summary),
-    );
-  }
+  document.getElementById(SUBHEAD_ID)?.replaceChildren(...subheadNotes(summary));
+  document.getElementById(HEADLINE_ID)?.replaceChildren(...headline(summary));
 
   /*
    * The cells are repainted in place rather than rebuilt. The review's cursor
@@ -771,7 +832,16 @@ export function refreshSummaryAnalysis(summary: Summary): void {
 
   // Only if the verdict that just landed is the one being looked at; see
   // `refreshReview`.
-  refreshReview?.();
+  refreshReview?.(remeasured);
+
+  /*
+   * The phase bars are rebuilt rather than repainted, which is safe where the
+   * strip's cells were not: nothing holds a reference to them, and the section
+   * keeps its shape across the update — an engine session draws points-shaped
+   * rows from the first paint, filling in as verdicts land.
+   */
+  const phases: HTMLElement | null = document.getElementById(PHASES_ID);
+  phases?.replaceChildren(...phaseSection(summary));
 
   const slot: HTMLElement | null = document.getElementById(FINDINGS_ID);
   if (!slot) return;
@@ -780,25 +850,193 @@ export function refreshSummaryAnalysis(summary: Summary): void {
 }
 
 /**
- * Phase rates as bars. Three numbers are exactly the case where a table makes
- * the reader do the comparing: the point is which phase is weakest, and a bar
- * answers that before the labels are read. The counts stay, since a rate over
- * four guesses and one over forty are not the same claim.
+ * The widest figure the phase bars have to draw against.
+ *
+ * Self-scaled to the session rather than fixed, because there is no natural
+ * ceiling here and the real numbers are small: a fixed scale would have to be
+ * `BLUNDER_LOSS`, against which every phase would be a stub. So the bars
+ * compare phases *within* a session, and the numbers beside them are what
+ * compares one session with another.
+ *
+ * Floored at `BEAT_MARGIN`, so a session where every phase came out level does
+ * not draw a full-width bar out of a tenth of a point — and does it with the
+ * noise floor the rest of the summary already uses rather than a number
+ * invented here.
  */
-function phaseBars(summary: Summary): HTMLElement {
+function phaseCeiling(summary: Summary): number {
+  let widest: number = BEAT_MARGIN;
+  for (const phase of summary.phases) {
+    const per = perPrediction(phase.cost);
+    if (per === null) continue;
+    widest =
+      baseline === 'engine'
+        ? Math.max(widest, per.yours, per.played)
+        : Math.max(widest, Math.abs(per.yours - per.played));
+  }
+  return widest;
+}
+
+/**
+ * A phase's edge as a bar growing from the middle of the track: right when
+ * your average was better than the game's own moves, left when it was worse.
+ *
+ * ALWAYS THE LENGTH THE NUMBER SAYS. The strip's rule — anything inside
+ * `BEAT_MARGIN` is a stub on the axis, taking no side — was applied here first
+ * and it made a liar of the chart: a phase reading "+0.28" beside a bar of no
+ * length is not being cautious, it is showing a value it did not compute. That
+ * rule belongs where it came from, on a single move's estimate, where half a
+ * point really is the engine's noise floor. A phase average is a different
+ * quantity and gets drawn as measured.
+ */
+function edgeBar(delta: number, ceiling: number): HTMLElement {
+  const reach: number = (Math.abs(delta) / ceiling) * 50;
+  const better: boolean = delta < 0;
+  return el('div', {
+    class: `bar-edge ${better ? 'better' : 'worse'}`,
+    style: `${better ? 'left' : 'right'}:50%;width:${reach}%`,
+  });
+}
+
+/**
+ * Against the engine there is no edge to draw — nothing beats its own move —
+ * so the phase becomes a pair of bars from zero, yours over the game's.
+ *
+ * The game's bar is what makes the reader's absolute scale legible. On its
+ * own, points per prediction says mostly how expensive the phase is: endgame
+ * moves are cheap, so a lone bar would report every reader as strongest in the
+ * endgame. Beside the same phase's played moves, a short bar means something.
+ */
+function pairedBars(yours: number, played: number, ceiling: number): HTMLElement[] {
+  const width = (points: number): number => Math.max(0, Math.min(1, points / ceiling)) * 100;
+  return [
+    el('div', { class: 'bar-pair mine', style: `width:${width(yours)}%` }),
+    el('div', { class: 'bar-pair theirs', style: `width:${width(played)}%` }),
+  ];
+}
+
+/**
+ * What a phase row says in full, for the tooltip: both sides in the screen's
+ * own convention, and the exact-match rate the bar gave its place up to.
+ *
+ * Not "you gave up 0.29, White -0.02": a verb that carries the direction and a
+ * figure that also carries it make a double negative on the second half, where
+ * White's *gain* would read as a loss (design §6.1).
+ */
+function phaseLabel(
+  phase: PhaseResult,
+  rate: string,
+  per: { readonly yours: number; readonly played: number },
+  them: string,
+): string {
+  const moves: number = phase.cost?.moves ?? 0;
+  return (
+    `${phase.phase}: ${rate}. Average points per prediction vs the engine's best: ` +
+    `you ${signed(per.yours, 2)}, ${them} ${signed(per.played, 2)}, ` +
+    `across the ${moves} both could be scored.`
+  );
+}
+
+/**
+ * One phase as a bar, in whichever unit the session has.
+ *
+ * The row keeps the same three slots however it is drawn — label, track, value
+ * — so an engine session and a bare one are the same shape, and a phase whose
+ * verdicts have not landed yet holds its place rather than appearing later.
+ *
+ * The figures are MEANS. Both medians are computed mostly over the same
+ * entries — on a hit your move is the played move — so with half the
+ * predictions matching, their difference is damped toward zero by
+ * construction. `perPrediction` records the argument in full.
+ */
+function phaseBar(phase: PhaseResult, ceiling: number | null, color: Color): HTMLElement {
+  const rate: string =
+    phase.guessed > 0 ? `${percent(phase.rate)} (${phase.hits}/${phase.guessed})` : 'not reached';
+  const per = perPrediction(phase.cost);
+
+  const track: Child[] = [];
+  let value: string;
+  let label: string;
+
+  if (ceiling === null) {
+    value = rate;
+    label = `${phase.phase}: ${rate}`;
+    track.push(el('div', { class: 'bar-fill', style: `width:${phase.rate * 100}%` }));
+  } else if (per === null || phase.cost === null) {
+    value = 'not scored';
+    label = `${phase.phase}: ${rate}, and nothing the engine could score on both sides`;
+    if (baseline === 'played') track.push(el('div', { class: 'bar-axis' }));
+  } else if (baseline === 'engine') {
+    value = `${signed(per.yours, 2)} · ${signed(per.played, 2)}`;
+    label = phaseLabel(phase, rate, per, colorName(color));
+    track.push(...pairedBars(per.yours, per.played, ceiling));
+  } else {
+    /*
+     * Two decimals, and not `asChange`: that function calls anything inside
+     * `BEAT_MARGIN` noise, which is right for one move's estimate and wrong
+     * for a figure derived from a whole phase. `signed` handles the sign, so
+     * an edge in your favour reads "+0.43" like every other good number here.
+     */
+    const delta: number = per.yours - per.played;
+    value = signed(delta, 2);
+    label = phaseLabel(phase, rate, per, colorName(color));
+    track.push(el('div', { class: 'bar-axis' }), edgeBar(delta, ceiling));
+  }
+
+  // The tooltip goes on the cells, not the row: `.bar-row` is `display:
+  // contents`, so it generates no box of its own to carry one. It is where the
+  // exact-match rate lives once the bar is drawn in points.
+  const shape: string =
+    ceiling === null ? '' : baseline === 'engine' ? ' paired' : ' diverging';
+  return el('div', { class: 'bar-row' }, [
+    el('span', { class: 'bar-label', title: label }, [phase.phase]),
+    el('div', { class: `bar-track${shape}`, title: label }, track),
+    el('span', { class: 'bar-value', title: label }, [value]),
+  ]);
+}
+
+/**
+ * Phase results as bars. Three numbers are exactly the case where a table makes
+ * the reader do the comparing: the point is which phase is weakest, and a bar
+ * answers that before the labels are read.
+ *
+ * What "weakest" means is the baseline's to decide, and the heading says which
+ * question is being answered rather than labelling the axis. The exact-match
+ * rate is not dropped, it moves to the row's tooltip, the text export and the
+ * JSON — it stays the number a reader can check by eye, and it is not the
+ * phase story.
+ *
+ * The unit is chosen by whether an engine ran, not by whether its numbers have
+ * arrived: a section that switched units halfway through a read would be worse
+ * than either version of it.
+ */
+function phaseSection(summary: Summary): Child[] {
+  const ceiling: number | null = summary.ai === null ? null : phaseCeiling(summary);
   const rows: HTMLElement[] = summary.phases.map((phase) =>
-    el('div', { class: 'bar-row' }, [
-      el('span', { class: 'bar-label' }, [phase.phase]),
-      el('div', { class: 'bar-track' }, [
-        el('div', { class: 'bar-fill', style: `width:${phase.rate * 100}%` }),
-      ]),
-      el('span', { class: 'bar-value' }, [
-        phase.guessed > 0 ? `${percent(phase.rate)} (${phase.hits}/${phase.guessed})` : 'not reached',
-      ]),
-    ]),
+    phaseBar(phase, ceiling, summary.color),
   );
 
-  return el('section', {}, [el('h3', {}, ['By phase']), el('div', { class: 'bars' }, rows)]);
+  /*
+   * What is being averaged, not what was done. "Your predictions against
+   * Black's moves" describes an activity; the bar is the engine's score for
+   * your move set against its score for Black's, averaged over the
+   * predictions — which is a different sentence and the true one.
+   */
+  const them: string = colorName(summary.color);
+  const caption: string =
+    baseline === 'engine'
+      ? `Average points per prediction vs the engine's best, yours over ${them}'s.`
+      : `Your average score against ${them}'s, per prediction, as the engine ` +
+        'scores them. Right of the line is better.';
+
+  return [
+    el('h3', {}, ['By phase']),
+    ...(ceiling === null ? [] : [el('p', { class: 'muted bars-caption' }, [caption])]),
+    el('div', { class: 'bars' }, rows),
+  ];
+}
+
+function phaseBars(summary: Summary): HTMLElement {
+  return el('section', { id: PHASES_ID }, phaseSection(summary));
 }
 
 /**
@@ -914,16 +1152,18 @@ function cellLabel(row: SummaryRow, scored: boolean): string {
   const where = `Move ${row.moveNumber}: you ${row.guess}, played ${row.actual}`;
   if (!scored) return where;
 
-  const { loss, playedLoss } = row;
-  if (loss === null || playedLoss === null) return `${where} — not scored`;
+  const delta: number | null = costAgainst(row, baseline);
+  if (delta === null) return `${where} — not scored`;
 
-  const delta: number = loss - playedLoss;
-  const band: CostBand = costBand(row);
-  if (band === 'better') return `${where} — ${(-delta).toFixed(1)} points better than the game`;
+  const against: string = baseline === 'engine' ? 'the engine' : 'the game';
+  const band: CostBand = costBand(row, baseline);
+  if (band === 'better') return `${where} — ${(-delta).toFixed(1)} points better than ${against}`;
   if (band === 'even') {
-    return row.hit ? `${where} — the same move` : `${where} — the same cost, within half a point`;
+    return row.hit && baseline === 'played'
+      ? `${where} — the same move`
+      : `${where} — the same cost, within half a point`;
   }
-  return `${where} — ${delta.toFixed(1)} points worse than the game`;
+  return `${where} — ${delta.toFixed(1)} points worse than ${against}`;
 }
 
 /**
@@ -950,7 +1190,7 @@ function engineMoves(summary: Summary): Set<number> {
 function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean, engine: boolean): void {
   const selected: boolean = cell.classList.contains('selected');
   const match: string = row.hit ? 'hit' : 'miss';
-  const band: CostBand | null = scored ? costBand(row) : null;
+  const band: CostBand | null = scored ? costBand(row, baseline) : null;
 
   /*
    * A cell the engine cannot speak for still shows hit or miss, faintly.
@@ -973,7 +1213,7 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean, engine: 
    * they are drawn as a stub on the axis, since half a point of difference is
    * not a claim about which move was better.
    */
-  const delta: number | null = band === null ? null : costDelta(row);
+  const delta: number | null = band === null ? null : costAgainst(row, baseline);
   const direction: string =
     delta === null || band === 'even' ? '' : delta < 0 ? ' up' : ' down';
   cell.style.setProperty('--h', String(Math.min(1, Math.abs(delta ?? 0) / BLUNDER_LOSS)));
@@ -1188,15 +1428,15 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
      * takes the engine's blue, since the two are one move and how it compared
      * with the game is the lesser fact.
      *
-     * The number on it is measured against the move the game played, which is
-     * what the colour measures too — one question, asked once. It is not the
-     * loss against the engine's best: that is a second scale, and a mark
-     * carrying both leaves a reader no way to tell which they are reading. The
-     * losses are in the line under the board, where each is labelled.
+     * The number on it is measured from the baseline the reader chose, which
+     * is what the colour measures too — one question, asked once. A mark
+     * carrying both scales at once would leave no way to tell which is being
+     * read; the two losses are in the line under the board, each labelled.
      */
     const band: CostBand | 'engine' | null =
-      made.guess === best ? 'engine' : live.ai === null ? null : costBand(row);
-    const gained: string | null = gainOver(row.playedLoss, row.loss);
+      made.guess === best ? 'engine' : live.ai === null ? null : costBand(row, baseline);
+    const gained: string | null =
+      baseline === 'engine' ? gainOver(0, row.loss) : gainOver(row.playedLoss, row.loss);
     // A pass has no place on the board, so it carries no mark. What it cost is
     // still in the line under the board, where it is labelled.
     const yours: Marker | null = made.guess === null ? null : {
@@ -1212,17 +1452,27 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
      * the move the game made, that is how yours compared — and they are
      * concentric rather than competing.
      */
+    const played: string | null = baseline === 'engine' ? gainOver(0, row.playedLoss) : null;
     const marks: Marker[] =
-      made.actual === null ? [] : [{ index: made.actual, kind: 'actual' }];
+      made.actual === null
+        ? []
+        : [
+            {
+              index: made.actual,
+              kind: 'actual',
+              ...(played === null ? {} : { label: played }),
+            },
+          ];
     if (yours && (!made.hit || band !== null)) marks.push(yours);
 
     // The engine's move only when it is a third point: on the guess or on the
     // played stone it is already the mark that is there.
     
     if (best !== undefined && best !== made.actual && best !== made.guess) {
-      // The engine's own move gave up nothing, so what it was worth against
-      // the game's move is simply what the game's move cost.
-      const better: string | null = gainOver(row.playedLoss, 0);
+      // The engine's own move gave up nothing, so against the game's move it
+      // is worth simply what the game's move cost — and against itself, zero.
+      const better: string | null =
+        baseline === 'engine' ? '0' : gainOver(row.playedLoss, 0);
       marks.push({ index: best, kind: 'best', ...(better === null ? {} : { label: better }) });
     }
 
@@ -1283,7 +1533,7 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
    * a heal, restarting the marker animations under a reader who is not looking
    * at the move that changed.
    */
-  refreshReview = (): void => {
+  refreshReview = (force = false): void => {
     if (!panel.isConnected) {
       refreshReview = null;
       return;
@@ -1291,7 +1541,9 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     if (at === null) return;
     const row: SummaryRow | undefined = current(summary).rows[at];
     if (!row) return;
-    if (verdictsNow().get(row.moveNumber) === shown) return;
+    // A changed baseline changes every mark on the board without changing a
+    // single verdict, so it says so rather than being caught by the guard.
+    if (!force && verdictsNow().get(row.moveNumber) === shown) return;
     drawBoard();
   };
 
@@ -1385,30 +1637,97 @@ function exportActions(props: SummaryProps): HTMLElement {
   ]);
 }
 
+/**
+ * The two choices a reader can make about the screen they are looking at.
+ *
+ * Both are about *reading* the session rather than about the session itself,
+ * so both live at the top of it and both are remembered (`settings.ts`). The
+ * baseline appears only where there is an engine to be a baseline against.
+ */
+function summaryControls(props: SummaryProps): HTMLElement {
+  const { summary } = props;
+  const controls: Child[] = [];
+
+  const box = el('input', { type: 'checkbox', id: 'summary-ai' }) as HTMLInputElement;
+  box.checked = props.ai && props.aiUnavailable === null;
+  box.disabled = props.aiUnavailable !== null;
+  box.addEventListener('change', () => props.onToggleAi(box.checked));
+  controls.push(
+    el('label', { class: 'toggle', for: 'summary-ai', title: props.aiUnavailable ?? '' }, [
+      box,
+      props.aiUnavailable === null ? 'score with the engine' : `no engine: ${props.aiUnavailable}`,
+    ]),
+  );
+
+  if (summary.ai !== null) {
+    const choose = (which: Baseline, label: string): HTMLElement => {
+      const on: boolean = baseline === which;
+      const node: HTMLElement = el(
+        'button',
+        {
+          type: 'button',
+          class: `segment${on ? ' on' : ''}`,
+          'data-baseline': which,
+          'aria-pressed': on ? 'true' : 'false',
+        },
+        [label],
+      );
+      node.addEventListener('click', () => setBaseline(which));
+      return node;
+    };
+    controls.push(
+      el('div', { class: 'segments' }, [
+        el('span', { class: 'segments-label' }, ['measured against']),
+        choose('played', `${colorName(summary.color)}'s move`),
+        choose('engine', 'the engine'),
+      ]),
+    );
+  }
+
+  return el('div', { class: 'summary-controls' }, controls);
+}
+
+/**
+ * Change what the screen measures from, without rebuilding it.
+ *
+ * A re-render would be simpler and would throw away the review's cursor, which
+ * is a closure over the strip's cells — flipping the baseline while reading
+ * move 47 would land the reader back at the final position. So this repaints
+ * the same regions a late verdict does, which is a path already proven by
+ * every heal.
+ */
+function setBaseline(next: Baseline): void {
+  if (next === baseline) return;
+  baseline = next;
+  setBaselineWanted(next);
+
+  document.querySelectorAll('.segments .segment').forEach((node) => {
+    const on: boolean = node.getAttribute('data-baseline') === next;
+    node.classList.toggle('on', on);
+    node.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+
+  // The same repaint a late verdict does; see `refreshSummaryAnalysis`. The
+  // flag is what tells the review that the board changed without its verdict
+  // changing, which is a thing only a baseline can do.
+  if (latestSummary) refreshSummaryAnalysis(latestSummary, true);
+}
+
 export function renderSummary(root: HTMLElement, props: SummaryProps): void {
   const { summary } = props;
   const result: Score = summary.score;
   latestSummary = summary;
+  baseline = baselineWanted();
 
   const parts: Child[] = [
     el('h2', {}, ['Session summary']),
     el('p', { class: 'muted' }, [`${summary.game} · played as ${colorName(summary.color)}`]),
+    summaryControls(props),
+    el('div', { id: HEADLINE_ID }, headline(summary)),
   ];
 
   if (result.guessed > 0) {
-    // The rate leads; the raw counts and the best run hang off it. Getting one
-    // in five is the headline number, and "of how many" is the qualifier.
-    parts.push(
-      el('p', { class: 'headline' }, [percent(result.rate)]),
-      el('p', { id: SUBHEAD_ID, class: 'subhead' }, [
-        `${result.hits} of ${result.guessed} matched`,
-        streakNote(summary),
-        timingNote(summary),
-        engineNote(summary),
-      ]),
-    );
-  } else {
-    parts.push(el('p', { class: 'headline' }, ['No moves predicted.']));
+    parts.push(el('p', { id: SUBHEAD_ID, class: 'subhead' }, subheadNotes(summary)));
   }
 
   if (summary.abandoned) {

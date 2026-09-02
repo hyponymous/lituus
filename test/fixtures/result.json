@@ -62,19 +62,22 @@
       "phase": "opening",
       "predicted": 25,
       "hits": 15,
-      "rate": 0.6
+      "rate": 0.6,
+      "cost": null
     },
     {
       "phase": "middle",
       "predicted": 50,
       "hits": 30,
-      "rate": 0.6
+      "rate": 0.6,
+      "cost": null
     },
     {
       "phase": "endgame",
       "predicted": 25,
       "hits": 7,
-      "rate": 0.28
+      "rate": 0.28,
+      "cost": null
     }
   ],
   "engine": null,

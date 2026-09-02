@@ -11,7 +11,10 @@
  * not worth failing a load over, so a broken store reads as "no preference".
  */
 
+import type { Baseline } from './summary.ts';
+
 const AI_WANTED = 'lituus.ai-wanted';
+const BASELINE = 'lituus.baseline';
 
 export function aiWanted(): boolean {
   try {
@@ -24,6 +27,28 @@ export function aiWanted(): boolean {
 export function setAiWanted(on: boolean): void {
   try {
     localStorage.setItem(AI_WANTED, String(on));
+  } catch {
+    /* blocked or full; the setting simply does not survive the tab */
+  }
+}
+
+/**
+ * What the summary measures from: the move the game played, or the engine's
+ * own. A preference like any other — it is a way of reading the same session,
+ * not a fact about it, and re-choosing it every visit would grate exactly as
+ * re-ticking the scoring box does.
+ */
+export function baselineWanted(): Baseline {
+  try {
+    return localStorage.getItem(BASELINE) === 'engine' ? 'engine' : 'played';
+  } catch {
+    return 'played';
+  }
+}
+
+export function setBaselineWanted(baseline: Baseline): void {
+  try {
+    localStorage.setItem(BASELINE, baseline);
   } catch {
     /* blocked or full; the setting simply does not survive the tab */
   }

@@ -489,6 +489,28 @@ export interface Comparison {
   readonly playedMedian: number;
 }
 
+/**
+ * The pair as a `Comparison`, or null when no move could be quoted on both
+ * sides. `yours` and `played` are parallel: entry `i` of each is the same
+ * prompt, which is what lets the two sums and the two medians be over one set.
+ *
+ * Shared with the per-phase figures in `summary.ts`, which run the same
+ * comparison over a slice of the session rather than all of it.
+ */
+export function comparisonOf(
+  yours: readonly number[],
+  played: readonly number[],
+): Comparison | null {
+  if (yours.length === 0) return null;
+  return {
+    moves: yours.length,
+    yourLoss: yours.reduce((sum, loss) => sum + loss, 0),
+    playedLoss: played.reduce((sum, loss) => sum + loss, 0),
+    yourMedian: median(yours),
+    playedMedian: median(played),
+  };
+}
+
 function median(values: readonly number[]): number {
   if (values.length === 0) return 0;
   const sorted: number[] = [...values].sort((a, b) => a - b);
@@ -561,15 +583,6 @@ export function aiResult(
     misleading,
     misleadingHits,
     runs: missedRuns(analysis, prompts, board),
-    against:
-      yours.length === 0
-        ? null
-        : {
-            moves: yours.length,
-            yourLoss: yours.reduce((sum, loss) => sum + loss, 0),
-            playedLoss: played.reduce((sum, loss) => sum + loss, 0),
-            yourMedian: median(yours),
-            playedMedian: median(played),
-          },
+    against: comparisonOf(yours, played),
   };
 }

@@ -22,6 +22,7 @@ import {
   longestStreak,
   percent,
   phaseOf,
+  signed,
   summarize,
   tenukiAgreement,
   toJSON,
@@ -268,7 +269,7 @@ test('the exports carry the streaks', () => {
   const game: Game = longGame(40);
   const summary: Summary = summarize(playSession(game, BLACK, new Set(blackMoves(3, 4))));
 
-  assert.match(toText(summary), /Longest streak: 4 in a row \(moves 3–9\)/);
+  assert.match(toText(summary), /Longest run of matches: 4 \(moves 3–9\)/);
   assert.deepEqual(JSON.parse(toJSON(summary)).streaks, [
     { length: 4, firstMove: 3, lastMove: 9 },
   ]);
@@ -557,4 +558,15 @@ test('percentages round to whole numbers', () => {
   assert.equal(percent(0), '0%');
   assert.equal(percent(1), '100%');
   assert.equal(percent(1 / 3), '33%');
+});
+
+test('a signed loss decides its sign at the precision it prints', () => {
+  assert.equal(signed(0), '+0.0', 'negating zero must not produce "-0.0"');
+  assert.equal(signed(3.14), '-3.1');
+  assert.equal(signed(-0.4), '+0.4');
+
+  // A phase median lives two decimals down, where a tenth is a real figure
+  // rather than a rounding artifact.
+  assert.equal(signed(0.04, 2), '-0.04');
+  assert.equal(signed(0.001, 2), '+0.00', 'too small to show is too small to sign');
 });

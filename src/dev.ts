@@ -623,6 +623,9 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
     area.focus();
   };
 
+  /** Whether the harness's own engine should run; the summary's toggle owns it. */
+  let scoringWanted = true;
+
   const accept = (text: string): void => {
     if (text.trim() === '') {
       showForm('Paste a result first.');
@@ -638,7 +641,7 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
       // export's own `ai` block: reading the figures back would make the diff
       // below compare a file with itself.
       restored = restoreAnalysis(text, session.game);
-      summary = summarize(session, restored ?? undefined);
+      summary = summarize(session, scoringWanted ? (restored ?? undefined) : undefined);
     } catch (error: unknown) {
       const detail: string = error instanceof Error ? error.message : String(error);
       showForm(detail);
@@ -656,6 +659,16 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
       },
       onRestart: () => showForm(),
       challengeLink: (): Promise<string> => link,
+      // The harness has its own engine, so the toggle drives that one: off
+      // stops the searches and re-renders without them, on starts the whole
+      // pass again from the pasted result.
+      ai: scoringWanted,
+      aiUnavailable: null,
+      onToggleAi: (on: boolean): void => {
+        scoringWanted = on;
+        stopScoring();
+        accept(text);
+      },
     });
 
     /*
@@ -668,6 +681,7 @@ export function renderDev(root: HTMLElement, props: DevProps, initial?: string):
     root.prepend(driftBanner(driftFrom(text, summary)), status);
 
     stopScoring();
+    if (!scoringWanted) return;
     scoring = beginScoring(session, restored, {
       onStatus: (line: string): void => {
         status.textContent = line;

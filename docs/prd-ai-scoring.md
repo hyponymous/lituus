@@ -85,9 +85,27 @@ session.
 
 ## 5. What the summary says
 
-Exact-match hit rate remains the headline. Point loss is a second, subordinate
-figure, for a reason that is not merely conservative: a hit rate is a number
-the user can verify by eye, and an engine estimate is not.
+Exact-match hit rate is the headline of an *unscored* session, where it is the
+only signal there is. Where the engine has spoken it is demoted to the line
+under the headline — still present, because it remains the one figure a reader
+can check by eye, but no longer the thing the screen is about. The headline
+becomes what the session cost against what the game's own moves cost over the
+same predictions: a pair, so that neither number has to be read alone.
+
+An attempt was made to give the rate a reference class instead — how often the
+*engine* picks the played move, as a ceiling on what exact match can reach.
+The counts were cheap and correct and the section was cut anyway: three
+agreement figures side by side did not add up to an insight, and a summary is
+not improved by numbers a reader has no use for.
+
+Point loss is reported as a **total**, not a median. On a hit the guess *is*
+the played move, so with half the predictions matching, both medians are
+computed mostly over the same entries and their difference is damped toward
+zero by construction; the median of the differences is 0.00 outright. The
+total is where a shared move contributes exactly zero and a miss carries its
+full weight. Its volatility — a handful of moves supplying most of it — is
+reported rather than smoothed away, since those moves are the ones worth
+re-reading.
 
 Per prediction, where the engine has an opinion:
 

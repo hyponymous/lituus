@@ -13,8 +13,9 @@ import { readGame, type Game } from '../src/game.ts';
 import { advance, guess, startSession, type Session } from '../src/session.ts';
 import { pointFromName } from '../src/goban.ts';
 import {
+  costAgainst,
   costBand,
-  costDelta,
+  perPrediction,
   summarize,
   toJSON,
   toText,
@@ -199,6 +200,55 @@ test('a session the engine could not speak for has nothing to compare', () => {
   assert.equal(summary.ai?.against, null);
 });
 
+test('a phase carries the same comparison, over its own moves', () => {
+  const { summary } = play(
+    ['D16', 'C6', 'O3'],
+    [
+      verdict({ moveNumber: 1, played: move(at('Q16'), 4), guessed: move(at('D16'), 1) }),
+      verdict({ moveNumber: 3, played: move(at('Q16'), 1), guessed: move(at('C6'), 3) }),
+      // Unsearched, so excluded here for the same reason it is excluded from
+      // the session-wide comparison.
+      verdict({ moveNumber: 5, played: move(at('Q16'), 9, 1), guessed: move(at('O3'), 2) }),
+    ],
+  );
+
+  // Every prompt in this record is inside the opening, so the phase's figures
+  // are the session's — which is the cheapest way to pin that the two are the
+  // same computation over different slices.
+  const opening = summary.phases.find((phase) => phase.phase === 'opening');
+  assert.deepEqual(opening?.cost, summary.ai?.against);
+  assert.equal(opening?.cost?.moves, 2);
+
+  // And a phase that was never reached has nothing to say, rather than zero.
+  assert.equal(summary.phases.find((phase) => phase.phase === 'endgame')?.cost, null);
+});
+
+test('a phase is summarized by the mean, which the median cannot do here', () => {
+  const { summary } = play(
+    ['D16', 'C6'],
+    [
+      verdict({ moveNumber: 1, played: move(at('Q16'), 4), guessed: move(at('D16'), 1) }),
+      verdict({ moveNumber: 3, played: move(at('Q16'), 1), guessed: move(at('C6'), 3) }),
+    ],
+  );
+
+  // 4 points given up against 5, over two predictions.
+  const opening = summary.phases.find((phase) => phase.phase === 'opening');
+  assert.deepEqual(perPrediction(opening?.cost ?? null), { yours: 2, played: 2.5 });
+
+  // And nothing to say where the engine could not speak for both sides.
+  assert.equal(perPrediction(null), null);
+});
+
+test('a phase costs nothing when there was no engine', () => {
+  const game: Game = readGame(parse(GAME));
+  let session: Session = startSession(game, 1);
+  session = advance(guess(session, at('D16'), 1000));
+
+  const summary: Summary = summarize(session);
+  assert.ok(summary.phases.every((phase) => phase.cost === null));
+});
+
 test('blunders are counted at the threshold the measurements used', () => {
   const { summary } = play(
     ['D16', 'C6'],
@@ -289,7 +339,9 @@ test('the text export leads with what was given up and what was beaten', () => {
   const text: string = toText(summary);
 
   assert.match(text, /Engine: b15c192 @ 50 visits/);
-  assert.match(text, /Points given up/);
+  // Signed, and negative for a loss, like every figure a reader sees
+  // (docs/design-ai-scoring.md §6.1).
+  assert.match(text, /Your guesses vs the engine's best: -0\.5/);
   assert.match(text, /beat the game's move 1 times/);
 });
 
@@ -471,7 +523,7 @@ function bandOf(guessLoss: number, playedLoss: number | null): CostBand {
     ['D16'],
     [verdict({ moveNumber: 1, played, guessed: move(at('D16'), guessLoss) })],
   );
-  return costBand(summary.rows[0]);
+  return costBand(summary.rows[0], 'played');
 }
 
 test('a guess that cost clearly less than the played move reads as better', () => {
@@ -487,7 +539,7 @@ test('a difference inside the noise floor reads as even, in either direction', (
 test('an exact match lands in even, since one move cannot cost two amounts', () => {
   const { summary } = play([null], [verdict({ moveNumber: 1, guessed: move(at('Q16'), 0.2) })]);
   assert.equal(summary.rows[0].hit, true);
-  assert.equal(costBand(summary.rows[0]), 'even');
+  assert.equal(costBand(summary.rows[0], 'played'), 'even');
 });
 
 test('costlier than the played move reads as worse, and past the blunder line as blunder', () => {
@@ -505,7 +557,7 @@ test('a comparison missing either half is unscored, never even', () => {
 test('with no engine every row is unscored', () => {
   const game: Game = readGame(parse(GAME));
   const summary: Summary = summarize(advance(guess(startSession(game, 1), at('D16'), 1000)));
-  assert.equal(costBand(summary.rows[0]), 'unscored');
+  assert.equal(costBand(summary.rows[0], 'played'), 'unscored');
 });
 
 test('the cost delta keeps the sign convention a point loss already carries', () => {
@@ -515,10 +567,28 @@ test('the cost delta keeps the sign convention a point loss already carries', ()
     ['D16'],
     [verdict({ moveNumber: 1, played: move(at('Q16'), 4), guessed: move(at('D16'), 1) })],
   );
-  assert.equal(costDelta(summary.rows[0]), -3);
+  assert.equal(costAgainst(summary.rows[0], 'played'), -3);
+
+  // Against the engine there is nothing to subtract: the loss is the cost.
+  assert.equal(costAgainst(summary.rows[0], 'engine'), 1);
 });
 
 test('a delta needs both halves, and says so rather than reading as zero', () => {
   const { summary } = play(['D16'], [verdict({ moveNumber: 1, played: null })]);
-  assert.equal(costDelta(summary.rows[0]), null);
+  assert.equal(costAgainst(summary.rows[0], 'played'), null);
+
+  // ...but an unsearched played move does not stop the engine baseline, which
+  // never needed it.
+  assert.equal(costAgainst(summary.rows[0], 'engine'), 1.2);
+});
+
+test('nothing beats the engine, so a negative against it is noise, not a win', () => {
+  // A guess the engine likes better than its own best is search noise around
+  // zero. Against the played move the same row is a genuine `better`.
+  const { summary } = play(
+    ['D16'],
+    [verdict({ moveNumber: 1, played: move(at('Q16'), 4), guessed: move(at('D16'), -0.9) })],
+  );
+  assert.equal(costBand(summary.rows[0], 'played'), 'better');
+  assert.equal(costBand(summary.rows[0], 'engine'), 'even');
 });

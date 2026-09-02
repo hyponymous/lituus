@@ -62,19 +62,40 @@
       "phase": "opening",
       "predicted": 25,
       "hits": 15,
-      "rate": 0.6
+      "rate": 0.6,
+      "cost": {
+        "moves": 25,
+        "yourLoss": 7.3,
+        "playedLoss": -0.5,
+        "yourMedian": -0.04,
+        "playedMedian": -0.05
+      }
     },
     {
       "phase": "middle",
       "predicted": 50,
       "hits": 30,
-      "rate": 0.6
+      "rate": 0.6,
+      "cost": {
+        "moves": 50,
+        "yourLoss": 53.1,
+        "playedLoss": -3.3,
+        "yourMedian": 0.03,
+        "playedMedian": -0.04
+      }
     },
     {
       "phase": "endgame",
       "predicted": 25,
       "hits": 7,
-      "rate": 0.28
+      "rate": 0.28,
+      "cost": {
+        "moves": 25,
+        "yourLoss": 51.5,
+        "playedLoss": -3,
+        "yourMedian": 0.12,
+        "playedMedian": -0.46
+      }
     }
   ],
   "engine": {

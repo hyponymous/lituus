@@ -15,6 +15,7 @@ import {
   BEAT_MARGIN,
   BLUNDER_LOSS,
   aiResult,
+  comparisonOf,
   describeEngine,
   beatPlayed,
   isMisleading,
@@ -22,6 +23,7 @@ import {
   verdictFor,
   type AiResult,
   type Analysis,
+  type Comparison,
   type MoveVerdict,
   type Verdict,
 } from './analysis.ts';
@@ -59,6 +61,16 @@ export interface PhaseResult {
   readonly hits: number;
   /** Hits over guesses in this phase, in [0, 1]. Zero when nothing was guessed. */
   readonly rate: number;
+  /**
+   * What this phase cost, against what the game's own moves cost over the same
+   * moves. Null with no engine, and null in a phase where no prediction has
+   * both sides quotable.
+   *
+   * The same comparison `ai.against` makes, over a slice: with an engine, the
+   * question "which phase is weakest" is better answered in points than in
+   * exact matches, and the grouping is the one already on screen.
+   */
+  readonly cost: Comparison | null;
 }
 
 /**
@@ -331,17 +343,65 @@ export type CostBand = 'better' | 'even' | 'worse' | 'blunder' | 'unscored';
  * manufacture a verdict out of the engine's silence, which is the same reason
  * `beatPlayed` insists on both.
  */
-export function costDelta(row: SummaryRow): number | null {
-  if (row.loss === null || row.playedLoss === null) return null;
-  return row.loss - row.playedLoss;
+/**
+ * What zero means, on every chart and every per-move figure the summary draws.
+ *
+ * It was decided per widget before this existed, and never stated: the strip
+ * and the board's ghost stones measured from the move the game played, while
+ * `medianLoss` and the findings measured from the engine's best — both on
+ * screen at once, with nothing saying so. One choice, made by the reader.
+ */
+export type Baseline = 'played' | 'engine';
+
+/**
+ * What a prediction cost against the chosen baseline. Positive is worse, as
+ * every loss in this codebase is.
+ *
+ * Against the engine that is simply the loss. Against the played move it is
+ * the difference, which can be negative — you can beat the move the game made,
+ * and cannot beat the engine's own.
+ *
+ * Null when the figure it needs is missing. Against the played move BOTH
+ * losses have to be quotable: comparing a searched guess with an unsearched
+ * played move would manufacture a verdict out of the engine's silence, which
+ * is the same reason `beatPlayed` insists on both.
+ */
+export function costAgainst(row: SummaryRow, baseline: Baseline): number | null {
+  if (row.loss === null) return null;
+  if (baseline === 'engine') return row.loss;
+  return row.playedLoss === null ? null : row.loss - row.playedLoss;
 }
 
-/** Which band a row falls in. */
-export function costBand(row: SummaryRow): CostBand {
-  const delta: number | null = costDelta(row);
+/**
+ * Points a prediction, for each side, over the moves both could be scored on.
+ *
+ * The MEAN, and the medians beside it in `Comparison` are not usable for this.
+ * On a hit your move *is* the played move, so with half the predictions
+ * matching, both medians are computed mostly over the same entries with the
+ * same cost: their difference is damped toward zero by construction, and what
+ * is left measures the tail badly. The mean is the statistic where a shared
+ * move contributes exactly zero to the difference and a miss carries its full
+ * weight. (The median of the differences is 0.00 outright, for the same
+ * reason — see `Comparison`.)
+ */
+export function perPrediction(
+  cost: Comparison | null,
+): { readonly yours: number; readonly played: number } | null {
+  if (cost === null || cost.moves === 0) return null;
+  return { yours: cost.yourLoss / cost.moves, played: cost.playedLoss / cost.moves };
+}
+
+/**
+ * Which band a row falls in.
+ *
+ * There is no `better` against the engine: its move is the best one by
+ * definition, so a negative there is search noise and belongs in `even`.
+ */
+export function costBand(row: SummaryRow, baseline: Baseline): CostBand {
+  const delta: number | null = costAgainst(row, baseline);
   if (delta === null) return 'unscored';
 
-  if (delta <= -BEAT_MARGIN) return 'better';
+  if (delta <= -BEAT_MARGIN) return baseline === 'played' ? 'better' : 'even';
   if (delta < BEAT_MARGIN) return 'even';
   return delta >= BLUNDER_LOSS ? 'blunder' : 'worse';
 }
@@ -400,7 +460,28 @@ function phaseResults(game: Game, rows: readonly SummaryRow[]): PhaseResult[] {
   return PHASES.map((phase) => {
     const inPhase: readonly SummaryRow[] = rows.filter((row) => row.phase === phase);
     const hits: number = inPhase.filter((row) => row.hit).length;
-    return { phase, guessed: inPhase.length, hits, rate: rateOf(hits, inPhase.length) };
+
+    /*
+     * Only the predictions where both sides can be quoted, the insistence
+     * `Comparison` records: measuring a searched guess against an unsearched
+     * played move would manufacture a verdict out of the engine's silence.
+     * With no engine every loss is null, so this falls out as null on its own.
+     */
+    const yours: number[] = [];
+    const played: number[] = [];
+    for (const row of inPhase) {
+      if (row.loss === null || row.playedLoss === null) continue;
+      yours.push(row.loss);
+      played.push(row.playedLoss);
+    }
+
+    return {
+      phase,
+      guessed: inPhase.length,
+      hits,
+      rate: rateOf(hits, inPhase.length),
+      cost: comparisonOf(yours, played),
+    };
   });
 }
 
@@ -475,16 +556,39 @@ function colorName(color: Color): string {
  *
  * The `+ 0` is not decoration. Negating a loss of exactly zero gives negative
  * zero, which `toFixed` faithfully renders as `-0.0` — so every move the engine
- * thought was perfect would be printed as though it had lost something.
+ * thought was perfect would be printed as though it had lost something. The
+ * sign is decided at the printed precision for the same reason: a figure that
+ * rounds to zero should not be handed a minus sign it does not show.
+ *
+ * `digits` is for figures that live at a finer scale than one move's loss. A
+ * median over a phase is tenths of a point, and at one decimal a whole column
+ * of them reads "+0.0".
  */
-export function signed(loss: number): string {
+export function signed(loss: number, digits = 1): string {
   const value: number = -loss + 0;
-  return `${value < -0.05 ? '-' : '+'}${Math.abs(value).toFixed(1)}`;
+  return `${value < -0.5 * 10 ** -digits ? '-' : '+'}${Math.abs(value).toFixed(digits)}`;
 }
 
 /** A percentage for display. Rounded to whole numbers; nobody needs decimals. */
 export function percent(rate: number): string {
   return `${Math.round(rate * 100)}%`;
+}
+
+/**
+ * A `Comparison` at export precision: totals to a tenth, medians to a
+ * hundredth, as everywhere else a point loss is written down. One function
+ * because the session-wide comparison and the per-phase ones are the same
+ * shape and must round the same way.
+ */
+function comparison(against: Comparison | null): object | null {
+  if (against === null) return null;
+  return {
+    moves: against.moves,
+    yourLoss: Number(against.yourLoss.toFixed(1)),
+    playedLoss: Number(against.playedLoss.toFixed(1)),
+    yourMedian: Number(against.yourMedian.toFixed(2)),
+    playedMedian: Number(against.playedMedian.toFixed(2)),
+  };
 }
 
 /**
@@ -570,6 +674,7 @@ export function toJSON(summary: Summary): string {
         predicted: result.guessed,
         hits: result.hits,
         rate: Number(result.rate.toFixed(4)),
+        cost: comparison(result.cost),
       })),
       // Null throughout when no engine ran, rather than absent: a reader
       // diffing two exports should see the same keys either way.
@@ -593,16 +698,7 @@ export function toJSON(summary: Summary): string {
               blunders: summary.ai.blunders,
               misleading: summary.ai.misleading,
               misleadingHits: summary.ai.misleadingHits,
-              against:
-                summary.ai.against === null
-                  ? null
-                  : {
-                      moves: summary.ai.against.moves,
-                      yourLoss: Number(summary.ai.against.yourLoss.toFixed(1)),
-                      playedLoss: Number(summary.ai.against.playedLoss.toFixed(1)),
-                      yourMedian: Number(summary.ai.against.yourMedian.toFixed(2)),
-                      playedMedian: Number(summary.ai.against.playedMedian.toFixed(2)),
-                    },
+              against: comparison(summary.ai.against),
               runs: summary.ai.runs.map((run) => ({
                 point: run.name,
                 length: run.length,
@@ -675,7 +771,9 @@ export function toText(summary: Summary): string {
 
   const best: Streak | null = longestStreak(summary);
   if (best) {
-    lines.push(`Longest streak: ${best.length} in a row (moves ${best.firstMove}–${best.lastMove})`);
+    lines.push(
+      `Longest run of matches: ${best.length} (moves ${best.firstMove}–${best.lastMove})`,
+    );
   }
 
   lines.push('', 'By phase:');
@@ -684,7 +782,22 @@ export function toText(summary: Summary): string {
       phase.guessed > 0
         ? `${phase.hits} / ${phase.guessed} (${percent(phase.rate)})`
         : 'not reached';
-    lines.push(`  ${phase.phase.padEnd(8)} ${detail}`);
+    /*
+     * The points clause is appended rather than substituted: the exact-match
+     * rate stays the headline (PRD §5), and a text export is read where a bar
+     * cannot be, so both numbers fit on the line.
+     *
+     * Both sides and then the edge between them, at two decimals: a phase
+     * figure is tenths of a point and one decimal rounds a column of them to
+     * zero. Means rather than medians, for the reason `perPrediction` gives.
+     */
+    const per = perPrediction(phase.cost);
+    const cost: string =
+      per === null || phase.cost === null
+        ? ''
+        : `you ${signed(per.yours, 2)}, game ${signed(per.played, 2)} per prediction ` +
+          `(${signed(per.yours - per.played, 2)}, across ${phase.cost.moves})`;
+    lines.push(`  ${phase.phase.padEnd(8)} ${detail.padEnd(18)}${cost}`.trimEnd());
   }
 
   const { tenuki } = summary;
@@ -706,8 +819,8 @@ export function toText(summary: Summary): string {
     lines.push('', `Engine: ${describeEngine(ai.config)}`);
     if (ai.graded > 0) {
       lines.push(
-        `Points given up: ${ai.totalLoss.toFixed(1)} over ${ai.graded} guesses, ` +
-          `median ${ai.medianLoss.toFixed(1)}`,
+        `Your guesses vs the engine's best: ${signed(ai.totalLoss, 1)} across ` +
+          `${ai.graded} of them, median ${signed(ai.medianLoss, 2)}`,
       );
     }
     if (ai.against !== null) {
@@ -715,15 +828,18 @@ export function toText(summary: Summary): string {
       // carries the swings, which are part of the game and part of the score,
       // and the median says what an ordinary move was worth.
       const { against } = ai;
-      const mean = (total: number): string => (total / against.moves).toFixed(2);
-      const net: number = against.playedLoss - against.yourLoss;
+      // Signed, like every figure a reader sees (design §6.1). Raw losses put
+      // a minus on the side that did *better*, which is how "them -6.8 points"
+      // came to mean the opposite of how it read.
+      const mean = (total: number): string => signed(total / against.moves, 2);
+      const total = (loss: number): string => signed(loss, 1).padStart(7);
       lines.push(
-        `Against the moves played, over ${against.moves}:`,
-        `  you    ${against.yourLoss.toFixed(1)} points, ` +
-          `median ${against.yourMedian.toFixed(2)}, mean ${mean(against.yourLoss)}`,
-        `  them   ${against.playedLoss.toFixed(1)} points, ` +
-          `median ${against.playedMedian.toFixed(2)}, mean ${mean(against.playedLoss)}`,
-        `  net    ${Math.abs(net).toFixed(1)} in ${net >= 0 ? 'your' : "the game's"} favour`,
+        `Vs the engine's best, across ${against.moves}:`,
+        `  you   ${total(against.yourLoss)}, ` +
+          `median ${signed(against.yourMedian, 2)}, mean ${mean(against.yourLoss)}`,
+        `  them  ${total(against.playedLoss)}, ` +
+          `median ${signed(against.playedMedian, 2)}, mean ${mean(against.playedLoss)}`,
+        `  net   ${total(against.yourLoss - against.playedLoss)} to you`,
       );
     }
     if (ai.beat > 0) {
