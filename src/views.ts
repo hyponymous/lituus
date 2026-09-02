@@ -444,6 +444,8 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
 
   renderGoban(session.position, board, {
     markers: sessionMarkers(session),
+    // Your guesses are drawn as your own stones, whichever colour you play.
+    ghosts: session.color,
     animate: sessionAnimate(session),
     // On a miss the played stone waits with its marker, so the user reads
     // their own guess before the answer lands somewhere else on the board.
@@ -1476,7 +1478,11 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
       marks.push({ index: best, kind: 'best', ...(better === null ? {} : { label: better }) });
     }
 
-    renderGoban(move.after, board, { showCoordinates: true, markers: marks });
+    renderGoban(move.after, board, {
+      showCoordinates: true,
+      markers: marks,
+      ghosts: summary.color,
+    });
 
     // Where you are; the line below says what happened. Which move each side
     // played was in both, and naming it twice is what made the pair wrap.

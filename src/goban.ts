@@ -10,7 +10,16 @@
  * against the whole board and a cropped one would move under them as the game
  * spreads. See docs/reuse-notes.md.
  */
-import { BLACK, EMPTY, stoneAt, toIndex, toRowCol, type Position } from './rules.ts';
+import {
+  BLACK,
+  EMPTY,
+  stoneAt,
+  toIndex,
+  toRowCol,
+  WHITE,
+  type Color,
+  type Position,
+} from './rules.ts';
 
 const CELL = 30;
 const MARGIN = 34;
@@ -78,6 +87,36 @@ function ghost(color: string): string {
   return `${color}c4`;
 }
 
+/** Weighted blend of two `#rrggbb` colors, `weight` of the way from a to b. */
+function blend(a: string, b: string, weight: number): string {
+  const channel = (i: number): string => {
+    const from: number = parseInt(a.slice(1 + i * 2, 3 + i * 2), 16);
+    const to: number = parseInt(b.slice(1 + i * 2, 3 + i * 2), 16);
+    return Math.round(from + (to - from) * weight)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${channel(0)}${channel(1)}${channel(2)}`;
+}
+
+/**
+ * Your guess is a move you would have played, so it belongs to your colour.
+ * The band hues are dark, so a White player's own guesses came out reading as
+ * black stones — the board said the wrong thing about whose move it was
+ * before it said anything about how good the move was.
+ *
+ * So White's ghosts are mixed into White's stone rather than drawn in the
+ * band outright: the disc reads as a white stone that is also, say, red, and
+ * the ring around it (a darker shade of the same band) carries the hue at
+ * full strength. Black's are unchanged — the band colours already sit where
+ * a black stone sits. This is for your ghost alone; see `drawMarker`.
+ */
+const WHITE_GHOST_MIX = 0.74;
+
+function ghostFill(color: string, ghosts: Color): string {
+  return ghosts === WHITE ? `${blend(color, WHITE_STONE, WHITE_GHOST_MIX)}ea` : ghost(color);
+}
+
 /**
  * `last` marks the stone most recently played, as a board would by memory.
  * The others belong to the reveal: where the move went, where you guessed.
@@ -119,6 +158,12 @@ export interface GobanOptions {
    * guess. The stylesheet owns the length of the beat.
    */
   readonly animateLate?: boolean;
+  /**
+   * The colour you are predicting for. Your own ghost stone is drawn as that
+   * colour's stone, so the board never implies the wrong player made the
+   * move. The engine's mark is unaffected. Defaults to Black.
+   */
+  readonly ghosts?: Color;
 }
 
 /**
@@ -278,7 +323,7 @@ function drawStones(
   }
 }
 
-function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
+function drawMarker(svg: SVGElement, pos: Position, marker: Marker, ghosts: Color): void {
   const [row, col] = toRowCol(pos, marker.index);
   const x: number = centerX(col);
   const y: number = centerY(row);
@@ -323,7 +368,10 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
         // The engine's ghost sits inside a stone's footprint rather than
         // filling it, so that where the two overlap yours still reads first.
         r: CELL * STONE_SCALE * (marker.kind === 'best' ? 0.95 : 1),
-        fill: played ? 'none' : ghost(color),
+        // The engine's move keeps its blue whoever is to play: it is the
+        // engine speaking, not a stone either player put down, and colouring
+        // it as yours would put two of your stones on the board.
+        fill: played ? 'none' : marker.kind === 'guess' ? ghostFill(color, ghosts) : ghost(color),
         // Your move is the one you are looking for on the board, so it is the
         // one drawn heavily — a darker shade of its own band, at weight. The
         // engine's is an answer to it, and reads as one.
@@ -425,7 +473,7 @@ export function renderGoban(pos: Position, container: HTMLElement, opts: GobanOp
   if (opts.showCoordinates !== false) drawCoordinates(svg, pos);
   drawStones(svg, pos, new Set(opts.animate ?? []), opts.animateLate === true);
 
-  for (const marker of opts.markers ?? []) drawMarker(svg, pos, marker);
+  for (const marker of opts.markers ?? []) drawMarker(svg, pos, marker, opts.ghosts ?? BLACK);
   if (opts.onPoint) drawHitTargets(svg, pos, opts.onPoint);
 
   container.replaceChildren(svg);
