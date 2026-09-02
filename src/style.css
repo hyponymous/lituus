@@ -586,24 +586,31 @@ section .muted {
 
 /* With one, each prediction is a bar from the axis: up for cheaper than the
    game, down for costlier, and `--h` is the difference against a cap of eight
-   points, set per cell in views.ts. The 3px floor keeps a bar clickable and a
-   run of small ones readable as a run. */
+   points, set per cell in views.ts.
+
+   No floor under the height, because the scale cannot produce a bar small
+   enough to need one: a difference under `BEAT_MARGIN` is drawn as a stub
+   instead, so the shortest bar there can be is half a point of eight, or
+   1.1px. A floor only in that last third of a pixel is invisible, and a floor
+   tall enough to be visible is a lie twice over — it draws a run of different
+   differences at one height, and it lifts the bar's mass off the axis the
+   stubs sit on, which is the ledge that reads as two zero levels. */
 .strip.chart .cell.up .bar {
   bottom: 50%;
-  height: max(3px, calc(var(--h, 0) * 18px));
+  height: calc(var(--h, 0) * 18px);
 }
 
 .strip.chart .cell.down .bar {
   top: 50%;
-  height: max(3px, calc(var(--h, 0) * 18px));
+  height: calc(var(--h, 0) * 18px);
 }
 
 /* Inside the noise floor, or with nothing to say: a stub on the axis. Half a
    point of difference is not a claim about which move was better, and drawing
    it as one would fill the chart with noise. */
 .strip.chart .cell:not(.up):not(.down) .bar {
-  top: calc(50% - 2px);
-  height: 4px;
+  top: calc(50% - 0.5px);
+  height: 1px;
 }
 
 /* A band names a colour rather than painting anything, so the bar and anything
