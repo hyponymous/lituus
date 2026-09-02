@@ -46,6 +46,7 @@ import {
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
 import { SPIKE_HASH } from './engine/spike-hash.ts';
 import { decode, encode } from './share.ts';
+import { aiWanted as storedAiWanted, setAiWanted } from './settings.ts';
 import type { Color } from './rules.ts';
 
 type Screen =
@@ -109,11 +110,13 @@ let promptedCursor: number | null = null;
  * seconds after the guess — or never — would break that outright. The two are
  * joined only when a summary is computed (design §3).
  *
- * `wanted` outlives any one session so that a replay keeps the setting, and the
- * store is keyed by move number rather than by guess, which is what makes a
- * same-colour replay reuse every search it already paid for.
+ * `wanted` outlives any one session so that a replay keeps the setting — and
+ * outlives the tab, restored from `settings.ts`, because a user who has already
+ * paid for the download should not have to ask for it again. The store is keyed
+ * by move number rather than by guess, which is what makes a same-colour replay
+ * reuse every search it already paid for.
  */
-let aiWanted = false;
+let aiWanted: boolean = storedAiWanted();
 let engine: EngineHandle | null = null;
 let engineStatus: EngineStatus = { state: 'idle' };
 let analysis: Analysis | null = null;
@@ -495,6 +498,7 @@ function draw(): void {
         ai: aiWanted,
         onToggleAi: (on: boolean): void => {
           aiWanted = on;
+          setAiWanted(on);
           draw();
         },
         aiUnavailable: unscorableReason(game),

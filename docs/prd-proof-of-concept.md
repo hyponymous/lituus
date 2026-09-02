@@ -189,6 +189,12 @@ a plain-text form suitable for pasting into notes). Nothing is written to
 browser storage; a reload loses the session. Persistence and resumable
 sessions are deferred until the loop itself is proven worth returning to.
 
+The one exception is *preferences*, which are not session state: the AI
+scoring toggle is remembered in `localStorage`, because a user who has
+already paid for the download should not have to re-tick the box on every
+visit. Nothing about a session — guesses, hits, timings — is written
+anywhere.
+
 ## 5. Scoring (PoC)
 
 Scoring is **binary exact match**: the guess is a hit if and only if it is
@@ -383,7 +389,8 @@ PoC settles by fiat, and the reasoning for the fiat is worth keeping.
 - **Local persistence.** `localStorage` per game: resume partial sessions and
   keep a history to track improvement over time. The PoC exports instead
   (§4.6), on the theory that a tool nobody returns to does not need a
-  history.
+  history. Session state, that is — the scoring preference is already stored
+  (§4.6), which is a different and much smaller thing.
 
 ### 8.5 SGF handling
 
