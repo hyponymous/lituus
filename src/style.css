@@ -390,8 +390,13 @@ button.primary {
 }
 
 /* Quieter than the readout and below it: scoring is a background activity and
-   must never compete with the board for attention while a prompt is open. */
-.engine {
+   must never compete with the board for attention while a prompt is open.
+
+   Named for the line rather than for the engine: `engine` alone is also a
+   strip cell's band — a prediction that was the engine's own move — and this
+   rule's top margin was landing on those cells, dropping them 4px off the
+   chart's axis. */
+.engine-line {
   margin: 0.25rem 0 0;
   font-size: 0.85rem;
   font-variant-numeric: tabular-nums;

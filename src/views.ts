@@ -307,7 +307,7 @@ export function updateEngineLine(text: string | null, failed: boolean): void {
   const node: HTMLElement | null = document.getElementById(ENGINE_LINE_ID);
   if (!node) return;
   node.textContent = text ?? '';
-  node.className = failed ? 'note' : 'muted engine';
+  node.className = failed ? 'note' : 'muted engine-line';
   node.hidden = text === null;
 }
 
@@ -428,7 +428,7 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
       'p',
       {
         id: ENGINE_LINE_ID,
-        class: props.engineFailed ? 'note' : 'muted engine',
+        class: props.engineFailed ? 'note' : 'muted engine-line',
         ...(props.engine ? {} : { hidden: 'hidden' }),
       },
       [props.engine ?? ''],
