@@ -80,8 +80,10 @@ test('the text export names the engine and what was given up', () => {
   assert.match(text, /Engine: b15c192 @ 50 visits/);
   assert.match(text, /Your guess beat the game's move 9 times/);
   // Negative zero renders as "-0.0" without care, which would print every
-  // perfect guess as though it had lost something.
-  assert.doesNotMatch(text, /-0\.0/);
+  // perfect guess as though it had lost something. Only a *zero* is wrong:
+  // a small negative is a real number here, since a move can beat the
+  // engine's own root evaluation by a fraction of a point.
+  assert.doesNotMatch(text, /-0\.0+(?!\d)/);
 });
 
 test('the annotated record still parses back as the game that was played', () => {

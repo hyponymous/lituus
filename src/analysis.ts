@@ -438,6 +438,42 @@ export interface AiResult {
   readonly misleadingHits: number;
   /** Stretches where neither of you played the engine's move. */
   readonly runs: readonly MissedRun[];
+  /**
+   * How the session compared with the moves actually played. Null when no
+   * prompt has both sides quotable, which is the only case where the
+   * comparison would have to be invented.
+   */
+  readonly against: Comparison | null;
+}
+
+/**
+ * Your predictions against the moves the game played, over the prompts where
+ * both have a quotable loss.
+ *
+ * The same insistence `costDelta` makes, for the same reason: comparing a
+ * searched guess with an unsearched played move manufactures a verdict out of
+ * the engine's silence. So this carries its own `moves` count rather than
+ * borrowing `graded`, and both totals are over that one set.
+ *
+ * Both the totals and the medians, because they answer different questions and
+ * a reader deserves both. The totals are the game's own currency and the more
+ * motivating number — a session is ahead or behind by so many points — but
+ * they are volatile: across the two scored dogfood games, five moves out of a
+ * hundred supply 42% and 59% of the difference. The medians say what a typical
+ * move was worth and barely move when one dragon dies. The median of the
+ * *difference* is not offered, since it is 0.00 by construction: an exact
+ * match's difference is exactly zero and the even band is `BEAT_MARGIN` wide,
+ * so the middle of the distribution is always a tie.
+ */
+export interface Comparison {
+  /** Prompts where both sides could be quoted. */
+  readonly moves: number;
+  /** Points your predictions gave up over those moves. */
+  readonly yourLoss: number;
+  /** Points the moves actually played gave up over the same moves. */
+  readonly playedLoss: number;
+  readonly yourMedian: number;
+  readonly playedMedian: number;
 }
 
 function median(values: readonly number[]): number {
@@ -460,6 +496,10 @@ export function aiResult(
   board: Position,
 ): AiResult {
   const losses: number[] = [];
+  // The compared pair, gathered side by side so the two sums and the two
+  // medians are always over the same set of moves.
+  const yours: number[] = [];
+  const played: number[] = [];
   let answered = 0;
   let beat = 0;
   let blunders = 0;
@@ -476,6 +516,12 @@ export function aiResult(
       losses.push(loss);
       if (loss >= BLUNDER_LOSS) blunders++;
     }
+    const playedLoss: number | null = lossOf(verdict.played);
+    if (loss !== null && playedLoss !== null) {
+      yours.push(loss);
+      played.push(playedLoss);
+    }
+
     if (beatPlayed(verdict)) beat++;
     if (isMisleading(verdict)) {
       misleading++;
@@ -497,5 +543,15 @@ export function aiResult(
     misleading,
     misleadingHits,
     runs: missedRuns(analysis, prompts, board),
+    against:
+      yours.length === 0
+        ? null
+        : {
+            moves: yours.length,
+            yourLoss: yours.reduce((sum, loss) => sum + loss, 0),
+            playedLoss: played.reduce((sum, loss) => sum + loss, 0),
+            yourMedian: median(yours),
+            playedMedian: median(played),
+          },
   };
 }

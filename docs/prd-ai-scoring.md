@@ -132,6 +132,17 @@ existing summary reports median time — one catastrophe should not swallow the
 figure. Sum of points lost is also reported, since that is the quantity a
 player recognizes from AI review tools.
 
+Both are reported **against the moves actually played**, over the prompts where
+both sides can be quoted. A figure on its own says nothing a reader can use:
+168 points given up sounds ruinous until the game gave up 255 over the same
+moves, and what they came to find out is whether they read the board better
+than the player did. The median leads and the difference in the totals follows
+it. The median of the *difference* is not offered — it is zero by construction,
+since an exact match's difference is exactly zero and the even band is
+`BEAT_MARGIN` wide. The full set, medians and means and totals for both sides,
+is in the text export; the two scored dogfood games read 0.30 against 0.78 and
+1.24 against 3.21, both sessions ahead of the game they were played against.
+
 **Show the engine's continuation, not only its verdict.** Point loss says a
 move cost four points; the engine's principal variation says why. Displaying
 two or three plies of the follow-up — for the guess and for the played move —

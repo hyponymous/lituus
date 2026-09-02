@@ -587,6 +587,16 @@ export function toJSON(summary: Summary): string {
               blunders: summary.ai.blunders,
               misleading: summary.ai.misleading,
               misleadingHits: summary.ai.misleadingHits,
+              against:
+                summary.ai.against === null
+                  ? null
+                  : {
+                      moves: summary.ai.against.moves,
+                      yourLoss: Number(summary.ai.against.yourLoss.toFixed(1)),
+                      playedLoss: Number(summary.ai.against.playedLoss.toFixed(1)),
+                      yourMedian: Number(summary.ai.against.yourMedian.toFixed(2)),
+                      playedMedian: Number(summary.ai.against.playedMedian.toFixed(2)),
+                    },
               runs: summary.ai.runs.map((run) => ({
                 point: run.name,
                 length: run.length,
@@ -692,6 +702,22 @@ export function toText(summary: Summary): string {
       lines.push(
         `Points given up: ${ai.totalLoss.toFixed(1)} over ${ai.graded} guesses, ` +
           `median ${ai.medianLoss.toFixed(1)}`,
+      );
+    }
+    if (ai.against !== null) {
+      // Both averages, because they disagree in a way worth seeing: the mean
+      // carries the swings, which are part of the game and part of the score,
+      // and the median says what an ordinary move was worth.
+      const { against } = ai;
+      const mean = (total: number): string => (total / against.moves).toFixed(2);
+      const net: number = against.playedLoss - against.yourLoss;
+      lines.push(
+        `Against the moves played, over ${against.moves}:`,
+        `  you    ${against.yourLoss.toFixed(1)} points, ` +
+          `median ${against.yourMedian.toFixed(2)}, mean ${mean(against.yourLoss)}`,
+        `  them   ${against.playedLoss.toFixed(1)} points, ` +
+          `median ${against.playedMedian.toFixed(2)}, mean ${mean(against.playedLoss)}`,
+        `  net    ${Math.abs(net).toFixed(1)} in ${net >= 0 ? 'your' : "the game's"} favour`,
       );
     }
     if (ai.beat > 0) {

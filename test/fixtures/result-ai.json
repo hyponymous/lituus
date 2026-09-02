@@ -91,6 +91,13 @@
     "blunders": 5,
     "misleading": 2,
     "misleadingHits": 0,
+    "against": {
+      "moves": 100,
+      "yourLoss": 111.9,
+      "playedLoss": -6.8,
+      "yourMedian": 0.03,
+      "playedMedian": -0.09
+    },
     "runs": []
   },
   "moves": [

@@ -34,7 +34,13 @@ import {
   type Summary,
   type SummaryRow,
 } from './summary.ts';
-import { BEAT_MARGIN, BLUNDER_LOSS, describeEngine, type Verdict } from './analysis.ts';
+import {
+  BEAT_MARGIN,
+  BLUNDER_LOSS,
+  describeEngine,
+  type Comparison,
+  type Verdict,
+} from './analysis.ts';
 import { annotatedFilename, annotatedSgf } from './annotate.ts';
 import { BLACK, WHITE, type Color } from './rules.ts';
 
@@ -560,15 +566,56 @@ function timingNote(summary: Summary): string {
  * Subordinate deliberately, and not because engine numbers are unimportant: a
  * hit rate is a number the reader can check by eye and a point loss is not, so
  * exact match keeps the headline and this sits beneath it
- * (`docs/prd-ai-scoring.md` §5). The median leads for the same reason it does
- * for timing — one catastrophe should not swallow the figure — and the total
- * follows it because that is the quantity a player recognizes from every other
- * AI review tool.
+ * (`docs/prd-ai-scoring.md` §5).
+ *
+ * Against the moves actually played, though, rather than alone. A total on its
+ * own is a number with nothing to weigh it against — 168 points sounds ruinous
+ * until you learn the game gave up 255 over the same moves — and what a reader
+ * came to find out is whether they read the board better than the player did.
+ * The median leads, for the same reason it does for timing: one catastrophe
+ * should not swallow the figure. The difference in the totals follows it,
+ * because that is the game's own currency and the more motivating number.
  */
-function engineNote(summary: Summary): string {
+function engineNote(summary: Summary): Child {
   const { ai } = summary;
   if (!ai || ai.graded === 0) return '';
-  return ` · ${ai.medianLoss.toFixed(1)} points a move, ${ai.totalLoss.toFixed(0)} in all`;
+
+  /*
+   * A sentence on its own line, not a fourth clause hung off the subhead with
+   * a dot. The other clauses are labels a reader can decode from the number
+   * alone — "3.4s a move" needs no help — and this one is not: "0.3 points a
+   * move" says nothing about whose points, over what, or whether 0.3 is good.
+   * Numbers a reader cannot check by eye have to be told what they are.
+   */
+  const { against } = ai;
+  const sentence: string =
+    against === null
+      ? `You gave up a median ${ai.medianLoss.toFixed(1)} points a move, ` +
+        `${ai.totalLoss.toFixed(0)} in all.`
+      : costSentence(against, summary.color);
+  return el('span', { class: 'cost-note' }, [sentence]);
+}
+
+/**
+ * Your median against theirs, then the difference in the totals — signed so
+ * that the good direction is the positive one, which is the only way round a
+ * reader takes in at a glance.
+ */
+function costSentence(against: Comparison, color: Color): string {
+  const net: number = against.playedLoss - against.yourLoss;
+  // Named by colour rather than as "the moves actually played": the reader
+  // knows which colour they sat behind, and the record is theirs, not an
+  // abstraction.
+  const lead: string =
+    `You gave up a median ${against.yourMedian.toFixed(1)} points a move, ` +
+    `against ${against.playedMedian.toFixed(1)} for ${color === BLACK ? 'Black' : 'White'}`;
+  // Under a point either way is a tie, not a result: the same noise floor the
+  // bands use, applied to the session rather than to one move.
+  if (Math.abs(net) < 1) return `${lead} — level over the session.`;
+  return (
+    `${lead} — ${Math.abs(net).toFixed(0)} points ` +
+    `${net > 0 ? 'fewer' : 'more'} over the session.`
+  );
 }
 
 /**

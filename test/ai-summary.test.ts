@@ -171,6 +171,34 @@ test('the session reports a median and a total, not a mean', () => {
   assert.equal(summary.ai?.graded, 3);
 });
 
+test('the comparison with the game is over the moves both sides can be quoted for', () => {
+  const { summary } = play(
+    ['D16', 'C6', 'O3'],
+    [
+      verdict({ moveNumber: 1, played: move(at('Q16'), 4), guessed: move(at('D16'), 1) }),
+      verdict({ moveNumber: 3, played: move(at('Q16'), 1), guessed: move(at('C6'), 3) }),
+      // Never properly searched, so neither side of it may be quoted: counting
+      // it would manufacture a comparison out of the engine's silence.
+      verdict({ moveNumber: 5, played: move(at('Q16'), 9, 1), guessed: move(at('O3'), 2) }),
+    ],
+  );
+
+  const against = summary.ai?.against;
+  assert.equal(against?.moves, 2);
+  assert.equal(against?.yourLoss, 4);
+  assert.equal(against?.playedLoss, 5);
+  assert.equal(against?.yourMedian, 2);
+  assert.equal(against?.playedMedian, 2.5);
+  // The unsearched move is still graded on your side, where only your own
+  // loss is needed.
+  assert.equal(summary.ai?.graded, 3);
+});
+
+test('a session the engine could not speak for has nothing to compare', () => {
+  const { summary } = play(['D16'], []);
+  assert.equal(summary.ai?.against, null);
+});
+
 test('blunders are counted at the threshold the measurements used', () => {
   const { summary } = play(
     ['D16', 'C6'],

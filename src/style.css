@@ -402,6 +402,14 @@ button.primary {
   font-variant-numeric: tabular-nums;
 }
 
+/* The cost sentence sits under the subhead's clauses rather than beside them:
+   it is a sentence, and the clauses are labels. Same size and colour, so it
+   reads as part of the same line of thought. */
+.cost-note {
+  display: block;
+  margin-top: 0.2rem;
+}
+
 /* Quiet by design. It answers "how much is left" for anyone who looks, and is
    not supposed to pull the eye away from the board while a prompt is open. */
 .progress {
