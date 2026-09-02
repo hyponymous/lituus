@@ -57,6 +57,22 @@ const BAND_MARKS: Record<string, string> = {
   engine: BEST_MARK,
 };
 
+/**
+ * The same hues, darkened, for the ring around your own ghost stone. The fill
+ * carries the meaning and the ring carries the emphasis, so the ring is a
+ * shade of the fill rather than a colour of its own: it reads as the same mark
+ * drawn more firmly, not as a second thing to decode.
+ */
+const BAND_EDGES: Record<string, string> = {
+  better: '#267346',
+  even: '#5a5247',
+  worse: '#a57421',
+  blunder: '#8c2d21',
+  unscored: '#5a5247',
+  none: '#5a5247',
+  engine: '#195cb4',
+};
+
 /** A ghost stone's fill: opaque enough to carry a number, not quite a stone. */
 function ghost(color: string): string {
   return `${color}c4`;
@@ -301,12 +317,15 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
       svgEl('circle', {
         cx: x,
         cy: y,
-        r: CELL * STONE_SCALE,
+        // The engine's ghost sits inside a stone's footprint rather than
+        // filling it, so that where the two overlap yours still reads first.
+        r: CELL * STONE_SCALE * (marker.kind === 'best' ? 0.95 : 1),
         fill: played ? 'none' : ghost(color),
-        stroke: color,
         // Your move is the one you are looking for on the board, so it is the
-        // one drawn heavily. The engine's is an answer to it, and reads as one.
-        'stroke-width': marker.kind === 'guess' ? 3 : 1,
+        // one drawn heavily — a darker shade of its own band, at weight. The
+        // engine's is an answer to it, and reads as one.
+        stroke: marker.kind === 'guess' ? BAND_EDGES[marker.band ?? 'none'] : color,
+        'stroke-width': marker.kind === 'guess' ? 2.5 : 0.5,
         class: `mark mark-${marker.kind}`,
       }),
     );
