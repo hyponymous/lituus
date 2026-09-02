@@ -26,10 +26,13 @@ const WHITE_STONE = '#f5f5f0';
 const WHITE_EDGE = '#888';
 
 /** Marker colors are chosen to read against wood, black, and white alike. */
-const ACTUAL_MARK = '#1e6fd9';
 const GUESS_MARK = '#d94f4f';
 const HIT_MARK = '#1faa5f';
-const BEST_MARK = '#7d4fd9';
+/* Blue for the engine's move, drawn as a filled ghost stone rather than as a
+   mark on the wood: that is AI Sensei's blue top move and OGS's suggestion
+   circle, so a reader who has used either arrives already knowing it. */
+const BEST_MARK = '#1e6fd9';
+const BEST_FILL = 'rgba(30, 111, 217, 0.38)';
 
 /**
  * `last` marks the stone most recently played, as a board would by memory.
@@ -216,11 +219,6 @@ function drawStones(
   }
 }
 
-const RING_COLORS: Record<'actual' | 'hit', string> = {
-  actual: ACTUAL_MARK,
-  hit: HIT_MARK,
-};
-
 function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
   const [row, col] = toRowCol(pos, marker.index);
   const x: number = centerX(col);
@@ -239,20 +237,16 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
   }
 
   if (marker.kind === 'best') {
-    /*
-     * A triangle, and deliberately not a ring: `actual` is already the blue
-     * one, and an engine's move drawn as a second blue circle would be read as
-     * the move played by anyone who glanced. The shape carries the meaning
-     * where the colour cannot.
-     */
-    const points = `${x},${y - size} ${x + size},${y + size * 0.8} ${x - size},${y + size * 0.8}`;
+    // Stone-sized, so it reads as the move that could have been played there
+    // rather than as an annotation about the point.
     svg.appendChild(
-      svgEl('polygon', {
-        points,
-        fill: 'none',
+      svgEl('circle', {
+        cx: x,
+        cy: y,
+        r: CELL * 0.42,
+        fill: BEST_FILL,
         stroke: BEST_MARK,
-        'stroke-width': 2.5,
-        'stroke-linejoin': 'round',
+        'stroke-width': 1.5,
         class: 'mark mark-best',
       }),
     );
@@ -273,13 +267,28 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker): void {
     return;
   }
 
+  /*
+   * The move the game played is ringed in whichever stone colour it is not,
+   * the way every board tool marks the move on the board — and the way the
+   * `last` dot above already does it. It needs no colour of its own: it always
+   * sits on a stone, and the contrast is what makes it visible. That also
+   * leaves blue free to mean the engine, which is where the reader's eye goes
+   * looking for it.
+   */
+  const stroke: string =
+    marker.kind === 'hit'
+      ? HIT_MARK
+      : stoneAt(pos, marker.index) === BLACK
+        ? WHITE_STONE
+        : BLACK_STONE;
+
   svg.appendChild(
     svgEl('circle', {
       cx: x,
       cy: y,
       r: size,
       fill: 'none',
-      stroke: RING_COLORS[marker.kind],
+      stroke,
       'stroke-width': 2.5,
       class: `mark mark-${marker.kind}`,
     }),

@@ -14,6 +14,7 @@ import { advance, guess, startSession, type Session } from '../src/session.ts';
 import { pointFromName } from '../src/goban.ts';
 import {
   costBand,
+  costDelta,
   summarize,
   toJSON,
   toText,
@@ -477,4 +478,19 @@ test('with no engine every row is unscored', () => {
   const game: Game = readGame(parse(GAME));
   const summary: Summary = summarize(advance(guess(startSession(game, 1), at('D16'), 1000)));
   assert.equal(costBand(summary.rows[0]), 'unscored');
+});
+
+test('the cost delta keeps the sign convention a point loss already carries', () => {
+  // Negative is the good direction: you gave up less than they did. The strip
+  // draws it upward, so a flipped sign here would invert the whole chart.
+  const { summary } = play(
+    ['D16'],
+    [verdict({ moveNumber: 1, played: move(at('Q16'), 4), guessed: move(at('D16'), 1) })],
+  );
+  assert.equal(costDelta(summary.rows[0]), -3);
+});
+
+test('a delta needs both halves, and says so rather than reading as zero', () => {
+  const { summary } = play(['D16'], [verdict({ moveNumber: 1, played: null })]);
+  assert.equal(costDelta(summary.rows[0]), null);
 });

@@ -22,6 +22,7 @@ import {
 } from './session.ts';
 import {
   costBand,
+  costDelta,
   duration,
   longestStreak,
   percent,
@@ -860,34 +861,58 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean): void {
   const band: CostBand | null = scored ? costBand(row) : null;
 
   /*
-   * A cell the engine cannot speak for still shows hit or miss, faintly, under
-   * the dashed border. Dropping to a blank cell would throw away something the
-   * session does know — and a summary opened while searches are still running
-   * would begin as a row of empty squares and *gain* information as it filled,
-   * which is not how it should read.
+   * A cell the engine cannot speak for still shows hit or miss, faintly.
+   * Dropping to a blank cell would throw away something the session does know
+   * — and a summary opened while searches are still running would begin as a
+   * row of empty squares and *gain* information as it filled, which is not how
+   * it should read.
    */
   const shown: string =
     band === null || band === 'unscored' ? `${band ?? ''} ${match}`.trim() : band;
-  const label: string = cellLabel(row, scored);
 
-  cell.className = `cell ${shown}${row.hit ? ' exact' : ''}${selected ? ' selected' : ''}`;
+  /*
+   * The bar's direction and height. Up is cheaper than the game, down is
+   * costlier, and the length is the difference in points against a cap of
+   * `BLUNDER_LOSS` — past which a bar would say only "off the scale", which the
+   * blunder colour already says. Bands inside the noise floor get no direction:
+   * they are drawn as a stub on the axis, since half a point of difference is
+   * not a claim about which move was better.
+   */
+  const delta: number | null = band === null ? null : costDelta(row);
+  const direction: string =
+    delta === null || band === 'even' ? '' : delta < 0 ? ' up' : ' down';
+  cell.style.setProperty('--h', String(Math.min(1, Math.abs(delta ?? 0) / BLUNDER_LOSS)));
+
+  const label: string = cellLabel(row, scored);
+  cell.className = `cell ${shown}${direction}${row.hit ? ' exact' : ''}${selected ? ' selected' : ''}`;
   cell.title = label;
   cell.setAttribute('aria-label', label);
+
+  // The bar is a child rather than the button's own background: the button is
+  // the click target and stays full height, while the bar is what the reader
+  // measures.
+  if (!cell.firstElementChild) cell.append(el('span', { class: 'bar' }));
 }
 
 /**
- * A point loss as a reader should see it.
+ * A point loss as the board tools write it: as the change to your score, so a
+ * move that cost six points reads "-6.0" rather than "6.0".
+ *
+ * The sign flips here and nowhere else. `loss` is positive-is-worse throughout
+ * the engine and the summary, because it is a difference between two leads and
+ * that is the direction the arithmetic runs; a reader looking at a move wants
+ * the number KataGo, OGS and AI Sensei would show them, which is the negation.
  *
  * A negative loss is search noise, not a move that beat perfect play
- * (`analysis.ts`), and "you gave up -0.1 points" reads as a broken engine
- * rather than as a rounding error. Anything inside the half-point floor the
- * product already trusts (`BEAT_MARGIN`) is reported as zero. A *larger*
- * negative is left visible: that would be a real anomaly, and hiding it would
+ * (`analysis.ts`), and "+0.1" reads as a broken engine rather than as a
+ * rounding error. Anything inside the half-point floor the product already
+ * trusts (`BEAT_MARGIN`) is reported as zero. A *larger* negative survives the
+ * flip and shows as a gain: that would be a real anomaly, and hiding it would
  * be the same mistake in the other direction.
  */
-function points(loss: number): string {
+function asChange(loss: number): string {
   const noise: boolean = loss < 0 ? loss > -BEAT_MARGIN : loss < 0.05;
-  return noise ? '0.0 points' : `${loss.toFixed(1)} points`;
+  return noise ? '0.0' : (-loss).toFixed(1);
 }
 
 /**
@@ -903,64 +928,28 @@ function points(loss: number): string {
  * nothing" are different claims, and a blank would be read as the second.
  */
 function costLine(summary: Summary, row: SummaryRow, verdict: Verdict | undefined): string {
-  // With an engine running, silence about one move is worth saying: the line
-  // fills itself in when that prompt's search lands. With no engine there is
-  // nothing to wait for, and the line stays out of the way.
-  if (!verdict) return summary.ai === null ? '' : 'The engine has not scored this move.';
-
-  const { loss, playedLoss } = row;
-  const yours: string =
-    loss === null ? 'your move was not scored' : `you gave up ${points(loss)}`;
-  const theirs: string =
-    playedLoss === null
-      ? `${colorName(summary.color)}\u2019s move was not scored`
-      : `${colorName(summary.color)} gave up ${points(playedLoss)}`;
-
-  // On a hit the two clauses are the same move, and saying it twice reads as
-  // an engine that cannot make up its mind.
-  const cost: string = row.hit
-    ? loss === null
-      ? 'That move was not scored.'
-      : `That move gave up ${points(loss)}.`
-    : `${yours[0].toUpperCase()}${yours.slice(1)}; ${theirs}.`;
-
-  const best: number = verdict.best.point;
-  const guessed: number | undefined = verdict.guessed?.point;
-  const played: number | undefined = verdict.played?.point;
-
-  let engine: string;
-  if (best === guessed) engine = 'That was the engine\u2019s own move.';
-  else if (best === played) engine = 'The engine agreed with the move played.';
-  else engine = `The engine would have played ${pointName(summary.board, best)}.`;
-
-  return `${cost} ${engine}`;
-}
-
-/**
- * Five colours need a key, and only when the engine gave them meaning.
- *
- * With no engine the strip is hit and miss as it always was, which needs no
- * explaining — and drawing a key over two self-evident colours would suggest
- * the two strips are the same measurement (`docs/design-ai-scoring.md` §8).
- */
-function stripLegend(): HTMLElement {
-  const keys: readonly (readonly [string, string])[] = [
-    ['better', 'better than the game'],
-    ['even', 'within half a point'],
-    ['worse', 'worse'],
-    ['blunder', `${BLUNDER_LOSS}+ points worse`],
-    ['unscored', 'not scored'],
-    // Last, because it is a mark on a band rather than a band of its own.
-    ['even exact', 'exact match'],
+  /*
+   * Three slots, always in the same order and always the same shape: your
+   * move, the game's, the engine's. The sentence this replaces read well on
+   * its own and ran to two or three lines, so the board and the chart under it
+   * moved every time the cursor did — and a reader stepping through with the
+   * arrow keys is looking at precisely the thing that jumped.
+   *
+   * The words still exist where words belong. `cellLabel` puts a sentence on
+   * every cell's tooltip, which is read one at a time and shifts nothing.
+   */
+  const cost = (loss: number | null): string => (loss === null ? ' —' : ` ${asChange(loss)}`);
+  const slots: string[] = [
+    `you ${row.guess}${cost(row.loss)}`,
+    `${colorName(summary.color)} ${row.actual}${cost(row.playedLoss)}`,
   ];
 
-  return el(
-    'p',
-    { class: 'legend muted' },
-    keys.map(([band, label]) =>
-      el('span', { class: 'key' }, [el('span', { class: `cell ${band}` }), label]),
-    ),
-  );
+  // The engine's slot is kept even when it has nothing to say, so that a
+  // verdict landing later fills a gap rather than pushing the line wider.
+  if (verdict) slots.push(`engine ${pointName(summary.board, verdict.best.point)}`);
+  else if (summary.ai !== null) slots.push('engine —');
+
+  return slots.join(' · ');
 }
 
 /**
@@ -984,15 +973,13 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
   const caption: HTMLElement = el('p', { class: 'caption muted' });
   const cost: HTMLElement = el('p', { class: 'caption cost muted' });
   const nav: HTMLElement = el('div', { class: 'nav' });
-  const strip: HTMLElement = el('div', { class: 'strip', id: STRIP_ID });
-  const panel: HTMLElement = el('div', { class: 'review' }, [
-    board,
-    caption,
-    cost,
-    nav,
-    strip,
-    ...(scored ? [stripLegend()] : []),
-  ]);
+  const strip: HTMLElement = el('div', {
+    // Bars need a scale, and with no engine there is nothing to scale. The
+    // strip stays the flat hit-or-miss ribbon it has always been.
+    class: scored ? 'strip chart' : 'strip',
+    id: STRIP_ID,
+  });
+  const panel: HTMLElement = el('div', { class: 'review' }, [board, caption, cost, nav, strip]);
 
   /**
    * Verdicts by move number, rebuilt from the *current* summary on every draw.
@@ -1053,8 +1040,18 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     const verdict: Verdict | undefined = verdictsNow().get(row.moveNumber);
     shown = verdict;
 
+    /*
+     * Blue for the move the game played, red for yours, green for the
+     * engine's — the vocabulary OGS and AI Sensei share, so a reader arrives
+     * knowing it.
+     *
+     * A hit is drawn as the played move rather than with the session's green
+     * hit ring, because in review green belongs to the engine and one hue
+     * cannot mean two things on the same board. Nothing is lost: a hit is the
+     * position with a single ring on it, which is what a hit is.
+     */
     const marks: Marker[] = made.hit
-      ? [{ index: made.actual, kind: 'hit' }]
+      ? [{ index: made.actual, kind: 'actual' }]
       : [
           { index: made.actual, kind: 'actual' },
           { index: made.guess, kind: 'guess' },
@@ -1069,11 +1066,10 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
 
     renderGoban(move.after, board, { showCoordinates: true, markers: marks });
 
-    const took: string = row.elapsedMs === null ? '' : ` (${duration(row.elapsedMs)})`;
-    const where = `Move ${row.moveNumber} (${at + 1} of ${summary.rows.length})${took}`;
-    caption.textContent = made.hit
-      ? `${where} — you played ${row.actual}, and so did they.`
-      : `${where} — you played ${row.guess}; ${colorName(summary.color)} played ${row.actual}.`;
+    // Where you are; the line below says what happened. Which move each side
+    // played was in both, and naming it twice is what made the pair wrap.
+    const took: string = row.elapsedMs === null ? '' : ` · ${duration(row.elapsedMs)}`;
+    caption.textContent = `Move ${row.moveNumber} · ${at + 1} of ${summary.rows.length}${took}`;
     cost.textContent = costLine(current(summary), row, verdict);
   };
 

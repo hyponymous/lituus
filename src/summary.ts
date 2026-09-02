@@ -318,16 +318,27 @@ function streaksOf(rows: readonly SummaryRow[]): Streak[] {
 export type CostBand = 'better' | 'even' | 'worse' | 'blunder' | 'unscored';
 
 /**
- * Which band a row falls in.
+ * What the prediction cost against what the game's move cost, in points.
  *
- * Both losses have to be quotable. Comparing a searched guess against an
- * unsearched played move would manufacture a verdict out of the engine's
- * silence, which is the same reason `beatPlayed` insists on both.
+ * Negative is the good direction — you gave up less than they did — which is
+ * the sign convention a point *loss* already carries, kept rather than flipped
+ * so the two numbers can be read side by side without a mental negation.
+ *
+ * Null when either side is missing. Both losses have to be quotable:
+ * comparing a searched guess against an unsearched played move would
+ * manufacture a verdict out of the engine's silence, which is the same reason
+ * `beatPlayed` insists on both.
  */
-export function costBand(row: SummaryRow): CostBand {
-  if (row.loss === null || row.playedLoss === null) return 'unscored';
+export function costDelta(row: SummaryRow): number | null {
+  if (row.loss === null || row.playedLoss === null) return null;
+  return row.loss - row.playedLoss;
+}
 
-  const delta: number = row.loss - row.playedLoss;
+/** Which band a row falls in. */
+export function costBand(row: SummaryRow): CostBand {
+  const delta: number | null = costDelta(row);
+  if (delta === null) return 'unscored';
+
   if (delta <= -BEAT_MARGIN) return 'better';
   if (delta < BEAT_MARGIN) return 'even';
   return delta >= BLUNDER_LOSS ? 'blunder' : 'worse';

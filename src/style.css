@@ -465,31 +465,45 @@ section .muted {
   margin-bottom: 0.4rem;
 }
 
+/* Both caption lines hold one line's height whatever they say, and never wrap.
+   Everything below them — the transport row, the chart — moves the moment they
+   do, and a reader stepping through predictions with the arrow keys is looking
+   straight at the thing that would jump. Overflow is ellipsised rather than
+   wrapped for the same reason: a line too long for the width is a line that
+   has to lose its tail, not gain a row. */
 .caption {
-  min-height: 1.5em;
+  height: 1.5em;
   margin: 0;
+  overflow: hidden;
   font-size: 0.9rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-/* The engine's line under the caption. It keeps its height whether or not
-   there is a verdict, so landing on an unscored move does not shuffle the
-   board and the strip up the page. */
 .caption.cost {
   margin-bottom: 0.2rem;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Sits between the board and the strip: the board says where you are, these
-   move you, the strip says where that is in the session. */
+   move you, the strip says where that is in the session.
+
+   Six controls that must read as one row of transport buttons, so they never
+   wrap — a "previous miss" sitting on its own line below "first" is a control
+   panel that has come apart. They are as narrow as their glyphs allow to make
+   that hold on a phone: at this size the whole row is about 210px, against the
+   340px it used to take. */
 .nav {
   display: flex;
-  gap: 0.25rem;
+  flex-wrap: nowrap;
+  gap: 0.2rem;
   margin: 0 0 0.5rem;
 }
 
 .nav-button {
-  min-width: 2.5rem;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.85rem;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.8rem;
   line-height: 1;
 }
 
@@ -500,106 +514,183 @@ section .muted {
   opacity: 0.4;
 }
 
+/* One line, always: the strip is the game's timeline, and a timeline that
+   wraps into four rows is a grid — the eye stops reading left-to-right and
+   starts hunting. Cells divide the width between them instead of claiming a
+   fixed size, so a 300-move game and a 40-move one both read end to end.
+
+   `overflow-x` is the safety valve rather than the plan: at the 2px floor a
+   32rem strip holds about 250 predictions, and only a longer game than that
+   scrolls. */
 .strip {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 1px;
   max-width: 32rem;
-  margin: 0 0 1.5rem;
+  /* Room for the selected cell to stand proud of the row: `overflow-x: auto`
+     forces vertical overflow to auto as well, so without this the cursor is
+     clipped by the very rule that keeps the timeline on one line. */
+  padding: 3px 0;
+  margin: -3px 0 1.4rem;
+  border-radius: 2px;
+}
+
+/* The axis the bars stand on, drawn once on the container rather than as a
+   border on eighty cells. */
+.strip.chart {
+  background: linear-gradient(var(--line), var(--line)) center/100% 1px no-repeat;
 }
 
 /* Cells are buttons, so they have to shed every button style they inherit.
-   The legend draws the same cells at the same size, so the shape and the band
-   colours are shared and the key cannot drift from the thing it explains. */
-.strip .cell,
-.legend .cell {
+   The button keeps its full height and stays the click target; the bar inside
+   it is what the reader measures. */
+.strip .cell {
   position: relative;
-  width: 14px;
-  height: 14px;
+  flex: 1 1 0;
+  min-width: 2px;
+  height: 40px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 2px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
 }
 
+.strip .cell .bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--band, var(--line));
+}
+
+/* With no engine there is no scale, so the cell is filled edge to edge and the
+   strip is the flat ribbon it has always been — including its height, since
+   the tall cell exists to give bars somewhere to go. */
+.strip:not(.chart) .cell {
+  height: 18px;
+}
+
+.strip:not(.chart) .cell .bar {
+  top: 0;
+  bottom: 0;
+}
+
+/* With one, each prediction is a bar from the axis: up for cheaper than the
+   game, down for costlier, and `--h` is the difference against a cap of eight
+   points, set per cell in views.ts. The 3px floor keeps a bar clickable and a
+   run of small ones readable as a run. */
+.strip.chart .cell.up .bar {
+  bottom: 50%;
+  height: max(3px, calc(var(--h, 0) * 18px));
+}
+
+.strip.chart .cell.down .bar {
+  top: 50%;
+  height: max(3px, calc(var(--h, 0) * 18px));
+}
+
+/* Inside the noise floor, or with nothing to say: a stub on the axis. Half a
+   point of difference is not a claim about which move was better, and drawing
+   it as one would fill the chart with noise. */
+.strip.chart .cell:not(.up):not(.down) .bar {
+  top: calc(50% - 2px);
+  height: 4px;
+}
+
+/* A band names a colour rather than painting anything, so the bar and anything
+   drawn over it later read the colour from one place. */
+
 /* With no engine, the strip is hit and miss as it always was. */
 .cell.hit {
-  background: var(--hit);
+  --band: var(--hit);
 }
 
 .cell.miss {
-  background: var(--miss);
-  opacity: 0.4;
+  --band: color-mix(in srgb, var(--miss) 45%, transparent);
 }
 
 /* With one, it is what the guess cost against what the game's move cost. */
 .cell.better {
-  background: var(--cost-better);
+  --band: var(--cost-better);
 }
 
 .cell.even {
-  background: var(--cost-even);
+  --band: var(--cost-even);
 }
 
 .cell.worse {
-  background: var(--cost-worse);
+  --band: var(--cost-worse);
 }
 
 .cell.blunder {
-  background: var(--cost-blunder);
+  --band: var(--cost-blunder);
 }
 
 /* Absent, not neutral: a comparison that could not be made must not read as
    one that came out even. The hit/miss underneath stays, at a fraction of its
-   strength — it is still known, and the dashed border is what says the engine
-   has not spoken. */
+   strength — it is still known, and the pallor is what says the engine has not
+   spoken. A dashed border said that more plainly and is not available at three
+   pixels wide, so the strip goes by weight instead. */
 .cell.unscored {
-  border-color: var(--line);
-  border-style: dashed;
+  --band: color-mix(in srgb, var(--line) 40%, transparent);
 }
 
 .cell.unscored.hit {
-  background: color-mix(in srgb, var(--hit) 30%, transparent);
+  --band: color-mix(in srgb, var(--hit) 30%, transparent);
 }
 
 .cell.unscored.miss {
-  background: color-mix(in srgb, var(--miss) 20%, transparent);
+  --band: color-mix(in srgb, var(--miss) 20%, transparent);
 }
 
 /* An exact match sits in `even` by construction — the same move cannot cost
    two different amounts — so it is marked by shape rather than by a band of
-   its own, which also keeps it legible without colour. */
+   its own, which also keeps it legible without colour. A bar along the foot of
+   the cell rather than a dot in the middle of it: the cells are now as narrow
+   as the timeline needs them to be, and a dot inside a three-pixel cell is no
+   mark at all. */
 .cell.exact::after {
   content: '';
   position: absolute;
-  inset: 3px;
-  border-radius: 1px;
-  background: var(--bg);
-  opacity: 0.8;
+  inset: auto 0 0 0;
+  height: 3px;
+  /* The foreground colour, so the mark contrasts with every band it can sit
+     on and flips with the theme along with everything else. Against the page
+     ground it would vanish into the gaps between cells. */
+  background: var(--fg);
+  opacity: 0.45;
 }
 
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.9rem;
-  margin: -1rem 0 1.5rem;
-  font-size: 0.78rem;
+/* On the chart the mark moves onto the axis, where an exact match's stub
+   already sits: a matched prediction cannot have a bar, since the same move
+   cannot cost two different amounts. It beads the axis, which is a fair
+   picture of a session — the matches are the flat part. */
+.strip.chart .cell.exact::after {
+  /* One pixel, so the opacity carries what the height no longer can. */
+  inset: calc(50% - 0.5px) 0 auto 0;
+  height: 1px;
+  opacity: 0.65;
 }
 
-.legend .key {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
+/* Outlines rather than borders: a border would eat a third of a cell this
+   narrow, and an outline is drawn outside the box, so it can overlap its
+   neighbours and stay visible. The selected cell is lifted above them so its
+   own outline is not painted over by the next cell along. */
 .strip .cell:hover,
 .strip .cell:focus-visible {
-  border-color: var(--fg);
+  outline: 1px solid var(--fg);
+  outline-offset: -1px;
+  z-index: 1;
 }
 
+/* The cursor is a lit column rather than a thicker bar: on a chart, weight
+   means magnitude, and a cursor that reads as magnitude is a cursor that lies.
+   The tint is on the button, which is full height whatever its bar is doing. */
 .strip .cell.selected {
-  border-color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 16%, transparent);
   outline: 1px solid var(--fg);
+  outline-offset: -1px;
+  z-index: 2;
 }
 
 /* ── Local-or-away matrix ────────────────────────────────────────────────── */
