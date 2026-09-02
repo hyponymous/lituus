@@ -18,6 +18,7 @@ import {
   endSession,
   guess,
   lastPlayed,
+  passGuess,
   score,
   startSession,
   type Score,
@@ -214,12 +215,69 @@ test('a pass leaves the last played move null rather than a phantom point', () =
 
 // ── Passes ───────────────────────────────────────────────────────────────────
 
-test('a pass by the chosen color is never prompted', () => {
+test('a pass by the chosen color is prompted like any other move', () => {
   const game: Game = load('(;SZ[19];B[dd];W[pp];B[];W[qq];B[cc])');
   const start: Session = startSession(game, BLACK);
   const next: Session = advance(guess(start, point(start.position, 'dd')));
 
-  assert.equal(next.move?.number, 5, 'the pass at move 3 is skipped');
+  assert.equal(next.move?.number, 3, 'the pass at move 3 is asked about');
+  assert.equal(next.move?.index, null);
+});
+
+test('predicting a pass where the game passed is a hit', () => {
+  const game: Game = load('(;SZ[19];B[dd];W[pp];B[];W[qq];B[cc])');
+  const start: Session = startSession(game, BLACK);
+  const atPass: Session = advance(guess(start, point(start.position, 'dd')));
+
+  const revealed: Session = passGuess(atPass);
+  assert.equal(revealed.phase, 'reveal');
+  assert.equal(revealed.lastGuess?.hit, true);
+  assert.equal(revealed.lastGuess?.guess, null, 'a pass is null, not a point');
+  assert.equal(revealed.lastGuess?.actual, null);
+});
+
+test('predicting a pass where the game played a point is a recorded miss', () => {
+  const start: Session = startSession(load(SIMPLE), BLACK);
+  const revealed: Session = passGuess(start);
+
+  assert.equal(revealed.lastGuess?.hit, false);
+  assert.equal(revealed.lastGuess?.guess, null);
+  assert.equal(revealed.lastGuess?.actual, point(start.position, 'dd'));
+  // The whole point of recording it: a pass cannot be used to keep a hard
+  // move out of the denominator (PRD §4.5).
+  assert.equal(score(revealed).guessed, 1);
+  assert.equal(score(revealed).hits, 0);
+});
+
+test('predicting a point where the game passed is a miss', () => {
+  const game: Game = load('(;SZ[19];B[dd];W[pp];B[];W[qq];B[cc])');
+  const start: Session = startSession(game, BLACK);
+  const atPass: Session = advance(guess(start, point(start.position, 'dd')));
+
+  const revealed: Session = guess(atPass, point(atPass.position, 'cc'));
+  assert.equal(revealed.lastGuess?.hit, false);
+  assert.equal(revealed.lastGuess?.actual, null, 'the game passed');
+});
+
+test('a pass reveal leaves the board where the pass left it', () => {
+  const game: Game = load('(;SZ[19];B[dd];W[pp];B[];W[qq];B[cc])');
+  const start: Session = startSession(game, BLACK);
+  const atPass: Session = advance(guess(start, point(start.position, 'dd')));
+  const revealed: Session = passGuess(atPass);
+
+  assert.deepEqual(
+    [...revealed.position.stones],
+    [...atPass.position.stones],
+    'a pass places no stone',
+  );
+});
+
+test('a pass cannot be predicted while the answer is showing', () => {
+  const start: Session = startSession(load(SIMPLE), BLACK);
+  const revealed: Session = guess(start, point(start.position, 'dd'));
+
+  assert.throws(() => passGuess(revealed), SessionError);
+  assert.throws(() => passGuess(endSession(start)), SessionError);
 });
 
 test('a pass by the opponent is played through without comment', () => {
@@ -305,9 +363,9 @@ test('an untouched session scores zero rather than dividing by zero', () => {
   assert.equal(Number.isFinite(result.rate), true);
 });
 
-test('prompt counts exclude the opponent s moves and both sides passes', () => {
+test('prompt counts exclude the opponent s moves but include passes', () => {
   const game: Game = load('(;SZ[19];B[dd];W[pp];B[];W[qq];B[cc])');
-  assert.equal(countPrompts(game, BLACK), 2);
+  assert.equal(countPrompts(game, BLACK), 3);
   assert.equal(countPrompts(game, WHITE), 2);
 });
 

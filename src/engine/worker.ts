@@ -42,8 +42,9 @@ export type WorkerRequest =
   | {
       readonly type: 'evaluate';
       readonly moveNumber: number;
-      readonly played: number;
-      readonly guess: number;
+      /** Board indices, or null for a pass, exactly as `Prompt` carries them. */
+      readonly played: number | null;
+      readonly guess: number | null;
     };
 
 /** Worker to main thread. */

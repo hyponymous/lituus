@@ -213,6 +213,15 @@ button.primary {
   font-weight: 600;
 }
 
+/*
+ * Leaving is not a move. `Pass` is an answer and sits with the loop's own
+ * controls; this pushes the way out to the far end, so the click that ends a
+ * session is nowhere near the click that answers a prompt.
+ */
+.actions button.leave {
+  margin-left: auto;
+}
+
 /* ── Setup ───────────────────────────────────────────────────────────────── */
 
 .meta {

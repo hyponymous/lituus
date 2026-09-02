@@ -256,6 +256,8 @@ export function renderSetup(root: HTMLElement, props: SetupProps): void {
 export interface SessionProps {
   readonly session: Session;
   readonly onGuess: (index: number) => void;
+  /** Predict a pass. There is no point on the board to click for one. */
+  readonly onPass: () => void;
   readonly onAdvance: () => void;
   readonly onEnd: () => void;
   /** One line about the engine, or null when scoring is off. */
@@ -328,12 +330,20 @@ function sessionMarkers(session: Session): Marker[] {
     return previous?.index != null ? [{ index: previous.index, kind: 'last' }] : [];
   }
 
-  return made.hit
-    ? [{ index: made.actual, kind: 'hit' }]
-    : [
-        { index: made.actual, kind: 'actual' },
-        { index: made.guess, kind: 'guess' },
-      ];
+  /*
+   * A pass is nowhere on the board, so it contributes no mark. Two passes
+   * leave the board bare, which is the honest picture: the answer is the
+   * readout's, and there is nothing to point at. A pass on one side alone
+   * still marks the other, so the reader sees the move that does have a place.
+   */
+  if (made.hit) {
+    return made.actual === null ? [] : [{ index: made.actual, kind: 'hit' }];
+  }
+
+  const marks: Marker[] = [];
+  if (made.actual !== null) marks.push({ index: made.actual, kind: 'actual' });
+  if (made.guess !== null) marks.push({ index: made.guess, kind: 'guess' });
+  return marks;
 }
 
 /** The stone that just appeared, so the renderer can animate it in. */
@@ -347,9 +357,19 @@ function sessionStatus(session: Session): string {
   const running = `${result.hits}/${result.guessed} matched`;
 
   if (session.phase === 'reveal' && session.lastGuess) {
-    const verdict: string = session.lastGuess.hit
-      ? 'The same move.'
-      : 'Not this time — the played move is circled.';
+    const made: Guess = session.lastGuess;
+    /*
+     * The played move is circled — except when it was a pass, which is nowhere
+     * to circle. On those the sentence is the whole answer, so it says what
+     * happened rather than pointing at the board.
+     */
+    const verdict: string = made.hit
+      ? made.actual === null
+        ? 'The same move — you both passed.'
+        : 'The same move.'
+      : made.actual === null
+        ? 'Not this time — the game passed here.'
+        : 'Not this time — the played move is circled.';
     return `${verdict} ${running}.`;
   }
   if (session.move) {
@@ -414,10 +434,19 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
     },
   });
 
-  // The reveal advances on its own; Skip is for readers faster than the timer.
+  /*
+   * The reveal advances on its own; Skip is for readers faster than the timer.
+   *
+   * Pass is an answer, not a way out, and it is placed with the controls
+   * because the board has no point to click for one — every other answer is a
+   * click on the goban. It is offered only while a prompt is waiting, for the
+   * same reason a click on the board is: the reveal must not be pre-empted.
+   */
   const controls: Child[] = [
-    ...(revealing ? [button('Skip', props.onAdvance)] : []),
-    button('End session', props.onEnd),
+    ...(revealing ? [button('Skip', props.onAdvance)] : [button('Pass', props.onPass)]),
+    // Set apart from the two above it, which drive the loop. Leaving is not a
+    // move, and it should not sit flush against the control that answers one.
+    button('End session', props.onEnd, { class: 'leave' }),
   ];
 
   replace(
@@ -1140,7 +1169,17 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
      * position with a single ring on it, which is what a hit is.
      */
     const live: Summary = current(summary);
-    const best: number | undefined = verdict?.best.point;
+    /*
+     * The engine's move, where it is a point on the board. A best move that is
+     * a pass is numbered past the last intersection, and marking it would put
+     * a mark at no intersection at all — most likely now that the end of a
+     * game is prompted, which is exactly where the engine wants to pass.
+     */
+    const bestPoint: number | undefined = verdict?.best.point;
+    const best: number | undefined =
+      bestPoint !== undefined && bestPoint < live.board.rows * live.board.cols
+        ? bestPoint
+        : undefined;
 
     /*
      * Your move, in the colour of how it turned out: a ghost stone where you
@@ -1158,7 +1197,9 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     const band: CostBand | 'engine' | null =
       made.guess === best ? 'engine' : live.ai === null ? null : costBand(row);
     const gained: string | null = gainOver(row.playedLoss, row.loss);
-    const yours: Marker = {
+    // A pass has no place on the board, so it carries no mark. What it cost is
+    // still in the line under the board, where it is labelled.
+    const yours: Marker | null = made.guess === null ? null : {
       index: made.guess,
       kind: 'guess',
       ...(band === null ? {} : { band }),
@@ -1171,8 +1212,9 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
      * the move the game made, that is how yours compared — and they are
      * concentric rather than competing.
      */
-    const marks: Marker[] = [{ index: made.actual, kind: 'actual' }];
-    if (!made.hit || band !== null) marks.push(yours);
+    const marks: Marker[] =
+      made.actual === null ? [] : [{ index: made.actual, kind: 'actual' }];
+    if (yours && (!made.hit || band !== null)) marks.push(yours);
 
     // The engine's move only when it is a third point: on the guess or on the
     // played stone it is already the mark that is there.

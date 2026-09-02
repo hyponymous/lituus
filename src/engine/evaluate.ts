@@ -213,10 +213,14 @@ export function evaluatePrompt(
     loss: rootLead - top.scoreLead,
   };
 
-  const played: MoveVerdict | null = verdictFor(prompt.played);
-  // A hit is the same move twice; do not pay for it twice.
+  // A pass arrives as null and is searched like any other move: the policy has
+  // one, numbered past the last intersection, and `search.ts` treats it as
+  // always legal in the main phase.
+  const played: MoveVerdict | null = verdictFor(prompt.played ?? pass);
+  // A hit is the same move twice; do not pay for it twice. Two passes are the
+  // same move on the same terms.
   const guessed: MoveVerdict | null =
-    prompt.guess === prompt.played ? played : verdictFor(prompt.guess);
+    prompt.guess === prompt.played ? played : verdictFor(prompt.guess ?? pass);
 
   return {
     moveNumber: prompt.moveNumber,

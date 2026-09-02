@@ -23,10 +23,10 @@ export type Phase = 'prompt' | 'reveal' | 'done';
 export interface Guess {
   /** Move number in the game record, 1-based, as shown to the user. */
   readonly moveNumber: number;
-  /** Where the move was actually played. */
-  readonly actual: number;
-  /** Where the user guessed. */
-  readonly guess: number;
+  /** Where the move was actually played, or null if the game passed. */
+  readonly actual: number | null;
+  /** Where the user guessed, or null if the user passed. */
+  readonly guess: number | null;
   readonly hit: boolean;
   /**
    * How long the prompt was on screen before the click, in milliseconds, or
@@ -63,11 +63,10 @@ export class SessionError extends Error {
   }
 }
 
-/** The next move of this color that can be predicted — passes are not prompts. */
+/** The next move of this color that can be predicted. Passes are prompts too. */
 function nextPrompt(game: Game, color: Color, from: number): number {
   for (let i = from; i < game.moves.length; i++) {
-    const move: GameMove = game.moves[i];
-    if (move.color === color && move.index !== null) return i;
+    if (game.moves[i].color === color) return i;
   }
   return game.moves.length;
 }
@@ -115,6 +114,25 @@ export function canGuess(session: Session, index: number): boolean {
   return session.phase === 'prompt' && isLegal(session.position, index, session.color);
 }
 
+/** Settle a committed answer into the reveal. The one place a guess is scored. */
+function reveal(session: Session, move: GameMove, made: Guess): Session {
+  return {
+    ...session,
+    phase: 'reveal',
+    position: move.after,
+    lastGuess: made,
+    guesses: [...session.guesses, made],
+  };
+}
+
+/** The move under the prompt, or a `SessionError` naming why there is none. */
+function prompted(session: Session): GameMove {
+  if (session.phase !== 'prompt' || !session.move) {
+    throw new SessionError(`Cannot guess while ${session.phase}.`);
+  }
+  return session.move;
+}
+
 /**
  * Commit a guess and reveal the answer. There is no confirmation step: the
  * click is the answer, and it is scored on exact match against the played move.
@@ -124,33 +142,40 @@ export function canGuess(session: Session, index: number): boolean {
  * appeared, and because a pure transition cannot read a clock.
  */
 export function guess(session: Session, index: number, elapsedMs: number | null = null): Session {
-  if (session.phase !== 'prompt' || !session.move) {
-    throw new SessionError(`Cannot guess while ${session.phase}.`);
-  }
+  const move: GameMove = prompted(session);
   if (!canGuess(session, index)) {
     throw new SessionError('That point is not a legal move.');
   }
 
-  const move: GameMove = session.move;
-  if (move.index === null) {
-    throw new SessionError('A pass should never have been prompted.');
-  }
-
-  const made: Guess = {
+  return reveal(session, move, {
     moveNumber: move.number,
     actual: move.index,
+    // A point is never a pass, so a prompt the game passed is a miss here.
     guess: index,
     hit: index === move.index,
     elapsedMs,
-  };
+  });
+}
 
-  return {
-    ...session,
-    phase: 'reveal',
-    position: move.after,
-    lastGuess: made,
-    guesses: [...session.guesses, made],
-  };
+/**
+ * Predict a pass. The board offers no point to click for it, so this is the
+ * one answer that arrives from a control rather than from the goban.
+ *
+ * It is a guess and not a way out: it is recorded, it counts against the rate
+ * like any other, and it is a hit only where the game passed too. Under PRD
+ * §4.5 a session is one honest pass through the game, and a free skip would
+ * let the rate be taken over moves the user chose to answer.
+ */
+export function passGuess(session: Session, elapsedMs: number | null = null): Session {
+  const move: GameMove = prompted(session);
+
+  return reveal(session, move, {
+    moveNumber: move.number,
+    actual: move.index,
+    guess: null,
+    hit: move.index === null,
+    elapsedMs,
+  });
 }
 
 /** Move past the revealed answer to the next prompt, or to the end of the game. */

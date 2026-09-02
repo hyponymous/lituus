@@ -11,7 +11,9 @@ import {
   advance,
   endSession,
   guess,
+  passGuess,
   startSession,
+  type Guess,
   type Session,
 } from './session.ts';
 import { summarize } from './summary.ts';
@@ -220,14 +222,22 @@ function showEngineProgress(changedAnalysis: boolean): void {
 }
 
 /** Ask the engine about the position the user has just guessed at. */
-function enqueue(session: Session, moveNumber: number, played: number, guessed: number): void {
+function enqueue(
+  session: Session,
+  moveNumber: number,
+  played: number | null,
+  guessed: number | null,
+): void {
   const move = session.game.moves.find((candidate) => candidate.number === moveNumber);
   if (!queue || !move) return;
 
   // Already answered, about this very guess. A replay that repeats a guess
-  // costs nothing; one that changes it pays for the change and no more.
+  // costs nothing; one that changes it pays for the change and no more. A
+  // verdict names a pass the engine's way, one past the last intersection, so
+  // the comparison is made in that numbering rather than this one.
   const known: Verdict | null = analysis ? verdictFor(analysis, moveNumber) : null;
-  if (known && known.guessed?.point === guessed) return;
+  const asPoint: number = guessed ?? session.game.cols * session.game.rows;
+  if (known && known.guessed?.point === asPoint) return;
 
   const prompt: Prompt = {
     moveNumber,
@@ -420,6 +430,19 @@ function drawSession(session: Session): void {
 
   const next = (): void => show({ name: 'session', session: advance(session) });
 
+  /**
+   * Show a committed answer, and ask the engine about it.
+   *
+   * Enqueued from the guess rather than from the reveal, so the search starts
+   * at the earliest moment the guess is known. It cannot delay anything:
+   * `session` has no reference to the evaluator (design §5.1).
+   */
+  const commit = (next: Session): void => {
+    const made: Guess | null = next.lastGuess;
+    if (made) enqueue(session, made.moveNumber, made.actual, made.guess);
+    show({ name: 'session', session: next });
+  };
+
   if (session.phase === 'prompt' && session.cursor !== promptedCursor) {
     promptedCursor = session.cursor;
     promptedAt = performance.now();
@@ -427,15 +450,8 @@ function drawSession(session: Session): void {
 
   renderSession(root, {
     session,
-    onGuess: (index: number): void => {
-      const next: Session = guess(session, index, elapsed());
-      // Enqueued from the guess rather than from the reveal, so the search
-      // starts at the earliest moment the guess is known. It cannot delay
-      // anything: `session` has no reference to the evaluator (design §5.1).
-      const made = next.lastGuess;
-      if (made) enqueue(session, made.moveNumber, made.actual, made.guess);
-      show({ name: 'session', session: next });
-    },
+    onGuess: (index: number): void => commit(guess(session, index, elapsed())),
+    onPass: (): void => commit(passGuess(session, elapsed())),
     onAdvance: next,
     onEnd: (): void => show({ name: 'session', session: endSession(session) }),
     engine: engineLine(),

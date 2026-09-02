@@ -150,15 +150,18 @@ export function hoshiPoints(size: number): [number, number][] {
 /**
  * Human-readable name of a point, e.g. "Q16".
  *
- * An index that is not a point on this board reads as "pass", which is what
- * one always is in practice: the engine numbers a pass just past the last
- * intersection. The arithmetic below would otherwise have named it "A0" — a
+ * A pass reads as "pass": `null`, which is how the game and session layers
+ * carry one, and equally an index that is not a point on this board, which is
+ * how the engine carries one — it numbers a pass just past the last
+ * intersection. The arithmetic below would otherwise have named that "A0" — a
  * plausible-looking name for no point at all, which `pointFromName` then
  * refuses, so an exported variation containing one came back shorter than it
  * went out. "pass" is refused by the same reader, and says what it is.
  */
-export function pointName(pos: Position, index: number): string {
-  if (!Number.isInteger(index) || index < 0 || index >= pos.rows * pos.cols) return 'pass';
+export function pointName(pos: Position, index: number | null): string {
+  if (index === null || !Number.isInteger(index) || index < 0 || index >= pos.rows * pos.cols) {
+    return 'pass';
+  }
   const [row, col] = toRowCol(pos, index);
   return `${COL_LETTERS[col] ?? '?'}${pos.rows - row}`;
 }

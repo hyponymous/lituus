@@ -114,12 +114,14 @@ function evaluate(
   const session: Session = startSession(game(), 1);
   const move = game().moves.find((m) => m.number === moveNumber);
   if (!move) throw new EvaluationError(`Move ${moveNumber} is not in this record.`);
+  // "pass" is how these tests name one; a `Prompt` carries it as null.
+  const asMove = (name: string): number | null => (name === 'pass' ? null : at(name));
   const prompt: Prompt = {
     moveNumber,
     position: move.before,
     color: move.color,
-    played: at(played),
-    guess: at(guess),
+    played: asMove(played),
+    guess: asMove(guess),
   };
   void session;
   return evaluatePrompt(new Search(network, context.board), context, prompt, visits);
@@ -223,6 +225,35 @@ test('the natural move is the policy\'s favourite, whatever the search decides',
   // The position misleads: the move that looks best is not, and by how much is
   // the difficulty signal (`docs/katago-feasibility.md` §8).
   assert.ok(verdict.natural.loss > 5, `natural loss was ${verdict.natural.loss}`);
+});
+
+test('a prompted pass is searched, not skipped over', () => {
+  /*
+   * Move 4 is White's pass, and it is a prompt like any other. A pass arrives
+   * as null and is searched as the move the policy numbers just past the last
+   * intersection — `search.ts` treats passing as always legal in the main
+   * phase, so there is a real verdict to be had about it.
+   */
+  const network: Network = stubNetwork(() => ({ pass: 6 }));
+  const verdict: Verdict = evaluate(network, 4, 'pass', 'pass');
+
+  assert.equal(verdict.played?.point, AREA, 'the played pass carries a verdict');
+  assert.equal(
+    verdict.guessed,
+    verdict.played,
+    'two passes are one move, and are not searched twice',
+  );
+});
+
+test('a guessed pass is scored against the point the game played', () => {
+  const network: Network = stubNetwork(() => ({ pass: 6 }));
+  // Move 5 is Black C3; guessing a pass there is a miss with a cost.
+  const verdict: Verdict = evaluate(network, 5, 'C3', 'pass');
+
+  assert.equal(verdict.guessed?.point, AREA, 'the guessed pass is the pass index');
+  assert.equal(verdict.played?.point, at('C3'));
+  assert.notEqual(verdict.guessed, verdict.played, 'a miss is two different moves');
+  assert.deepEqual(verdict.guessed?.pv, [], 'a line that opens with a pass carries nothing');
 });
 
 test('a search that finds nothing to say raises rather than inventing a verdict', () => {

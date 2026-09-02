@@ -163,14 +163,15 @@ test('a pass leaves the board untouched but still consumes a move number', () =>
   assert.deepEqual(game.moves.map((move) => move.number), [1, 2, 3]);
 });
 
-test('passes are never offered as a prediction prompt', () => {
+test('a pass is a prompt like any other move of that color', () => {
   const game: Game = load('(;SZ[19];B[dd];W[pp];B[];W[qq];B[cc])');
   const prompts: GameMove[] = promptableMoves(game, BLACK);
   assert.deepEqual(
     prompts.map((move) => move.number),
-    [1, 5],
-    'the black pass at move 3 should not be prompted',
+    [1, 3, 5],
+    'the black pass at move 3 is asked about too',
   );
+  assert.equal(prompts[1].index, null, 'and it carries no point');
 });
 
 test('promptable moves are filtered to the chosen color', () => {

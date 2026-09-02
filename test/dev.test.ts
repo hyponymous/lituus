@@ -12,7 +12,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parse } from '../src/sgf-parser.ts';
 import { readGame, type Game } from '../src/game.ts';
-import { advance, canGuess, guess, startSession, type Session } from '../src/session.ts';
+import {
+  advance,
+  canGuess,
+  guess,
+  passGuess,
+  startSession,
+  type Session,
+} from '../src/session.ts';
 import { summarize, toJSON, type Summary } from '../src/summary.ts';
 import { RestoreError, driftFrom, restoreAnalysis, restoreSession } from '../src/dev.ts';
 import { BLACK, WHITE } from '../src/rules.ts';
@@ -36,11 +43,47 @@ function play(sgf: string, color: 1 | -1, hits: Set<number>): Session {
 
   while (session.phase === 'prompt' && session.move) {
     const actual: number | null = session.move.index;
-    if (actual === null) break;
-    session = advance(guess(session, hits.has(session.move.number) ? actual : aMiss(session, actual)));
+    const hit: boolean = hits.has(session.move.number);
+    // A pass is answered with the control rather than a point: to match one
+    // you pass, and to miss one you play anywhere at all.
+    if (actual === null) {
+      session = advance(hit ? passGuess(session) : guess(session, aMiss(session, -1)));
+    } else {
+      session = advance(guess(session, hit ? actual : aMiss(session, actual)));
+    }
   }
   return session;
 }
+
+const PASSING_GAME =
+  '(;SZ[19]PB[Ada]BR[3d]PW[Bo]WR[4d]RE[B+R]' +
+  ';B[dd];W[pp];B[dp];W[pd];B[];W[];B[qf])';
+
+test('a predicted pass survives the export round trip', () => {
+  // Move 5 is Black's pass, matched; move 7 is missed, so the export carries a
+  // pass on both sides of the hit/miss line.
+  const played: Session = play(PASSING_GAME, BLACK, new Set([1, 5]));
+  const exported: string = toJSON(summarize(played));
+
+  assert.match(exported, /"pass"/, 'a pass is named, not turned into a point');
+  assert.doesNotMatch(exported, /A0/, 'and never into a name for no point at all');
+
+  const restored: Session = restoreSession(exported);
+  assert.deepEqual(restored.guesses, played.guesses);
+  assert.equal(toJSON(summarize(restored)), exported);
+});
+
+test('a passed prompt is a hit only where the game passed too', () => {
+  const matched: Session = play(PASSING_GAME, BLACK, new Set([5]));
+  const passRow = summarize(matched).rows.find((row) => row.moveNumber === 5);
+
+  assert.equal(passRow?.guess, 'pass');
+  assert.equal(passRow?.actual, 'pass');
+  assert.equal(passRow?.hit, true);
+  // Nowhere on the board, so the tenuki pairing has nothing to compare.
+  assert.equal(passRow?.actualAway, null);
+  assert.equal(passRow?.guessAway, null);
+});
 
 test('an exported result rebuilds into a session that exports identically', () => {
   const played: Session = play(GAME, BLACK, new Set([1, 3, 5]));

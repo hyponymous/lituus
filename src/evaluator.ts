@@ -28,10 +28,16 @@ export interface Prompt {
   readonly position: Position;
   /** Whose turn it is. */
   readonly color: Color;
-  /** Where the game actually played, as a board index. */
-  readonly played: number;
-  /** Where the user guessed. Equal to `played` on a hit. */
-  readonly guess: number;
+  /** Where the game actually played, as a board index, or null for a pass. */
+  readonly played: number | null;
+  /**
+   * Where the user guessed, or null for a pass. Equal to `played` on a hit.
+   *
+   * A pass is `null` here, as it is everywhere above the engine line; the
+   * engine numbers one past the last intersection, and `evaluate.ts` is where
+   * the two meet.
+   */
+  readonly guess: number | null;
 }
 
 export interface Evaluator {

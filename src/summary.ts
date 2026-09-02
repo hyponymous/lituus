@@ -243,7 +243,9 @@ function tenukiResult(board: Position, game: Game, guesses: readonly Guess[]): T
 
   for (const made of guesses) {
     const from: number | null = referencePoint(game, made.moveNumber);
-    if (from === null) {
+    // A pass is nowhere on the board, so "did they play away from the last
+    // move?" has no answer for it — on either side of the pairing.
+    if (from === null || made.actual === null || made.guess === null) {
       counts.unscored++;
       continue;
     }
@@ -425,8 +427,12 @@ export function summarize(session: Session, analysis?: Analysis): Summary {
       guess: pointName(board, made.guess),
       actual: pointName(board, made.actual),
       hit: made.hit,
-      actualAway: from === null ? null : isAway(board, from, made.actual),
-      guessAway: from === null ? null : isAway(board, from, made.guess),
+      actualAway: from === null || made.actual === null
+        ? null
+        : isAway(board, from, made.actual),
+      guessAway: from === null || made.guess === null
+        ? null
+        : isAway(board, from, made.guess),
       elapsedMs: made.elapsedMs,
       loss: verdict ? lossOf(verdict.guessed) : null,
       playedLoss: verdict ? lossOf(verdict.played) : null,

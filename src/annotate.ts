@@ -34,8 +34,14 @@ import { signed, summarize, toText, type Summary } from './summary.ts';
 import { BLACK, toRowCol, type Color, type Position } from './rules.ts';
 import type { Session } from './session.ts';
 
-/** A board index as an SGF point value — the inverse of game.ts's pointIndex. */
-export function pointValue(pos: Position, index: number): string {
+/**
+ * A board index as an SGF point value — the inverse of game.ts's pointIndex.
+ *
+ * A pass is the empty value, which is how SGF writes one and how `pointIndex`
+ * reads one back. It is not a missing value: `B[]` is a move.
+ */
+export function pointValue(pos: Position, index: number | null): string {
+  if (index === null) return '';
   const [row, col] = toRowCol(pos, index);
   return String.fromCharCode(97 + col) + String.fromCharCode(97 + row);
 }
@@ -170,8 +176,8 @@ function bestBranch(
   board: Position,
   color: Color,
   verdict: Verdict | undefined,
-  guess: number,
-  actual: number,
+  guess: number | null,
+  actual: number | null,
 ): GameTree | null {
   if (!verdict) return null;
   const best: BestMove = verdict.best;

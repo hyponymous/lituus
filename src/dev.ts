@@ -110,16 +110,22 @@ function restoreGuess(game: Game, color: Color, entry: unknown, at: number): Gue
   const moveNumber: number = asNumber(row.move, `moves[${at}].move`);
   const move: GameMove | undefined = game.moves[moveNumber - 1];
 
-  if (!move || move.index === null) {
+  if (!move) {
     throw new RestoreError(`The record has no move ${moveNumber} to predict.`);
   }
   if (move.color !== color) {
     throw new RestoreError(`Move ${moveNumber} does not belong to the color you played.`);
   }
 
+  /*
+   * "pass" is a guess, not a bad point name. `pointName` writes exactly that
+   * word for one and `pointFromName` refuses it along with every other string
+   * that is not a point, so the two cases are told apart here rather than by
+   * null-ness — otherwise a restored pass would read as a corrupt export.
+   */
   const name: string = asString(row.guess, `moves[${at}].guess`);
-  const guess: number | null = pointFromName(game.initial, name);
-  if (guess === null) {
+  const guess: number | null = name === 'pass' ? null : pointFromName(game.initial, name);
+  if (guess === null && name !== 'pass') {
     throw new RestoreError(`"${name}" is not a point on a ${game.cols}x${game.rows} board.`);
   }
 

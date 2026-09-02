@@ -28,8 +28,9 @@ import {
 export interface GameMove {
   readonly color: Color;
   /**
-   * Board index, or null for a pass. Passes are part of the record and are
-   * replayed, but are never a prediction prompt: there is nothing to point at.
+   * Board index, or null for a pass. A pass is prompted like any other move;
+   * there is nothing to point at, so the session view offers a control instead
+   * (`views.ts`) and `null` travels as the answer.
    */
   readonly index: number | null;
   /** 1-based, counting passes, as move numbers are conventionally quoted. */
@@ -242,9 +243,14 @@ export function readGame(trees: readonly GameTree[]): Game {
   return { cols, rows, initial: initial ?? position, moves, meta, notes, source: tree };
 }
 
-/** Moves the given color is asked to predict — every move of theirs but a pass. */
+/**
+ * Moves the given color is asked to predict — every move of theirs, passes
+ * included. A pass is a decision like any other, and one the user can make
+ * (`session.ts`, `passGuess`), so leaving it out would ask about the whole
+ * game except the moment the player judged there was nothing left to play.
+ */
 export function promptableMoves(game: Game, color: Color): GameMove[] {
-  return game.moves.filter((move) => move.color === color && move.index !== null);
+  return game.moves.filter((move) => move.color === color);
 }
 
 /** A short one-line description, for the setup view's header. */

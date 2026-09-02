@@ -360,9 +360,14 @@ export const MISSED_RUN_MIN = 4;
  */
 export function missedRuns(
   analysis: Analysis,
-  prompts: readonly { readonly moveNumber: number; readonly actual: number; readonly guess: number }[],
+  prompts: readonly {
+    readonly moveNumber: number;
+    readonly actual: number | null;
+    readonly guess: number | null;
+  }[],
   board: Position,
 ): MissedRun[] {
+  const area: number = board.rows * board.cols;
   const runs: MissedRun[] = [];
   let point: number | null = null;
   let start = 0;
@@ -388,7 +393,15 @@ export function missedRuns(
     // A prompt with no verdict breaks the run rather than being skipped over.
     // Bridging a gap would claim the engine kept naming a move across positions
     // where nothing asked it.
-    const best: number | null = verdict?.best.point ?? null;
+    /*
+     * A best move that is a pass cannot start a run. The engine numbers one
+     * past the last intersection, so it would be reported under `pointName`'s
+     * name for it — a run called "pass", which names no point to go and look
+     * at, and which is not the lesson this is built to find.
+     */
+    const bestPoint: number | undefined = verdict?.best.point;
+    const best: number | null =
+      bestPoint !== undefined && bestPoint < area ? bestPoint : null;
     const unplayed: boolean = best !== null && prompt.actual !== best;
 
     if (unplayed && best === point) {
@@ -492,7 +505,12 @@ function median(values: readonly number[]): number {
  */
 export function aiResult(
   analysis: Analysis,
-  prompts: readonly { readonly moveNumber: number; readonly actual: number; readonly guess: number; readonly hit: boolean }[],
+  prompts: readonly {
+    readonly moveNumber: number;
+    readonly actual: number | null;
+    readonly guess: number | null;
+    readonly hit: boolean;
+  }[],
   board: Position,
 ): AiResult {
   const losses: number[] = [];

@@ -113,7 +113,11 @@ Required support:
 - Board size from `SZ` (19×19 primary; 9×9 and 13×13 should work).
 - Handicap and setup stones (`HA`, `AB`, `AW`) applied before move 1, so the
   starting position is correct.
-- Passes (`B[]` / `W[]`), which are skipped rather than prompted.
+- Passes (`B[]` / `W[]`), which are prompted like any other move. The session
+  view offers a `Pass` control, since there is no point on the board to click
+  for one, and a passed prediction is scored on exact match like any other —
+  a hit only where the game passed too. (The PoC skipped passes rather than
+  prompting them; changed 2026-09-02.)
 - Standard capture and ko rules, so the displayed position is legal and
   correct at every step.
 
