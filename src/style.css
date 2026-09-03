@@ -296,6 +296,9 @@ button.primary {
    auto-advance outlasts it. */
 :root {
   --reveal-beat: 550ms;
+  /* How long a stone takes to land. Named because the capture it causes waits
+     on it, and the two must not drift apart. */
+  --stone-drop: 140ms;
 }
 
 @keyframes stone-drop {
@@ -337,13 +340,14 @@ button.primary {
 }
 
 .board .stone-new,
+.board .stone-taken,
 .board .mark {
   transform-box: fill-box;
   transform-origin: center;
 }
 
 .board .stone-new {
-  animation: stone-drop 140ms ease-out;
+  animation: stone-drop var(--stone-drop) ease-out;
 }
 
 /* `backwards` holds the from-state during the delay; without it the stone is
@@ -351,6 +355,33 @@ button.primary {
 .board .stone-late {
   animation-delay: var(--reveal-beat);
   animation-fill-mode: backwards;
+}
+
+/* A capture is a consequence, so it has to follow its cause on screen: the
+   taken stones hold their place until the stone that took them has finished
+   landing, then lift. `forwards` keeps them gone afterwards — they are not on
+   the board the position describes, and the animation is the only thing
+   drawing them. */
+@keyframes stone-lift {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+}
+
+.board .stone-taken {
+  animation: stone-lift 180ms ease-in var(--stone-drop) forwards;
+}
+
+/* Held back with the stone it belongs to: on a miss that stone waits out the
+   beat before it lands, and a capture resolving during the wait would answer
+   the question the beat exists to hold open. */
+.board .stone-taken-late {
+  animation-delay: calc(var(--reveal-beat) + var(--stone-drop));
 }
 
 .board .mark-guess {
@@ -390,6 +421,16 @@ button.primary {
   .board .stone-late,
   .board .mark-actual {
     animation: mark-in 1ms linear var(--reveal-beat) backwards;
+  }
+
+  /* Likewise the order of cause and effect: the taken stones still wait for
+     the stone that took them, they simply blink out instead of lifting. */
+  .board .stone-taken {
+    animation: stone-lift 1ms linear var(--stone-drop) forwards;
+  }
+
+  .board .stone-taken-late {
+    animation-delay: calc(var(--reveal-beat) + var(--stone-drop));
   }
 }
 

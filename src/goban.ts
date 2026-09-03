@@ -128,7 +128,8 @@ export interface Marker {
   readonly kind: MarkerKind;
   /**
    * For a guess: how it compared with the move the game played, which decides
-   * its colour. Absent where nothing has judged it.
+   * its colour. On the played move it means your guess was this same point,
+   * and rings it. Absent where nothing has judged it.
    */
   readonly band?: 'better' | 'even' | 'worse' | 'blunder' | 'unscored' | 'engine';
   /**
@@ -164,6 +165,18 @@ export interface GobanOptions {
    * move. The engine's mark is unaffected. Defaults to Black.
    */
   readonly ghosts?: Color;
+  /**
+   * Stones the move being revealed took off the board. The position handed in
+   * has already removed them, which takes them away a beat before the stone
+   * that captured them arrives — the board resolves the capture before the
+   * reader has seen its cause. Passed here they are drawn where they stood
+   * and lifted once the new stone has landed.
+   */
+  readonly captured?: {
+    readonly indices: readonly number[];
+    /** Their colour: the mover's opponent, since a move takes only theirs. */
+    readonly color: Color;
+  };
 }
 
 /**
@@ -323,6 +336,62 @@ function drawStones(
   }
 }
 
+/**
+ * The stones a move just took, drawn as they stood. The stylesheet holds them
+ * until the capturing stone has landed and then lifts them, so the reader
+ * watches the capture happen rather than finding it already done.
+ */
+function drawCaptured(
+  svg: SVGElement,
+  pos: Position,
+  captured: NonNullable<GobanOptions['captured']>,
+  late: boolean,
+): void {
+  for (const index of captured.indices) {
+    const [row, col] = toRowCol(pos, index);
+    svg.appendChild(
+      svgEl('circle', {
+        cx: centerX(col),
+        cy: centerY(row),
+        r: CELL * STONE_SCALE,
+        fill: captured.color === BLACK ? BLACK_STONE : WHITE_STONE,
+        ...(captured.color === BLACK ? {} : { stroke: WHITE_EDGE, 'stroke-width': 0.8 }),
+        class: late ? 'stone-taken stone-taken-late' : 'stone-taken',
+      }),
+    );
+  }
+}
+
+/**
+ * The number written inside a ghost stone, as large as the ghost allows —
+ * which is the point of it: a number too small to read at a glance is a
+ * number the reader ignores. Long labels ("+10.5") step down rather than
+ * spilling the stone.
+ */
+function drawLabel(
+  svg: SVGElement,
+  x: number,
+  y: number,
+  label: string,
+  fill: string,
+  kind: MarkerKind,
+): void {
+  const scale: number = label.length <= 2 ? 0.5 : label.length <= 4 ? 0.42 : 0.34;
+  const text: SVGElement = svgEl('text', {
+    x,
+    y,
+    fill,
+    'font-size': CELL * scale,
+    'font-weight': 700,
+    'font-family': 'system-ui, sans-serif',
+    'text-anchor': 'middle',
+    'dominant-baseline': 'central',
+    class: `mark mark-${kind}-label`,
+  });
+  text.textContent = label;
+  svg.appendChild(text);
+}
+
 function drawMarker(svg: SVGElement, pos: Position, marker: Marker, ghosts: Color): void {
   const [row, col] = toRowCol(pos, marker.index);
   const x: number = centerX(col);
@@ -341,6 +410,13 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker, ghosts: Colo
   }
 
   /*
+   * On an occupied point a ghost becomes a ring: the move is already there as
+   * a stone, and a translucent disc over it would only muddy the stone's own
+   * colour. That is what a hit looks like on a board drawn after the move.
+   */
+  const played: boolean = stoneAt(pos, marker.index) !== EMPTY;
+
+  /*
    * A move that was not played is a ghost stone, carrying what it was worth.
    * This is the review tools' idiom and it says two things at once — where the
    * move was, and what it cost — where a mark on the wood said only the first.
@@ -352,14 +428,6 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker, ghosts: Colo
   if (marker.kind === 'best' || marker.kind === 'guess') {
     const color: string =
       marker.kind === 'best' ? BEST_MARK : BAND_MARKS[marker.band ?? 'none'];
-
-    /*
-     * On an occupied point the ghost becomes a ring: the move is already there
-     * as a stone, and a translucent disc over it would only muddy the stone's
-     * own colour. That is what a hit looks like — your move and the game's
-     * move are one stone, ringed in the colour of how it turned out.
-     */
-    const played: boolean = stoneAt(pos, marker.index) !== EMPTY;
 
     svg.appendChild(
       svgEl('circle', {
@@ -382,25 +450,38 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker, ghosts: Colo
     );
 
     if (marker.label !== undefined && !played) {
-      /*
-       * As large as the label allows, which is the point of it: a number too
-       * small to read at a glance is a number the reader ignores. Long labels
-       * ("+10.5") step down rather than spilling the stone.
-       */
-      const scale: number = marker.label.length <= 2 ? 0.5 : marker.label.length <= 4 ? 0.42 : 0.34;
-      const text: SVGElement = svgEl('text', {
-        x,
-        y,
-        fill: LABEL_TEXT,
-        'font-size': CELL * scale,
-        'font-weight': 700,
-        'font-family': 'system-ui, sans-serif',
-        'text-anchor': 'middle',
-        'dominant-baseline': 'central',
-        class: `mark mark-${marker.kind}-label`,
-      });
-      text.textContent = marker.label;
-      svg.appendChild(text);
+      drawLabel(svg, x, y, marker.label, LABEL_TEXT, marker.kind);
+    }
+    return;
+  }
+
+  /*
+   * On a board drawn *before* the move, the record's move is not a stone yet.
+   * It is drawn as the stone it is about to be — near-opaque, in its own
+   * colour rather than in any of the marker hues — because it is the one mark
+   * on this board that is a fact and not a judgment. The number inside says
+   * the same thing: it is the move number, the record's own name for it,
+   * where the other two marks carry what they were worth.
+   *
+   * A ring appears only where your guess landed on this very point. There is
+   * then one mark, not two stacked, and the ring is your band around the
+   * record's stone: the two are one move, said once.
+   */
+  if (marker.kind === 'actual' && !played) {
+    const white: boolean = ghosts === WHITE;
+    svg.appendChild(
+      svgEl('circle', {
+        cx: x,
+        cy: y,
+        r: CELL * STONE_SCALE,
+        fill: `${white ? WHITE_STONE : BLACK_STONE}d8`,
+        stroke: marker.band === undefined ? WHITE_EDGE : BAND_EDGES[marker.band],
+        'stroke-width': marker.band === undefined ? (white ? 0.8 : 0) : 2.5,
+        class: 'mark mark-actual',
+      }),
+    );
+    if (marker.label !== undefined) {
+      drawLabel(svg, x, y, marker.label, white ? LABEL_TEXT : WHITE_STONE, marker.kind);
     }
     return;
   }
@@ -472,6 +553,7 @@ export function renderGoban(pos: Position, container: HTMLElement, opts: GobanOp
   drawHoshi(svg, pos);
   if (opts.showCoordinates !== false) drawCoordinates(svg, pos);
   drawStones(svg, pos, new Set(opts.animate ?? []), opts.animateLate === true);
+  if (opts.captured) drawCaptured(svg, pos, opts.captured, opts.animateLate === true);
 
   for (const marker of opts.markers ?? []) drawMarker(svg, pos, marker, opts.ghosts ?? BLACK);
   if (opts.onPoint) drawHitTargets(svg, pos, opts.onPoint);

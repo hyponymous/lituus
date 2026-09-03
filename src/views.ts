@@ -8,7 +8,7 @@
  * is why they replace their container's contents rather than patching.
  */
 
-import { pointName, renderGoban, type Marker } from './goban.ts';
+import { pointName, renderGoban, type GobanOptions, type Marker } from './goban.ts';
 import { describe, type Game, type GameMeta, type GameMove } from './game.ts';
 import {
   canGuess,
@@ -375,6 +375,18 @@ function sessionAnimate(session: Session): number[] {
   return played?.index != null ? [played.index] : [];
 }
 
+/**
+ * What that stone took with it. The position it produced has the captures
+ * already resolved, so without this they vanish while the stone that took
+ * them is still on its way in — the board shows the consequence before the
+ * cause, which is exactly backwards from how it happened on the real board.
+ */
+function sessionCaptured(session: Session): GobanOptions['captured'] {
+  const played: GameMove | null = lastPlayed(session);
+  if (!played || played.captured.length === 0) return undefined;
+  return { indices: played.captured, color: played.color === BLACK ? WHITE : BLACK };
+}
+
 function sessionStatus(session: Session): string {
   const result: Score = score(session);
   const running = `${result.hits}/${result.guessed} matched`;
@@ -447,6 +459,7 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
     // Your guesses are drawn as your own stones, whichever colour you play.
     ghosts: session.color,
     animate: sessionAnimate(session),
+    captured: sessionCaptured(session),
     // On a miss the played stone waits with its marker, so the user reads
     // their own guess before the answer lands somewhere else on the board.
     animateLate: missed,
@@ -1449,12 +1462,19 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     };
 
     /*
-     * The played move keeps its contrast ring even on a hit, where your own
-     * ring goes around the same stone. The two say different things — this is
-     * the move the game made, that is how yours compared — and they are
-     * concentric rather than competing.
+     * The board is the position *before* the move, which is the position the
+     * question was asked from and the one every review tool shows: the marks
+     * are then three candidates for the same empty point, read side by side,
+     * rather than two opinions arriving after the answer has already landed.
+     *
+     * The game's move is the numbered one. What it cost is in the line under
+     * the board rather than on the mark, so the two marks carrying numbers in
+     * points stay the two that are being judged.
+     *
+     * On a hit there is one mark: the game's stone, ringed in your band. Two
+     * ghosts on one point would stack into an unreadable disc, and they are
+     * the same move anyway.
      */
-    const played: string | null = baseline === 'engine' ? gainOver(0, row.playedLoss) : null;
     const marks: Marker[] =
       made.actual === null
         ? []
@@ -1462,10 +1482,19 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
             {
               index: made.actual,
               kind: 'actual',
-              ...(played === null ? {} : { label: played }),
+              label: String(row.moveNumber),
+              ...(made.hit ? { band: band ?? 'unscored' } : {}),
             },
           ];
-    if (yours && (!made.hit || band !== null)) marks.push(yours);
+    if (yours && !made.hit) marks.push(yours);
+
+    /*
+     * The stone before this one, dotted as a board dots its last move. On the
+     * position after the move that reading came free; here it is the only
+     * thing saying which move the position is waiting on.
+     */
+    const previous: GameMove | undefined = session.game.moves[row.moveNumber - 2];
+    if (previous?.index != null) marks.push({ index: previous.index, kind: 'last' });
 
     // The engine's move only when it is a third point: on the guess or on the
     // played stone it is already the mark that is there.
@@ -1478,7 +1507,7 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
       marks.push({ index: best, kind: 'best', ...(better === null ? {} : { label: better }) });
     }
 
-    renderGoban(move.after, board, {
+    renderGoban(move.before, board, {
       showCoordinates: true,
       markers: marks,
       ghosts: summary.color,
