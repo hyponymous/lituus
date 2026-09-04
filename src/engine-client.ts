@@ -27,6 +27,22 @@ import type { WorkerReply, WorkerRequest } from './engine/worker.ts';
 export const VISITS = 50;
 
 /**
+ * Failed prompts in a row before scoring is called dead rather than unlucky.
+ *
+ * One failure is not fatal and never has been — a single search can hit a
+ * position the engine refuses and the summary simply reports what it has. A
+ * *run* of them is a different event: the engine has stopped, and every later
+ * prompt will fail too. Without this the session goes on asking, the errors are
+ * dropped one at a time, and the only visible trace is a summary quietly
+ * missing its last fifty moves.
+ *
+ * Three, because two in a row is within reach of coincidence and the cost of
+ * being late by one prompt is nothing. The count resets on any verdict, so a
+ * scattered failure never accumulates into a false alarm.
+ */
+export const ERRORS_BEFORE_FAILED = 3;
+
+/**
  * What the session view shows about the engine.
  *
  * `downloading` carries a fraction rather than a percentage because the
@@ -101,6 +117,9 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
     { resolve: (verdict: Verdict) => void; reject: (error: unknown) => void }
   >();
 
+  /** Failed prompts since the last verdict; see `ERRORS_BEFORE_FAILED`. */
+  let consecutiveErrors = 0;
+
   const failEverything = (reason: string): void => {
     for (const { reject } of waiting.values()) reject(new EvaluationError(reason));
     waiting.clear();
@@ -125,6 +144,7 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
         failEverything(reply.reason);
         return;
       case 'verdict': {
+        consecutiveErrors = 0;
         waiting.get(reply.verdict.moveNumber)?.resolve(reply.verdict);
         waiting.delete(reply.verdict.moveNumber);
         return;
@@ -132,6 +152,13 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
       case 'error': {
         waiting.get(reply.moveNumber)?.reject(new EvaluationError(reply.reason));
         waiting.delete(reply.moveNumber);
+        // A run of them means the engine is gone, not that these positions
+        // were awkward. The last reason is the reason: they are all the same
+        // failure arriving once per prompt.
+        if (++consecutiveErrors >= ERRORS_BEFORE_FAILED) {
+          setStatus({ state: 'failed', reason: reply.reason });
+          failEverything(reply.reason);
+        }
         return;
       }
     }

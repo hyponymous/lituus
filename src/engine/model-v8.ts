@@ -85,6 +85,46 @@ export interface Evaluation {
   readonly scoreValue: Float32Array;
 }
 
+/**
+ * What a dead readback looks like, and why anything has to look for it.
+ *
+ * `dataSync` on the WebGPU backend is not a readback at all: tfjs copies the
+ * buffer into a pair of freshly made `OffscreenCanvas` WebGPU contexts and
+ * recovers the bytes through `drawImage` and `getImageData`. When the device
+ * has been lost that pipeline still runs — and returns **zeros**, with no
+ * error anywhere.
+ *
+ * Zeros are not a bad evaluation, they are a silently ruinous one. Every value
+ * logit equal makes win, loss and no-result each a third, so `winLossValue` is
+ * 0 and every lead is 0; a flat policy makes every prior equal, so the search
+ * visits points in board order and every tie-break in `search.ts` resolves to
+ * the lowest index. The result reads as a fully searched verdict claiming that
+ * A19 is the best move and that nothing anyone plays gives up a point — and it
+ * is stored, so nothing later asks the question again. That is the failure
+ * this exists to convert into an error (dogfood, 2026-09-03: 62 consecutive
+ * prompts scored 0.00 with a best move of A19).
+ *
+ * The test is exact equality across all eight head outputs, plus a finiteness
+ * check. A live network hits any one of them at zero often enough; hitting all
+ * eight at once, bit for bit, is not something a float pipeline does.
+ */
+export function isDegenerate(evaluation: Evaluation): boolean {
+  const heads: readonly number[] = [
+    ...evaluation.value,
+    ...evaluation.scoreValue,
+    evaluation.policyPass,
+  ];
+  return heads.every((x: number) => x === 0) || heads.some((x: number) => !Number.isFinite(x));
+}
+
+/**
+ * What the user is told when the readback dies. Phrased as the engine stopping
+ * rather than as a bug, because that is what it is from the outside, and it
+ * reaches the status line through the worker's per-move error path.
+ */
+export const DEAD_READBACK =
+  'The GPU stopped returning results, so scoring cannot continue.';
+
 export class ModelV8 {
   readonly name: string;
   readonly version: number;
@@ -379,6 +419,9 @@ export class ModelV8 {
       scoreValue: scoreValue.dataSync() as Float32Array,
     };
     tf.dispose([policy, policyPass, value, scoreValue]);
+    // Checked here rather than in the search: this is the one place a GPU
+    // buffer becomes a number, and a fake network in a test cannot fail this way.
+    if (isDegenerate(result)) throw new Error(DEAD_READBACK);
     return result;
   }
 

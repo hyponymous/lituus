@@ -85,6 +85,38 @@ let broken: string | null = null;
 /** Serializes work: `evaluate` messages can arrive while `init` is still running. */
 let queue: Promise<void> = Promise.resolve();
 
+/**
+ * Say so when the GPU goes away, instead of quietly scoring with a dead one.
+ *
+ * A lost `GPUDevice` throws nothing. Work submitted to it is dropped and every
+ * readback comes back zeroed, which `isDegenerate` in `model-v8.ts` catches one
+ * prompt at a time — but only once a prompt is asked, and only as a per-move
+ * error. The device itself knows the moment it happens and knows why, so this
+ * is the one place the reason can be reported at all.
+ *
+ * A device destroyed on the way out is our own teardown, not a failure.
+ */
+function watchForDeviceLoss(tf: typeof TF): void {
+  /*
+   * The WebGPU backend holds its `GPUDevice` as a public field, but the type
+   * lives in `@tensorflow/tfjs-backend-webgpu`, which this module imports for
+   * its side effect alone — importing its types here would pull the backend
+   * into the type graph of every file that touches the worker. Hence the
+   * assertion, written to tolerate a backend that has no device at all.
+   */
+  const backend = tf.backend() as unknown as { readonly device?: GPUDevice };
+  const device: GPUDevice | undefined = backend.device;
+  if (!device) return;
+  void device.lost.then((info: GPUDeviceLostInfo): void => {
+    if (info.reason === 'destroyed') return;
+    engine = null;
+    broken = info.message
+      ? `The GPU stopped: ${info.message}`
+      : 'The GPU stopped, so scoring is unavailable.';
+    post({ type: 'failed', reason: broken });
+  });
+}
+
 async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Promise<void> {
   const game: Game = readGame(parse(request.sgf));
   const context: GameContext = gameContext(game);
@@ -112,6 +144,7 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
     throw new Error('This browser has no WebGPU, so scoring is unavailable.');
   }
   await tf.ready();
+  watchForDeviceLoss(tf);
 
   const parsed: ParsedKataGoModelV8 = parseKataGoModelV8(bytes);
   const model = new ModelV8(tf, parsed);
