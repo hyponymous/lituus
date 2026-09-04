@@ -11,5 +11,16 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node", "vite/client", "@webgpu/types"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts", "experiments/katago/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "scripts/**/*.ts",
+    "experiments/katago/**/*.ts",
+    "experiments/browser/**/*.ts"
+  ],
+  "exclude": [
+    "experiments/browser/bench.ts",
+    "experiments/browser/mobile.ts",
+    "experiments/browser/vite.mobile.config.ts"
+  ]
 }

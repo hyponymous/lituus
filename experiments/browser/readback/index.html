@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>lituus — forward pass and readback</title>
+    <style>
+      body { font: 14px/1.5 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+      pre { background: #f4f4f4; padding: 1rem; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Forward pass and readback</h1>
+    <p>
+      Driven by <code>experiments/browser/run-readback.ts</code>. Nothing happens until
+      the harness calls in; this page exists so a real GPU is in scope.
+    </p>
+    <pre id="log">idle</pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

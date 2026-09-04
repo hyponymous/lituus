@@ -45,3 +45,30 @@ same GPU and both sets of timings become fiction.
 Positions come from a real game at six stages, opening through endgame,
 because search cost falls as the board fills and a single position would
 mislead.
+
+---
+
+# Forward pass and readback
+
+`run-readback.ts` measures **our** engine rather than the vendored one, and
+exists for a single question: `dataSync()` on the WebGPU backend is a canvas
+round trip, not a readback, and `ModelV8.evaluate` makes one per output head.
+
+    node experiments/browser/run-readback.ts --label before \
+      --save experiments/out/readback-before.json
+
+It reports the cost of one forward pass, the cost of one `dataSync()` at two
+sizes 90x apart, and the cost of one prompt at the shipping visit count. Two
+numbers to read together:
+
+- **a read as a share of a pass** tells you what reading fewer times can buy.
+- **the fitted per-call cost**, from the two sizes. Only that part is won back
+  by making fewer calls; the bytes have to cross either way. Measured at
+  2.4ms per call plus ~3.5us per float on an M-series Mac, which is why
+  reading the four heads once instead of four times took a forward pass from
+  23.0ms to 15.7ms.
+
+Headed, and for the same reason as above; the adapter is printed and a
+software one is flagged. It is a before-and-after instrument — one run on its
+own says almost nothing, so save one before touching anything and diff. Runs
+from different machines, adapters, or positions are not comparable.

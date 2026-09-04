@@ -125,6 +125,13 @@ export function isDegenerate(evaluation: Evaluation): boolean {
 export const DEAD_READBACK =
   'The GPU stopped returning results, so scoring cannot continue.';
 
+/**
+ * Score outputs read: `[scoreMean, scoreStdevPreSoftplus, lead,
+ * varTimeLeftPreSoftplus]`. Later networks carry more, and nothing here wants
+ * them.
+ */
+const SCORE_OUTPUTS = 4;
+
 export class ModelV8 {
   readonly name: string;
   readonly version: number;
@@ -360,8 +367,14 @@ export class ModelV8 {
    */
   evaluate(spatial: Float32Array, global: Float32Array, size: number): Evaluation {
     const tf = this.tf;
+    const area: number = size * size;
+    // The heads' own widths, from the weights that produce them, so a network
+    // with a wider value or score head is unpacked correctly rather than
+    // truncated to whatever this file expected.
+    const valueCount: number = this.v3.shape[1];
+    const scoreCount: number = Math.min(SCORE_OUTPUTS, this.sv3.shape[1]);
 
-    const [policy, policyPass, value, scoreValue] = tf.tidy(() => {
+    const packed: TF.Tensor1D = tf.tidy(() => {
       const input = tf.tensor4d(spatial, [1, size, size, 22]);
       const globals = tf.tensor2d(global, [1, global.length]);
 
@@ -399,26 +412,45 @@ export class ModelV8 {
       const valueOut = tf.add(tf.matMul(v2Out, this.v3) as TF.Tensor2D, this.v3Bias) as TF.Tensor2D;
       let scoreOut = tf.add(tf.matMul(v2Out, this.sv3) as TF.Tensor2D, this.sv3Bias) as TF.Tensor2D;
       // Later networks carry extra score outputs we do not read.
-      if (scoreOut.shape[1] > 4) scoreOut = tf.slice(scoreOut, [0, 0], [1, 4]) as TF.Tensor2D;
+      if (scoreOut.shape[1] > scoreCount) {
+        scoreOut = tf.slice(scoreOut, [0, 0], [1, scoreCount]) as TF.Tensor2D;
+      }
 
       // Channel 0 of the policy head is the move policy; later channels are
       // auxiliary targets from training that nothing here uses.
-      const flat = tf.reshape(policyOut, [size * size, policyOut.shape[3]]);
-      return [
-        tf.slice(flat, [0, 0], [size * size, 1]),
-        tf.slice(pass, [0, 0], [1, 1]),
-        valueOut,
-        scoreOut,
-      ];
+      const flat = tf.reshape(policyOut, [area, policyOut.shape[3]]);
+
+      /*
+       * The four heads as one tensor, because the readback is what costs.
+       *
+       * `dataSync` on the WebGPU backend is a canvas round trip per call (see
+       * `isDegenerate` above), and the per-call part of it is a fixed cost
+       * paid whatever the payload — measured at 2.4ms against 3.9ms for the
+       * 361-float policy, on an M-series Mac, by
+       * `experiments/browser/run-readback.ts`. Reading four times therefore
+       * cost three of those for nothing. Concatenating is one small kernel on
+       * a tensor already on the GPU; unpacking is a `subarray` on the way out.
+       */
+      return tf.concat([
+        tf.reshape(tf.slice(flat, [0, 0], [area, 1]), [area]) as TF.Tensor1D,
+        tf.reshape(tf.slice(pass, [0, 0], [1, 1]), [1]) as TF.Tensor1D,
+        tf.reshape(valueOut, [valueCount]) as TF.Tensor1D,
+        tf.reshape(scoreOut, [scoreCount]) as TF.Tensor1D,
+      ]) as TF.Tensor1D;
     });
 
+    // Views onto one buffer, not four copies: nothing downstream keeps them
+    // past the next call, and `search.ts` builds its own array from the policy.
+    const heads = packed.dataSync() as Float32Array;
+    const valueAt: number = area + 1;
+    const scoreAt: number = valueAt + valueCount;
     const result: Evaluation = {
-      policy: policy.dataSync() as Float32Array,
-      policyPass: (policyPass.dataSync() as Float32Array)[0],
-      value: value.dataSync() as Float32Array,
-      scoreValue: scoreValue.dataSync() as Float32Array,
+      policy: heads.subarray(0, area),
+      policyPass: heads[area],
+      value: heads.subarray(valueAt, scoreAt),
+      scoreValue: heads.subarray(scoreAt, scoreAt + scoreCount),
     };
-    tf.dispose([policy, policyPass, value, scoreValue]);
+    packed.dispose();
     // Checked here rather than in the search: this is the one place a GPU
     // buffer becomes a number, and a fake network in a test cannot fail this way.
     if (isDegenerate(result)) throw new Error(DEAD_READBACK);
