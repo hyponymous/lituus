@@ -33,6 +33,7 @@ import { refreshSummaryAnalysis, renderSummary } from './views.ts';
 import { BLACK, WHITE, type Color, type Position } from './rules.ts';
 import {
   emptyAnalysis,
+  withIncident,
   sameEngine,
   verdictFor,
   withVerdict,
@@ -215,6 +216,33 @@ export function restoreAnalysis(text: string, game: Game): Analysis | null {
     visits: asNumber(config.visits, '"engine".visits'),
     backend: asString(config.backend, '"engine".backend'),
   });
+
+  /*
+   * Restored before the verdicts, so the order in the export is the order the
+   * incidents are replayed in. Absent in anything exported before the field
+   * existed, which is not an error: a result with no record of a failure is
+   * read as a result with no failures, exactly as it was.
+   */
+  for (const [at, entry] of asArray(config.incidents ?? [], '"engine".incidents').entries()) {
+    const row: Record<string, unknown> = asRecord(entry, `"engine".incidents[${at}]`);
+    analysis = withIncident(analysis, {
+      move: row.move === null || row.move === undefined
+        ? null
+        : asNumber(row.move, `"engine".incidents[${at}].move`),
+      reason: asString(row.reason, `"engine".incidents[${at}].reason`),
+      fatal: row.fatal === true,
+    });
+  }
+  /*
+   * The count is carried, not counted. `INCIDENT_LIMIT` truncates the list, so
+   * a session that lost its device on the tenth of sixty prompts exports eight
+   * incidents and sixty failures, and rebuilding the total from the list would
+   * quietly turn sixty into eight — drift, on the field whose whole job is to
+   * say how much went wrong.
+   */
+  if (config.failures !== undefined) {
+    analysis = { ...analysis, failures: asNumber(config.failures, '"engine".failures') };
+  }
 
   for (const [at, entry] of rows.entries()) {
     const row: Record<string, unknown> = asRecord(entry, `verdicts[${at}]`);

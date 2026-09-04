@@ -101,7 +101,9 @@
   "engine": {
     "network": "b15c192",
     "visits": 50,
-    "backend": "katago"
+    "backend": "katago",
+    "failures": 0,
+    "incidents": []
   },
   "ai": {
     "graded": 100,

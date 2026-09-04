@@ -179,3 +179,25 @@ test('a prompt submitted after stopping is ignored', async () => {
 
   assert.deepEqual(asked, []);
 });
+
+test('the queue names the move in flight, and nothing between searches', async () => {
+  // The only way a failure arriving on the engine rather than on a prompt — a
+  // lost device — can be recorded against a position in the game.
+  let answer: (verdict: Verdict) => void = () => {};
+  const { evaluator } = recording(
+    () =>
+      new Promise<Verdict>((resolve) => {
+        answer = resolve;
+      }),
+  );
+  const queue: Queue = createQueue(evaluator, { onVerdict: () => {} });
+
+  assert.equal(queue.current(), null);
+  queue.submit(prompt(12));
+  // While the search is still outstanding, which is when a device is lost.
+  assert.equal(queue.current(), 12);
+
+  answer(verdictFor(12));
+  await settle();
+  assert.equal(queue.current(), null);
+});

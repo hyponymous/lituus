@@ -30,6 +30,7 @@ import {
   BLUNDER_LOSS,
   MISSED_RUN_MIN,
   emptyAnalysis,
+  withIncident,
   withVerdict,
   type Analysis,
   type EngineConfig,
@@ -354,9 +355,34 @@ test('the JSON export carries the verdicts, not only the figures from them', () 
   const { summary } = play(['D16'], [verdict({ moveNumber: 1 })]);
   const json = JSON.parse(toJSON(summary)) as Record<string, unknown>;
 
-  assert.deepEqual(json.engine, { network: 'b15c192', visits: 50, backend: 'replay' });
+  assert.deepEqual(json.engine, {
+    network: 'b15c192',
+    visits: 50,
+    backend: 'replay',
+    failures: 0,
+    incidents: [],
+  });
   assert.equal(Array.isArray(json.verdicts), true);
   assert.equal((json.verdicts as unknown[]).length, 1);
+});
+
+test('the export says the engine stopped, rather than leaving a silent gap', () => {
+  // Without this a run that lost its GPU is indistinguishable from one that was
+  // simply left unfinished: both are losses that are null.
+  const game: Game = readGame(parse(GAME));
+  let session: Session = startSession(game, 1);
+  session = advance(guess(session, at('D16'), 1000));
+  const analysis: Analysis = withIncident(emptyAnalysis(CONFIG), {
+    move: 1,
+    reason: 'The GPU stopped.',
+    fatal: true,
+  });
+  const summary: Summary = summarize(session, analysis);
+
+  const engine = (JSON.parse(toJSON(summary)) as { engine: Record<string, unknown> }).engine;
+  assert.equal(engine.failures, 1);
+  assert.deepEqual(engine.incidents, [{ move: 1, reason: 'The GPU stopped.', fatal: true }]);
+  assert.match(toText(summary), /Scoring stopped at move 1: The GPU stopped\./);
 });
 
 test('a session with no engine exports the same keys, all null', () => {

@@ -21,6 +21,12 @@ import {
   type Session,
 } from '../src/session.ts';
 import { summarize, toJSON, type Summary } from '../src/summary.ts';
+import {
+  INCIDENT_LIMIT,
+  emptyAnalysis,
+  withIncident,
+  type Analysis,
+} from '../src/analysis.ts';
 import { RestoreError, driftFrom, restoreAnalysis, restoreSession } from '../src/dev.ts';
 import { BLACK, WHITE } from '../src/rules.ts';
 
@@ -208,6 +214,56 @@ test('a result from before timing restores with no times rather than zeros', () 
   const restored: Session = restoreSession(JSON.stringify(older));
   assert.ok(restored.guesses.every((made) => made.elapsedMs === null));
   assert.equal(summarize(restored).timing, null);
+});
+
+// ── Engine failures ──────────────────────────────────────────────────────────
+
+const ENGINE = { network: 'b15c192', visits: 50, backend: 'webgpu' };
+
+/** A session whose engine died partway, with more failures than the list keeps. */
+function broken(): Summary {
+  const played: Session = play(GAME, BLACK, new Set([1]));
+  let analysis: Analysis = withIncident(emptyAnalysis(ENGINE), {
+    move: 12,
+    reason: 'The GPU stopped returning results, so scoring cannot continue.',
+    fatal: true,
+  });
+  for (let move = 13; move < 13 + INCIDENT_LIMIT + 3; move++) {
+    analysis = withIncident(analysis, { move, reason: 'the same failure', fatal: false });
+  }
+  return summarize(played, analysis);
+}
+
+test('an engine failure survives the round trip, count and all', () => {
+  const text: string = toJSON(broken());
+  const restored: Analysis | null = restoreAnalysis(text, readGame(parse(GAME)));
+
+  assert.ok(restored);
+  assert.equal(restored.incidents.length, INCIDENT_LIMIT);
+  assert.equal(restored.failures, INCIDENT_LIMIT + 4);
+  assert.equal(restored.incidents[0].move, 12);
+  assert.equal(restored.incidents[0].fatal, true);
+});
+
+test('a restored failure recomputes the same export', () => {
+  // The same guarantee the verdicts have: the figures are rebuilt from the
+  // record rather than read back, so a truncated list cannot quietly shrink
+  // the count it stands for.
+  const text: string = toJSON(broken());
+  const restored: Analysis | null = restoreAnalysis(text, readGame(parse(GAME)));
+  assert.ok(restored);
+  assert.deepEqual(driftFrom(text, summarize(restoreSession(text), restored)), []);
+});
+
+test('a result from before the incidents field restores as a run that never failed', () => {
+  const older = JSON.parse(toJSON(broken())) as { engine: Record<string, unknown> };
+  delete older.engine.failures;
+  delete older.engine.incidents;
+
+  const restored: Analysis | null = restoreAnalysis(JSON.stringify(older), readGame(parse(GAME)));
+  assert.ok(restored);
+  assert.equal(restored.failures, 0);
+  assert.deepEqual(restored.incidents, []);
 });
 
 // ── Drift ────────────────────────────────────────────────────────────────────

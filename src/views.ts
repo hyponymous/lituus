@@ -29,6 +29,7 @@ import {
   perPrediction,
   signed,
   tenukiAgreement,
+  failureNote,
   toJSON,
   toText,
   type Baseline,
@@ -743,7 +744,10 @@ function stat(figure: string, who: string): HTMLElement {
  */
 function engineFindings(summary: Summary): HTMLElement | null {
   const { ai } = summary;
-  if (!ai || ai.answered === 0) return null;
+  // A failure is a finding even when nothing was answered: an engine that died
+  // before its first verdict is the only thing this section has to say, and it
+  // is the thing most worth saying.
+  if (!ai || (ai.answered === 0 && ai.failures === 0)) return null;
 
   const notes: Child[] = [];
   const add = (text: string, kind: string): void => {
@@ -782,6 +786,10 @@ function engineFindings(summary: Summary): HTMLElement | null {
       run.everGuessed ? 'neutral' : 'bad',
     );
   }
+
+  const trouble: string | null = failureNote(ai);
+  // Ahead of the counts below, which it changes the meaning of.
+  if (trouble !== null) add(trouble, 'bad');
 
   if (ai.answered < summary.rows.length) {
     // Said rather than hidden: a median over half a game is not the same claim

@@ -11,6 +11,8 @@ import {
   MIN_TRUSTED_VISITS,
   describeEngine,
   emptyAnalysis,
+  withIncident,
+  INCIDENT_LIMIT,
   isTrusted,
   sameEngine,
   verdictCount,
@@ -70,6 +72,44 @@ test('a second verdict for the same move replaces the first', () => {
 
   assert.equal(verdictCount(second), 1);
   assert.equal(verdictFor(second, 5)?.played?.loss, 4.0);
+});
+
+// ── Failures ─────────────────────────────────────────────────────────────────
+
+test('an incident is remembered alongside the verdicts', () => {
+  const analysis: Analysis = withIncident(withVerdict(emptyAnalysis(CONFIG), verdict(4)), {
+    move: 9,
+    reason: 'The GPU stopped.',
+    fatal: true,
+  });
+
+  assert.equal(verdictCount(analysis), 1);
+  assert.equal(analysis.failures, 1);
+  assert.deepEqual(analysis.incidents, [{ move: 9, reason: 'The GPU stopped.', fatal: true }]);
+});
+
+test('the incident list is capped but the count is not', () => {
+  // A dead engine fails once per queued prompt, so the list is bounded and the
+  // count is what says how much of the session went unscored.
+  let analysis: Analysis = emptyAnalysis(CONFIG);
+  for (let move = 1; move <= INCIDENT_LIMIT + 5; move++) {
+    analysis = withIncident(analysis, { move, reason: 'gone', fatal: false });
+  }
+
+  assert.equal(analysis.incidents.length, INCIDENT_LIMIT);
+  assert.equal(analysis.failures, INCIDENT_LIMIT + 5);
+  // The first ones, not the last: the failure that started it is the one that
+  // explains the rest.
+  assert.equal(analysis.incidents[0].move, 1);
+});
+
+test('recording an incident does not mutate the analysis it came from', () => {
+  const before: Analysis = emptyAnalysis(CONFIG);
+  const after: Analysis = withIncident(before, { move: 2, reason: 'gone', fatal: false });
+
+  assert.equal(before.failures, 0);
+  assert.equal(before.incidents.length, 0);
+  assert.equal(after.failures, 1);
 });
 
 // ── Trust ────────────────────────────────────────────────────────────────────

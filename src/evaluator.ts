@@ -68,6 +68,13 @@ export interface Queue {
   readonly submit: (prompt: Prompt) => void;
   /** How many prompts are waiting or in flight. */
   readonly pending: () => number;
+  /**
+   * The move being evaluated right now, or null between searches.
+   *
+   * Exposed so that a failure arriving on the engine rather than on a prompt —
+   * a lost device — can still be recorded against a position in the game.
+   */
+  readonly current: () => number | null;
   /** Stop after the search in flight. Nothing further is started or reported. */
   readonly stop: () => void;
 }
@@ -93,6 +100,7 @@ export function createQueue(evaluator: Evaluator, handlers: QueueHandlers): Queu
   const seen = new Set<number>();
   let running = false;
   let stopped = false;
+  let inFlight: number | null = null;
 
   async function drain(): Promise<void> {
     if (running) return;
@@ -100,6 +108,7 @@ export function createQueue(evaluator: Evaluator, handlers: QueueHandlers): Queu
     while (!stopped) {
       const prompt: Prompt | undefined = waiting.shift();
       if (!prompt) break;
+      inFlight = prompt.moveNumber;
       try {
         const verdict: Verdict = await evaluator.evaluate(prompt);
         if (!stopped) handlers.onVerdict(verdict);
@@ -107,6 +116,8 @@ export function createQueue(evaluator: Evaluator, handlers: QueueHandlers): Queu
         // The move stays in `seen`. A failure that is going to repeat should
         // not be retried behind every later prompt in the session.
         if (!stopped) handlers.onError?.(prompt, error);
+      } finally {
+        inFlight = null;
       }
     }
     running = false;
@@ -120,6 +131,7 @@ export function createQueue(evaluator: Evaluator, handlers: QueueHandlers): Queu
       void drain();
     },
     pending: (): number => waiting.length + (running ? 1 : 0),
+    current: (): number | null => inFlight,
     stop: (): void => {
       stopped = true;
       waiting.length = 0;

@@ -21,6 +21,7 @@ import {
   emptyAnalysis,
   verdictCount,
   verdictFor,
+  withIncident,
   withVerdict,
   type Analysis,
   type Verdict,
@@ -173,6 +174,15 @@ function startEngineFor(game: Game): void {
 
   const handle: EngineHandle = engine ?? startEngine(game, {
     onStatus: (status: EngineStatus): void => {
+      // The one place a failure with no prompt in flight becomes a record: a
+      // download that never finished, or a device lost between moves.
+      if (status.state === 'failed' && engineStatus.state !== 'failed' && analysis !== null) {
+        analysis = withIncident(analysis, {
+          move: queue?.current() ?? null,
+          reason: status.reason,
+          fatal: true,
+        });
+      }
       engineStatus = status;
       showEngineProgress(false);
     },
@@ -185,8 +195,22 @@ function startEngineFor(game: Game): void {
       showEngineProgress(true);
     },
     // A single failed prompt is not fatal. The summary reports what it has.
-    // Nothing new to show, but the count of outstanding work changed.
-    onError: (): void => showEngineProgress(false),
+    // Nothing new to show, but the count of outstanding work changed — and the
+    // reason is recorded, so the export can say why a move has no number.
+    //
+    // Not once the engine has already been declared dead: `startEngine` rejects
+    // every outstanding prompt when that happens, and those rejections are the
+    // same event as the failure already recorded, arriving once per prompt.
+    onError: (prompt: Prompt, error: unknown): void => {
+      if (analysis !== null && engineStatus.state !== 'failed') {
+        analysis = withIncident(analysis, {
+          move: prompt.moveNumber,
+          reason: error instanceof Error ? error.message : String(error),
+          fatal: false,
+        });
+      }
+      showEngineProgress(false);
+    },
   });
 }
 

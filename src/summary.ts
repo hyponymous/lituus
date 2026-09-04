@@ -22,6 +22,7 @@ import {
   lossOf,
   verdictFor,
   type AiResult,
+  type EngineIncident,
   type Analysis,
   type Comparison,
   type MoveVerdict,
@@ -636,6 +637,32 @@ function exportVerdict(verdict: Verdict, board: Position): object {
   };
 }
 
+/**
+ * What went wrong with the engine, in one sentence, or null if nothing did.
+ *
+ * Shared by the text export and the summary view so the two cannot describe the
+ * same broken session differently. A fatal incident is quoted with its move
+ * because that is the fact a reader needs — everything after it is missing for
+ * one reason — while scattered refusals are reported as a count, since eight of
+ * them at eight positions is one story, not eight.
+ */
+export function failureNote(ai: AiResult): string | null {
+  const stopped: EngineIncident | undefined = ai.incidents.find(
+    (incident: EngineIncident) => incident.fatal,
+  );
+  if (stopped) {
+    return (
+      `Scoring stopped${stopped.move === null ? '' : ` at move ${stopped.move}`}: ` +
+      stopped.reason
+    );
+  }
+  if (ai.failures === 0) return null;
+  return (
+    `${ai.failures} prediction${ai.failures === 1 ? '' : 's'} could not be scored: ` +
+    ai.incidents[0].reason
+  );
+}
+
 export function toJSON(summary: Summary): string {
   return JSON.stringify(
     {
@@ -685,6 +712,15 @@ export function toJSON(summary: Summary): string {
               network: summary.ai.config.network,
               visits: summary.ai.config.visits,
               backend: summary.ai.config.backend,
+              // What the engine failed to answer, so a run that lost its GPU
+              // reads as a broken run rather than an unfinished one. `failures`
+              // can exceed the list, which is capped (`INCIDENT_LIMIT`).
+              failures: summary.ai.failures,
+              incidents: summary.ai.incidents.map((incident: EngineIncident) => ({
+                move: incident.move,
+                reason: incident.reason,
+                fatal: incident.fatal,
+              })),
             },
       ai:
         summary.ai === null
@@ -815,7 +851,10 @@ export function toText(summary: Summary): string {
   }
 
   const { ai } = summary;
-  if (ai && ai.answered > 0) {
+  // Failures count as something to report: an engine that died before its first
+  // verdict has nothing to say about the session and everything to say about
+  // itself, and silence there reads as scoring having never been asked for.
+  if (ai && (ai.answered > 0 || ai.failures > 0)) {
     lines.push('', `Engine: ${describeEngine(ai.config)}`);
     if (ai.graded > 0) {
       lines.push(
@@ -856,6 +895,9 @@ export function toText(summary: Summary): string {
           `(you found ${ai.misleadingHits})`,
       );
     }
+    // Before the counts, not after: it changes what they mean.
+    const trouble: string | null = failureNote(ai);
+    if (trouble !== null) lines.push(trouble);
     if (ai.answered < summary.rows.length) {
       // Said plainly rather than omitted: a median over half the game is not
       // the same number as a median over the game.

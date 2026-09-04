@@ -559,6 +559,16 @@ network name, visit count, and backend, and they travel into the JSON export
 and the SGF root comment. Any view that puts two results side by side refuses
 to compare point-loss figures produced by different configurations.
 
+The same value also records what the engine *failed* to do. `Analysis` carries
+an `incidents` list and a `failures` count, written when a prompt is refused or
+when the engine is declared dead, and both travel into the export beside the
+configuration. Without them a session whose GPU died mid-game exports exactly
+like a session left unfinished — losses that are null, with nothing to say
+which — and telling the two apart takes forensics on the principal variations.
+The list is capped, because a dead engine fails once per queued prompt and all
+of those are one event; the count is carried separately for the same reason, so
+a truncated list cannot shrink the number it stands for.
+
 This is the third thing needing such a flag, after the replay flag and the
 sampling mode, both already noted in `TODO.md` as unbuilt. They are one
 mechanism — **the conditions a score was produced under, stored with the

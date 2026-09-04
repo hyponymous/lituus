@@ -159,13 +159,72 @@ export interface Verdict {
  * a changed guess costs anything — which is what makes PRD §5's "Same again"
  * nearly free.
  */
+/**
+ * A prompt the engine could not answer, kept so the export can say why.
+ *
+ * Without this a session where the GPU died reads exactly like a session that
+ * was simply left unscored: losses come back null with nothing to say what
+ * happened. That is not hypothetical — a dogfood run lost its device mid-game
+ * and the only surviving evidence was the shape of the verdicts themselves,
+ * every principal variation reading A19, B19, C19 in board order (see
+ * `isDegenerate` in `engine/model-v8.ts`).
+ *
+ * Deliberately no timestamp. The useful axis is the game, not the clock: "the
+ * engine stopped at move 84" is what a reader needs, and the array's order
+ * already says which failure came first.
+ */
+export interface EngineIncident {
+  /** The move being scored, or null when nothing was in flight. */
+  readonly move: number | null;
+  /** What the engine said, in the words the session view showed. */
+  readonly reason: string;
+  /**
+   * Whether scoring stopped here. A single refused prompt is not fatal and the
+   * session carries on; a lost device or a failed download ends it, and only
+   * that kind explains every later move being missing.
+   */
+  readonly fatal: boolean;
+}
+
+/**
+ * How many incidents to keep.
+ *
+ * A dead engine produces one per queued prompt, all of them the same event, so
+ * the list is bounded and `failures` carries the count that the list truncates.
+ * Enough to show a pattern — two awkward positions early and a device loss
+ * later is a different story from three of the same message — and few enough
+ * that a broken session cannot inflate the export.
+ */
+export const INCIDENT_LIMIT = 8;
+
 export interface Analysis {
   readonly config: EngineConfig;
   readonly verdicts: ReadonlyMap<number, Verdict>;
+  /** The first `INCIDENT_LIMIT` failures, in the order they happened. */
+  readonly incidents: readonly EngineIncident[];
+  /**
+   * How many failures there were in all, including any past the limit.
+   *
+   * Not derivable from the verdicts: a move with no verdict may never have been
+   * asked about at all. This counts the asking that failed.
+   */
+  readonly failures: number;
 }
 
 export function emptyAnalysis(config: EngineConfig): Analysis {
-  return { config, verdicts: new Map() };
+  return { config, verdicts: new Map(), incidents: [], failures: 0 };
+}
+
+/** A new analysis that also remembers this failure. */
+export function withIncident(analysis: Analysis, incident: EngineIncident): Analysis {
+  return {
+    ...analysis,
+    incidents:
+      analysis.incidents.length < INCIDENT_LIMIT
+        ? [...analysis.incidents, incident]
+        : analysis.incidents,
+    failures: analysis.failures + 1,
+  };
 }
 
 /**
@@ -208,7 +267,7 @@ export function withVerdict(analysis: Analysis, verdict: Verdict): Analysis {
         ? null
         : { ...verdict.natural, loss: roundLoss(verdict.natural.loss) },
   });
-  return { config: analysis.config, verdicts };
+  return { ...analysis, verdicts };
 }
 
 export function verdictFor(analysis: Analysis, moveNumber: number): Verdict | null {
@@ -451,6 +510,10 @@ export interface AiResult {
   readonly misleadingHits: number;
   /** Stretches where neither of you played the engine's move. */
   readonly runs: readonly MissedRun[];
+  /** Prompts the engine refused, and why. Empty on a healthy run. */
+  readonly incidents: readonly EngineIncident[];
+  /** How many failed in all, which `incidents` may have truncated. */
+  readonly failures: number;
   /**
    * How the session compared with the moves actually played. Null when no
    * prompt has both sides quotable, which is the only case where the
@@ -571,6 +634,8 @@ export function aiResult(
 
   return {
     config: analysis.config,
+    incidents: analysis.incidents,
+    failures: analysis.failures,
     graded: losses.length,
     answered,
     medianLoss: median(losses),
