@@ -28,7 +28,9 @@ import {
   EXPECTED_SIZE,
   EXPECTED_TOLERANCE,
 } from './canary-expected.ts';
-import { loadNetworkBytes } from './net-cache.ts';
+import { forgetNetwork, isNetworkCached, loadNetworkBytes } from './net-cache.ts';
+import { NETWORK } from './network.ts';
+import { checkWeights, type WeightsCheck } from './weights-check.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8, type Evaluation } from './model-v8.ts';
@@ -113,10 +115,50 @@ async function probe(request: ProbeRequest): Promise<void> {
         .join('\n'),
   });
 
-  const bytes: Uint8Array = await loadNetworkBytes(request.networkUrl);
+  /*
+   * The weights, hashed. Everything above says the machine is fine: the bytes
+   * come back off the GPU exactly, and every operation agrees with the device's
+   * own CPU. What is left is what is being multiplied — and until now the only
+   * check on a 37MB download was its compressed length and a plausible-looking
+   * first sixty-four bytes.
+   *
+   * If the hash is wrong, the cached copy is evicted and the network fetched
+   * again, and both hashes are reported. A second wrong hash is a download or
+   * decompression that damages the file on this device; a right one after a
+   * wrong one is a poisoned cache, which every visit was re-reading.
+   */
+  const cached: boolean = await isNetworkCached(request.networkUrl);
+  let bytes: Uint8Array = await loadNetworkBytes(request.networkUrl);
+  let weights: WeightsCheck = await checkWeights(bytes);
+  let detail: string =
+    `${cached ? 'from the cache' : 'freshly downloaded'}\n` +
+    `${weights.bytes.toLocaleString('en-US')} bytes inflated, expected ` +
+    `${NETWORK.inflatedBytes.toLocaleString('en-US')}\n` +
+    `sha256 ${weights.sha256}\n` +
+    `expect ${NETWORK.sha256}`;
+
+  if (!weights.matches) {
+    await forgetNetwork(request.networkUrl);
+    bytes = await loadNetworkBytes(request.networkUrl);
+    const again: WeightsCheck = await checkWeights(bytes);
+    detail +=
+      `\nWEIGHTS ARE NOT THE EXPECTED ONES. re-downloaded:\n` +
+      `${again.bytes.toLocaleString('en-US')} bytes, sha256 ${again.sha256}\n` +
+      (again.matches
+        ? 'the fresh copy is correct — the cached one was damaged'
+        : again.sha256 === weights.sha256
+          ? 'the same wrong bytes again — this device damages the file on the way in'
+          : 'wrong a second time, and differently — the damage is not repeatable');
+    weights = again;
+  }
+
   const parsed: ParsedKataGoModelV8 = parseKataGoModelV8(bytes);
   const model = new ModelV8(tf, parsed);
-  post({ stage: 'network', ok: true, detail: `${parsed.modelName}, v${parsed.modelVersion}` });
+  post({
+    stage: 'network',
+    ok: weights.matches,
+    detail: `${parsed.modelName}, v${parsed.modelVersion}\n${detail}`,
+  });
 
   const canary = new Canary(model, size);
   const inputs = canaryInputs(size * size);

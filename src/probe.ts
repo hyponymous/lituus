@@ -28,7 +28,7 @@ const STAGES: ReadonlyArray<{ readonly stage: ProbeReport['stage']; readonly tit
   { stage: 'backend', title: 'WebGPU in a worker' },
   { stage: 'readback', title: 'Known numbers through the GPU' },
   { stage: 'ops', title: 'Every operation, GPU against CPU' },
-  { stage: 'network', title: `Load ${NETWORK.label}` },
+  { stage: 'network', title: `Load ${NETWORK.label}, and hash it` },
   { stage: 'forward', title: 'One forward pass, fixed input' },
   { stage: 'compare', title: 'Against a device known to be right' },
 ];

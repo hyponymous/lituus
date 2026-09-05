@@ -20,6 +20,18 @@ export interface Network {
   readonly url: string;
   /** Expected size in bytes, as a check that the download completed. */
   readonly bytes: number;
+  /**
+   * SHA-256 of the *inflated* weights, and the size they inflate to.
+   *
+   * A completed download is not an intact one. The only integrity check this
+   * had was the compressed length and the first sixty-four bytes being a
+   * plausible header, which a body damaged anywhere after that passes — it then
+   * parses, evaluates, and returns numbers that are finite, stable and wrong.
+   * The weights are the one input to the engine nothing else can vouch for, so
+   * they are hashed.
+   */
+  readonly inflatedBytes: number;
+  readonly sha256: string;
 }
 
 /**
@@ -34,6 +46,8 @@ export const NETWORK: Network = {
   file: 'g170e-b15c192-s1672170752-d466197061.bin.gz',
   url: 'https://katagoarchive.org/g170/neuralnets/g170e-b15c192-s1672170752-d466197061.bin.gz',
   bytes: 36_948_927,
+  inflatedBytes: 39_776_212,
+  sha256: '7a1fe84a36c6ff535dbfad1219a3ce4c040babe889712378a9d18a9276234faa',
 };
 
 /** Subdirectory of the published site the network is served from. */

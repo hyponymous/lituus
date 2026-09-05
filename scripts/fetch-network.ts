@@ -12,7 +12,11 @@
  * that forces it.
  */
 
+import { createReadStream } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
+import { createGunzip } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { NETWORK, NETWORK_DIR } from '../src/engine/network.ts';
 
@@ -32,6 +36,9 @@ async function main(): Promise<void> {
   const existing: number | null = await sizeOf(target);
   if (existing === NETWORK.bytes) {
     console.log(`${NETWORK.file} already present (${existing} bytes), skipping.`);
+    // Verified anyway: a file already in place is exactly the one nobody has
+    // looked at, and the size is what a damaged copy keeps.
+    await verify(target);
     return;
   }
 
@@ -53,7 +60,38 @@ async function main(): Promise<void> {
   if (got !== NETWORK.bytes) {
     throw new Error(`Expected ${NETWORK.bytes} bytes, got ${got}. Refusing a partial network.`);
   }
+  await verify(target);
   console.log(`Wrote ${target} (${got} bytes).`);
+}
+
+/**
+ * The same hash the browser checks, checked here first.
+ *
+ * The size says the download finished; it does not say the file is the one the
+ * app expects. Verifying at build time means a mismatch in the browser is a
+ * transport or cache fault on that device rather than an open question about
+ * what was published — which is the distinction that took a phone two sessions
+ * of wrong numbers to raise.
+ */
+async function verify(path: string): Promise<void> {
+  const hash = createHash('sha256');
+  let inflated = 0;
+  const gunzip = createGunzip();
+  createReadStream(path).pipe(gunzip);
+  for await (const chunk of gunzip as AsyncIterable<Buffer>) {
+    inflated += chunk.length;
+    hash.update(chunk);
+  }
+
+  const digest: string = hash.digest('hex');
+  if (inflated !== NETWORK.inflatedBytes || digest !== NETWORK.sha256) {
+    throw new Error(
+      `The download is not the pinned network. Inflated ${inflated} bytes ` +
+        `(expected ${NETWORK.inflatedBytes}), sha256 ${digest} ` +
+        `(expected ${NETWORK.sha256}).`,
+    );
+  }
+  console.log(`Verified sha256 ${digest} over ${inflated} inflated bytes.`);
 }
 
 main().catch((error: unknown) => {

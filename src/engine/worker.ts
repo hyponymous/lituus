@@ -31,7 +31,8 @@ import { evaluatePrompt, gameContext, type GameContext } from './evaluate.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8 } from './model-v8.ts';
-import { loadNetworkBytes, type Progress } from './net-cache.ts';
+import { forgetNetwork, loadNetworkBytes, type Progress } from './net-cache.ts';
+import { checkWeights, type WeightsCheck } from './weights-check.ts';
 import { Search } from './search.ts';
 
 /** Main thread to worker. */
@@ -146,10 +147,41 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
   const game: Game = readGame(parse(request.sgf));
   const context: GameContext = gameContext(game);
 
-  const bytes: Uint8Array = await loadNetworkBytes(request.networkUrl, {
+  let bytes: Uint8Array = await loadNetworkBytes(request.networkUrl, {
     onProgress: (progress: Progress): void =>
       post({ type: 'progress', received: progress.received, total: progress.total }),
   });
+
+  /*
+   * The weights, checked against the hash `network.ts` pins.
+   *
+   * A completed download is not an intact one, and until this was added the
+   * only checks were the compressed length and the first sixty-four bytes
+   * looking like a KataGo header. A body damaged after that parses, evaluates,
+   * and returns numbers that are finite, stable and wrong — which is exactly
+   * what a phone did for two whole sessions.
+   *
+   * A bad copy is evicted and fetched again before giving up, because the
+   * damaged bytes were being kept: the Cache API holds the network between
+   * visits, so a copy that arrived wrong once is re-read on every later visit
+   * and the obvious remedy — reload the page — changes nothing.
+   */
+  let weights: WeightsCheck = await checkWeights(bytes);
+  if (!weights.matches) {
+    await forgetNetwork(request.networkUrl);
+    bytes = await loadNetworkBytes(request.networkUrl, {
+      onProgress: (progress: Progress): void =>
+        post({ type: 'progress', received: progress.received, total: progress.total }),
+    });
+    weights = await checkWeights(bytes);
+  }
+  if (!weights.matches) {
+    throw new Error(
+      'The engine network did not arrive intact, twice over, so scoring is ' +
+        `unavailable. (${weights.bytes.toLocaleString('en-US')} bytes, ` +
+        `sha256 ${weights.sha256.slice(0, 16)}…)`,
+    );
+  }
 
   post({ type: 'warming' });
 
