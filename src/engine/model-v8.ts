@@ -25,6 +25,7 @@
 
 import type * as TF from '@tensorflow/tfjs-core';
 import type { ActivationKind, ParsedBatchNorm, ParsedConv2d, ParsedMatMul } from './bin-model-parser.ts';
+import { discoverHeadLayout, layoutBackend, type HeadLayout } from './head-layout.ts';
 import type { ParsedKataGoModelV8, ParsedTrunkBlock } from './model-types.ts';
 
 /** Batch norm folded into a scale and a bias, as the parser leaves it. */
@@ -381,6 +382,9 @@ export class ModelV8 {
    */
   private tracer: ((label: string, x: TF.Tensor) => void) | null = null;
 
+  /** Packed layouts already measured, keyed by the segment lengths. */
+  private readonly layouts = new Map<string, HeadLayout | null>();
+
   private watch(label: string, x: TF.Tensor): void {
     this.tracer?.(label, x);
   }
@@ -431,7 +435,7 @@ export class ModelV8 {
     const valueCount: number = this.v3.shape[1];
     const scoreCount: number = Math.min(SCORE_OUTPUTS, this.sv3.shape[1]);
 
-    const packed: TF.Tensor1D = tf.tidy(() => {
+    const segments: TF.Tensor1D[] = tf.tidy(() => {
       const input = tf.tensor4d(spatial, [1, size, size, 22]);
       const globals = tf.tensor2d(global, [1, global.length]);
 
@@ -494,30 +498,78 @@ export class ModelV8 {
        * cost three of those for nothing. Concatenating is one small kernel on
        * a tensor already on the GPU; unpacking is a `subarray` on the way out.
        */
-      return tf.concat([
+      return [
         tf.reshape(tf.slice(flat, [0, 0], [area, 1]), [area]) as TF.Tensor1D,
         tf.reshape(tf.slice(pass, [0, 0], [1, 1]), [1]) as TF.Tensor1D,
         tf.reshape(valueOut, [valueCount]) as TF.Tensor1D,
         tf.reshape(scoreOut, [scoreCount]) as TF.Tensor1D,
-      ]) as TF.Tensor1D;
+      ];
     });
 
-    // Views onto one buffer, not four copies: nothing downstream keeps them
-    // past the next call, and `search.ts` builds its own array from the policy.
+    try {
+      const layout: HeadLayout | null = this.layoutFor([area, 1, valueCount, scoreCount]);
+      const result: Evaluation =
+        layout === null ? this.readSeparately(segments) : this.readPacked(segments, layout);
+      // Checked here rather than in the search: this is the one place a GPU
+      // buffer becomes a number, and a fake network in a test cannot fail this
+      // way.
+      if (isDegenerate(result)) throw new Error(DEAD_READBACK);
+      return result;
+    } finally {
+      this.tf.dispose(segments);
+    }
+  }
+
+  /**
+   * The four heads in one read, at the offsets this device puts them.
+   *
+   * The reason for packing at all is that the readback is what costs.
+   * `dataSync` on the WebGPU backend is a canvas round trip per call (see
+   * `isDegenerate` above), and the per-call part is a fixed cost paid whatever
+   * the payload — 2.4ms against 3.9ms for the 361-float policy, on an M-series
+   * Mac, measured by `experiments/browser/run-readback.ts`. Reading four times
+   * paid three of those for nothing.
+   */
+  private readPacked(segments: readonly TF.Tensor1D[], layout: HeadLayout): Evaluation {
+    // `concat` wants a mutable array; the copy is four references.
+    const packed: TF.Tensor1D = this.tf.concat([...segments]) as TF.Tensor1D;
+    // Views onto one buffer, not four copies: `dataSync` hands back an array of
+    // its own, so disposing the tensor does not disturb them, and nothing
+    // downstream keeps them past the next call.
     const heads = packed.dataSync() as Float32Array;
-    const valueAt: number = area + 1;
-    const scoreAt: number = valueAt + valueCount;
-    const result: Evaluation = {
-      policy: heads.subarray(0, area),
-      policyPass: heads[area],
-      value: heads.subarray(valueAt, scoreAt),
-      scoreValue: heads.subarray(scoreAt, scoreAt + scoreCount),
-    };
     packed.dispose();
-    // Checked here rather than in the search: this is the one place a GPU
-    // buffer becomes a number, and a fake network in a test cannot fail this way.
-    if (isDegenerate(result)) throw new Error(DEAD_READBACK);
-    return result;
+
+    const [policyAt, passAt, valueAt, scoreAt] = layout.offsets;
+    return {
+      policy: heads.subarray(policyAt, policyAt + segments[0].size),
+      policyPass: heads[passAt],
+      value: heads.subarray(valueAt, valueAt + segments[2].size),
+      scoreValue: heads.subarray(scoreAt, scoreAt + segments[3].size),
+    };
+  }
+
+  /** One read per head, for a device whose packed layout cannot be located. */
+  private readSeparately(segments: readonly TF.Tensor1D[]): Evaluation {
+    const [policy, pass, value, score] = segments.map(
+      (segment: TF.Tensor1D) => segment.dataSync() as Float32Array,
+    );
+    return { policy, policyPass: pass[0], value, scoreValue: score };
+  }
+
+  /**
+   * This device's packed layout for these segment lengths, worked out once.
+   *
+   * Once per board size, not once per evaluation: the layout is a function of
+   * the lengths, and a session asks about one board thousands of times. Kept on
+   * the model because that is what owns the backend it was measured on.
+   */
+  private layoutFor(sizes: readonly number[]): HeadLayout | null {
+    const key: string = sizes.join(',');
+    const known: HeadLayout | null | undefined = this.layouts.get(key);
+    if (known !== undefined) return known;
+    const found: HeadLayout | null = discoverHeadLayout(layoutBackend(this.tf), sizes);
+    this.layouts.set(key, found);
+    return found;
   }
 
   /** Release the weights. The model is unusable afterwards. */
