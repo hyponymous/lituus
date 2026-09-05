@@ -33,7 +33,7 @@ import { NETWORK } from './network.ts';
 import { checkWeights, weightsFingerprint, type WeightsCheck } from './weights-check.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
-import { ModelV8, type Evaluation } from './model-v8.ts';
+import { ModelV8, type Evaluation, type TraceStage } from './model-v8.ts';
 import { checkOps, type OpResult } from './op-check.ts';
 import { checkReadback, type ReadbackCheck } from './readback-check.ts';
 
@@ -50,6 +50,7 @@ export interface ProbeReport {
     | 'network'
     | 'parsed'
     | 'forward'
+    | 'trace'
     | 'compare'
     | 'failed';
   readonly ok: boolean;
@@ -194,6 +195,25 @@ async function probe(request: ProbeRequest): Promise<void> {
       `scoreStdev, lead, varTimeLeft, pass, policy sum]\n` +
       `${digits(canaryHeads(evaluation))}\n` +
       `drift against itself: ${canary.drift().toExponential(3)}`,
+  });
+
+  /*
+   * Stage by stage, so the first place two machines part can be named. Printed
+   * unconditionally rather than only on a mismatch: the healthy machine's
+   * numbers are the thing a failing one has to be compared against, and they
+   * have to come from somewhere.
+   */
+  const trace: TraceStage[] = model.traceForward(inputs.spatial, inputs.global, size);
+  post({
+    stage: 'trace',
+    ok: true,
+    detail: trace
+      .map(
+        (one: TraceStage) =>
+          `${one.label.padEnd(22)} mean ${one.mean.toPrecision(8).padStart(13)}  ` +
+          `min ${one.min.toPrecision(8).padStart(13)}  max ${one.max.toPrecision(8).padStart(13)}`,
+      )
+      .join('\n'),
   });
 
   const off: number = canary.against(EXPECTED_HEADS);

@@ -31,6 +31,7 @@ const STAGES: ReadonlyArray<{ readonly stage: ProbeReport['stage']; readonly tit
   { stage: 'network', title: `Load ${NETWORK.label}, and hash it` },
   { stage: 'parsed', title: 'The weights as parsed, not as downloaded' },
   { stage: 'forward', title: 'One forward pass, fixed input' },
+  { stage: 'trace', title: 'Stage by stage through the network' },
   { stage: 'compare', title: 'Against a device known to be right' },
 ];
 

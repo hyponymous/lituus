@@ -74,6 +74,14 @@ type Block =
     };
 
 /** What one forward pass yields. Logits throughout; postprocessing is separate. */
+/** One stage of a traced forward pass; see `ModelV8.traceForward`. */
+export interface TraceStage {
+  readonly label: string;
+  readonly mean: number;
+  readonly min: number;
+  readonly max: number;
+}
+
 export interface Evaluation {
   /** Per-point policy logits, length `area`. */
   readonly policy: Float32Array;
@@ -322,12 +330,13 @@ export class ModelV8 {
     const tf = this.tf;
     let out: TF.Tensor4D = trunk;
 
-    for (const block of blocks) {
+    for (const [at, block] of blocks.entries()) {
       const pre = this.normAct(out, block.preBN, block.preActivation);
 
       if (block.kind === 'ordinary') {
         const mid = this.normAct(this.conv(pre, block.w1), block.midBN, block.midActivation);
         out = tf.add(out, this.conv(mid, block.w2)) as TF.Tensor4D;
+        this.watch(`block ${at} ordinary`, out);
         continue;
       }
 
@@ -342,8 +351,10 @@ export class ModelV8 {
           regular,
           tf.matMul(this.poolGlobal(pooled), block.w1r) as TF.Tensor2D,
         );
+        this.watch(`block ${at} gpool, pooled`, biased);
         const mid = this.normAct(biased, block.midBN, block.midActivation);
         out = tf.add(out, this.conv(mid, block.w2)) as TF.Tensor4D;
+        this.watch(`block ${at} gpool`, out);
         continue;
       }
 
@@ -352,6 +363,52 @@ export class ModelV8 {
       out = tf.add(out, this.conv(post, block.postConv)) as TF.Tensor4D;
     }
     return out;
+  }
+
+  // ── Watching the forward pass ──────────────────────────────────────────────
+
+  /**
+   * Where two machines part.
+   *
+   * Every operation this model uses agrees with its own device's CPU, on both a
+   * laptop and a phone, at the network's real shapes; the weights in memory are
+   * identical to the float; and the two devices still finish tens of points
+   * apart. That leaves composition, and a fault in composition has a first
+   * step where it appears. This records a fingerprint after each one so that
+   * step can be named rather than guessed at.
+   *
+   * Null in every ordinary session, so the cost is one null check per stage.
+   */
+  private tracer: ((label: string, x: TF.Tensor) => void) | null = null;
+
+  private watch(label: string, x: TF.Tensor): void {
+    this.tracer?.(label, x);
+  }
+
+  /**
+   * One forward pass, with each stage's mean, smallest and largest value.
+   *
+   * Read inside the pass rather than kept, because keeping twenty intermediate
+   * tensors of a 192-channel trunk is how a phone runs out of memory while
+   * being asked why it is behaving oddly.
+   */
+  traceForward(spatial: Float32Array, global: Float32Array, size: number): TraceStage[] {
+    const tf = this.tf;
+    const stages: TraceStage[] = [];
+    this.tracer = (label: string, x: TF.Tensor): void => {
+      const values = tf.tidy(() => ({
+        mean: (tf.mean(x).dataSync() as Float32Array)[0],
+        min: (tf.min(x).dataSync() as Float32Array)[0],
+        max: (tf.max(x).dataSync() as Float32Array)[0],
+      }));
+      stages.push({ label, ...values });
+    };
+    try {
+      this.evaluate(spatial, global, size);
+    } finally {
+      this.tracer = null;
+    }
+    return stages;
   }
 
   // ── Forward ────────────────────────────────────────────────────────────────
@@ -378,10 +435,14 @@ export class ModelV8 {
       const input = tf.tensor4d(spatial, [1, size, size, 22]);
       const globals = tf.tensor2d(global, [1, global.length]);
 
+      this.watch('input', input);
       let trunk = this.conv(input, this.conv1);
+      this.watch('conv1', trunk);
       trunk = this.addChannelBias(trunk, tf.matMul(globals, this.ginput) as TF.Tensor2D);
+      this.watch('plus global bias', trunk);
       trunk = this.stack(trunk, this.blocks);
       trunk = this.normAct(trunk, this.tipBN, this.tipActivation);
+      this.watch('trunk tip', trunk);
 
       // Policy head. The pooled statistics bias the per-point head and also
       // produce the pass logit, which is why they are computed once here.
@@ -392,10 +453,12 @@ export class ModelV8 {
         this.conv(trunk, this.p1),
         tf.matMul(pooled, this.gpoolToBias) as TF.Tensor2D,
       );
+      this.watch('policy pooled', pooled);
       const policyOut = this.conv(
         this.normAct(biased, this.p1BN, this.p1Activation),
         this.p2,
       );
+      this.watch('policy out', policyOut);
 
       let pass = tf.matMul(pooled, this.passMul) as TF.Tensor2D;
       if (this.passBias && this.passActivation && this.passMul2) {
