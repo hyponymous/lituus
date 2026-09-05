@@ -47,3 +47,58 @@ export async function checkWeights(data: Uint8Array): Promise<WeightsCheck> {
     matches: sha256 === NETWORK.sha256 && data.length === NETWORK.inflatedBytes,
   };
 }
+
+/**
+ * A fingerprint of the weights as they end up in memory, not as they sit on
+ * disk.
+ *
+ * The file hashes correctly on a device whose forward pass is wrong, which
+ * leaves one step between the bytes and the arithmetic that has never been
+ * checked: the parse. It reads binary floats out of the file, merges each batch
+ * norm's mean, variance, scale and bias into a scale and a bias, and hands the
+ * result to the GPU. All of that is ordinary JavaScript, and it runs on the
+ * device — a different engine, a different `Math.sqrt` result, an alignment
+ * assumption that holds on one platform and not another, and the weights differ
+ * while the file does not.
+ *
+ * Not a cryptographic hash. `crypto.subtle` cannot be fed incrementally and the
+ * weights are ten million floats; this only has to distinguish two machines,
+ * and FNV-1a over the float bits does that. The order of the walk is fixed by
+ * sorting keys, so two devices visit the same numbers in the same sequence.
+ */
+export function weightsFingerprint(parsed: unknown): { hex: string; floats: number } {
+  // 64 bits as two 32-bit halves, since a 32-bit fingerprint over ten million
+  // floats collides more often than a reader would credit.
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  let floats = 0;
+  const bits = new DataView(new ArrayBuffer(4));
+
+  const mix = (values: Float32Array): void => {
+    floats += values.length;
+    for (let i = 0; i < values.length; i++) {
+      bits.setFloat32(0, values[i]);
+      const word: number = bits.getUint32(0);
+      a = Math.imul(a ^ word, 0x01000193) >>> 0;
+      b = Math.imul(b ^ (word + i), 0x85ebca6b) >>> 0;
+    }
+  };
+
+  const walk = (node: unknown): void => {
+    if (node instanceof Float32Array) {
+      mix(node);
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (node !== null && typeof node === 'object') {
+      const keys: string[] = Object.keys(node as Record<string, unknown>).sort();
+      for (const key of keys) walk((node as Record<string, unknown>)[key]);
+    }
+  };
+
+  walk(parsed);
+  return { hex: `${a.toString(16).padStart(8, '0')}${b.toString(16).padStart(8, '0')}`, floats };
+}

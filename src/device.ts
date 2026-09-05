@@ -59,3 +59,35 @@ export async function describeDevice(): Promise<string> {
   );
   return `${parts.length > 0 ? parts.join(' / ') : 'adapter, no details'}, ${where}`;
 }
+
+/**
+ * The adapter's limits, for the handful that decide which kernel a backend
+ * picks and how much it can put in one buffer.
+ *
+ * A phone's caps are lower than a laptop's, and a limit is the kind of
+ * difference that changes a computation without failing: a backend that chooses
+ * a different shader for a smaller workgroup is running different code on the
+ * same graph. Printed rather than judged — nothing here knows which value is
+ * right, only that two devices can be compared.
+ */
+export async function describeLimits(): Promise<string> {
+  if (!('gpu' in navigator)) return 'no WebGPU';
+  const adapter: GPUAdapter | null = await navigator.gpu.requestAdapter();
+  if (!adapter) return 'no adapter';
+
+  const wanted: readonly string[] = [
+    'maxBufferSize',
+    'maxStorageBufferBindingSize',
+    'maxComputeWorkgroupStorageSize',
+    'maxComputeInvocationsPerWorkgroup',
+    'maxComputeWorkgroupSizeX',
+    'maxStorageBuffersPerShaderStage',
+  ];
+  const limits = adapter.limits as unknown as Record<string, number | undefined>;
+  const lines: string[] = wanted.map(
+    (name: string) => `${name}: ${limits[name]?.toLocaleString('en-US') ?? '(absent)'}`,
+  );
+  const features: string[] = Array.from(adapter.features ?? []);
+  lines.push(`features: ${features.length > 0 ? features.join(', ') : '(none)'}`);
+  return lines.join('\n');
+}

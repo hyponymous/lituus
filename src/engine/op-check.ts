@@ -20,8 +20,21 @@
 
 import type * as TF from '@tensorflow/tfjs-core';
 
-/** The trunk's channel count at b15c192, and the board the app plays on. */
-const CHANNELS = 32;
+/**
+ * The network's own dimensions, not round numbers.
+ *
+ * The first battery ran at 32 channels with 3x3 convolutions and found nothing,
+ * on a device whose full forward pass is wrong. That was the wrong test: a
+ * WebGPU kernel is chosen by shape, and a vector-packed path can be selected —
+ * or not — on whether a channel count divides by four. `conv1` is 5x5 with
+ * **22** input channels, which does not, and it is the first thing a position
+ * goes through.
+ */
+const TRUNK = 192;
+const MID = 128;
+const GPOOL = 64;
+const HEAD = 32;
+const INPUT = 22;
 const SIZE = 19;
 
 export interface OpResult {
@@ -55,64 +68,100 @@ function values(count: number, seed: number): Float32Array {
   return out;
 }
 
-const spatial: number[] = [1, SIZE, SIZE, CHANNELS];
+const board = (channels: number): number[] => [1, SIZE, SIZE, channels];
+
+const conv = (
+  name: string,
+  inChannels: number,
+  outChannels: number,
+  kernel: number,
+  dilation = 1,
+): Case => ({
+  name: `conv2d ${kernel}x${kernel} ${inChannels}->${outChannels}${dilation > 1 ? ` dilated ${dilation}` : ''}`,
+  shapes: [board(inChannels), [kernel, kernel, inChannels, outChannels]],
+  run: (tf, [x, w]) =>
+    tf.conv2d(x as TF.Tensor4D, w as TF.Tensor4D, 1, 'same', 'NHWC', [dilation, dilation]),
+});
 
 const CASES: readonly Case[] = [
+  // The trunk, in the order a position meets it. conv1 first, because 22 input
+  // channels is the one shape here that no packing rule likes.
+  conv('conv1', INPUT, TRUNK, 5),
+  conv('ordinary', TRUNK, TRUNK, 3),
+  conv('gpool w1a', TRUNK, MID, 3),
+  conv('gpool w1b', TRUNK, GPOOL, 3),
+  conv('gpool w2', MID, TRUNK, 3),
+  conv('head 1x1', TRUNK, HEAD, 1),
   {
-    name: 'mean over [1, 2]',
-    shapes: [spatial],
+    name: `mean over [1, 2] at ${TRUNK}`,
+    shapes: [board(TRUNK)],
     run: (tf, [x]) => tf.mean(x as TF.Tensor4D, [1, 2]),
   },
   {
-    name: 'max over [1, 2]',
-    shapes: [spatial],
+    name: `max over [1, 2] at ${GPOOL}`,
+    shapes: [board(GPOOL)],
     run: (tf, [x]) => tf.max(x as TF.Tensor4D, [1, 2]),
   },
   {
-    name: 'conv2d 3x3 same',
-    shapes: [spatial, [3, 3, CHANNELS, CHANNELS]],
-    run: (tf, [x, w]) =>
-      tf.conv2d(x as TF.Tensor4D, w as TF.Tensor4D, 1, 'same', 'NHWC', [1, 1]),
+    name: `mean over [1, 2] at ${HEAD}`,
+    shapes: [board(HEAD)],
+    run: (tf, [x]) => tf.mean(x as TF.Tensor4D, [1, 2]),
   },
   {
-    name: 'conv2d 3x3 dilated',
-    shapes: [spatial, [3, 3, CHANNELS, CHANNELS]],
-    run: (tf, [x, w]) =>
-      tf.conv2d(x as TF.Tensor4D, w as TF.Tensor4D, 1, 'same', 'NHWC', [2, 2]),
-  },
-  {
-    name: 'conv2d 1x1',
-    shapes: [spatial, [1, 1, CHANNELS, CHANNELS]],
-    run: (tf, [x, w]) =>
-      tf.conv2d(x as TF.Tensor4D, w as TF.Tensor4D, 1, 'same', 'NHWC', [1, 1]),
-  },
-  {
-    name: 'matMul',
-    shapes: [[1, CHANNELS * 3], [CHANNELS * 3, CHANNELS]],
+    name: `matMul ${TRUNK}->${MID}`,
+    shapes: [[1, TRUNK], [TRUNK, MID]],
     run: (tf, [a, b]) => tf.matMul(a as TF.Tensor2D, b as TF.Tensor2D),
   },
   {
-    name: 'add, broadcast over channels',
-    shapes: [spatial, [1, 1, 1, CHANNELS]],
+    name: 'matMul 96->96',
+    shapes: [[1, 96], [96, 96]],
+    run: (tf, [a, b]) => tf.matMul(a as TF.Tensor2D, b as TF.Tensor2D),
+  },
+  {
+    name: `add, broadcast over ${TRUNK}`,
+    shapes: [board(TRUNK), [1, 1, 1, TRUNK]],
     run: (tf, [x, b]) => tf.add(x, b),
   },
   {
-    name: 'mul, broadcast over channels',
-    shapes: [spatial, [1, 1, 1, CHANNELS]],
+    name: `mul, broadcast over ${TRUNK}`,
+    shapes: [board(TRUNK), [1, 1, 1, TRUNK]],
     run: (tf, [x, b]) => tf.mul(x, b),
   },
-  { name: 'relu', shapes: [spatial], run: (tf, [x]) => tf.relu(x) },
-  { name: 'tanh', shapes: [spatial], run: (tf, [x]) => tf.tanh(x) },
-  { name: 'softplus', shapes: [[1, CHANNELS]], run: (tf, [x]) => tf.softplus(x) },
+  { name: `relu at ${TRUNK}`, shapes: [board(TRUNK)], run: (tf, [x]) => tf.relu(x) },
+  { name: `tanh at ${TRUNK}`, shapes: [board(TRUNK)], run: (tf, [x]) => tf.tanh(x) },
+  { name: 'softplus', shapes: [[1, 4]], run: (tf, [x]) => tf.softplus(x) },
   {
-    name: 'concat along channels',
-    shapes: [[1, CHANNELS], [1, CHANNELS]],
-    run: (tf, [a, b]) => tf.concat([a as TF.Tensor2D, b as TF.Tensor2D], 1),
+    name: `concat ${GPOOL}+${GPOOL}+${GPOOL}`,
+    shapes: [[1, GPOOL], [1, GPOOL], [1, GPOOL]],
+    run: (tf, [a, b, c]) =>
+      tf.concat([a as TF.Tensor2D, b as TF.Tensor2D, c as TF.Tensor2D], 1),
   },
   {
-    name: 'slice',
-    shapes: [spatial],
-    run: (tf, [x]) => tf.slice(x as TF.Tensor4D, [0, 0, 0, 0], [1, SIZE, SIZE, 4]),
+    name: 'slice the policy plane',
+    shapes: [board(HEAD)],
+    run: (tf, [x]) => tf.slice(x as TF.Tensor4D, [0, 0, 0, 0], [1, SIZE, SIZE, 1]),
+  },
+  /*
+   * One composed case, because every operation above can be right on its own
+   * and the network still wrong. This is an ordinary trunk block: normalize,
+   * activate, convolve, and add the input back.
+   */
+  {
+    name: 'composed: one residual block',
+    shapes: [board(TRUNK), [1, 1, 1, TRUNK], [1, 1, 1, TRUNK], [3, 3, TRUNK, TRUNK]],
+    run: (tf, [x, scale, bias, w]) => {
+      const normalized = tf.add(tf.mul(x, scale), bias);
+      const activated = tf.relu(normalized);
+      const convolved = tf.conv2d(
+        activated as TF.Tensor4D,
+        w as TF.Tensor4D,
+        1,
+        'same',
+        'NHWC',
+        [1, 1],
+      );
+      return tf.add(x, convolved);
+    },
   },
 ];
 

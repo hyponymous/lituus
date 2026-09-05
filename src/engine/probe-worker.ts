@@ -30,7 +30,7 @@ import {
 } from './canary-expected.ts';
 import { forgetNetwork, isNetworkCached, loadNetworkBytes } from './net-cache.ts';
 import { NETWORK } from './network.ts';
-import { checkWeights, type WeightsCheck } from './weights-check.ts';
+import { checkWeights, weightsFingerprint, type WeightsCheck } from './weights-check.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8, type Evaluation } from './model-v8.ts';
@@ -43,7 +43,15 @@ export interface ProbeRequest {
 
 /** One finding at a time, so a hang is attributable to a step. */
 export interface ProbeReport {
-  readonly stage: 'backend' | 'readback' | 'ops' | 'network' | 'forward' | 'compare' | 'failed';
+  readonly stage:
+    | 'backend'
+    | 'readback'
+    | 'ops'
+    | 'network'
+    | 'parsed'
+    | 'forward'
+    | 'compare'
+    | 'failed';
   readonly ok: boolean;
   readonly detail: string;
 }
@@ -158,6 +166,21 @@ async function probe(request: ProbeRequest): Promise<void> {
     stage: 'network',
     ok: weights.matches,
     detail: `${parsed.modelName}, v${parsed.modelVersion}\n${detail}`,
+  });
+
+  /*
+   * The weights as the parser leaves them. The file hashing correctly does not
+   * mean the arrays handed to the GPU match: between the two sits a parse that
+   * reads binary floats and merges each batch norm, in JavaScript, on this
+   * device. Compare this line between two machines before blaming the GPU.
+   */
+  const fingerprint = weightsFingerprint(parsed);
+  post({
+    stage: 'parsed',
+    ok: true,
+    detail:
+      `${fingerprint.floats.toLocaleString('en-US')} floats\n` +
+      `fingerprint ${fingerprint.hex}`,
   });
 
   const canary = new Canary(model, size);

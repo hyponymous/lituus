@@ -17,7 +17,7 @@
  * ordinary visit pays nothing for it.
  */
 
-import { describeDevice } from './device.ts';
+import { describeDevice, describeLimits } from './device.ts';
 import { NETWORK, networkUrl } from './engine/network.ts';
 import type { ProbeReport, ProbeRequest } from './engine/probe-worker.ts';
 import { EXPECTED_ON } from './engine/canary-expected.ts';
@@ -29,6 +29,7 @@ const STAGES: ReadonlyArray<{ readonly stage: ProbeReport['stage']; readonly tit
   { stage: 'readback', title: 'Known numbers through the GPU' },
   { stage: 'ops', title: 'Every operation, GPU against CPU' },
   { stage: 'network', title: `Load ${NETWORK.label}, and hash it` },
+  { stage: 'parsed', title: 'The weights as parsed, not as downloaded' },
   { stage: 'forward', title: 'One forward pass, fixed input' },
   { stage: 'compare', title: 'Against a device known to be right' },
 ];
@@ -55,6 +56,7 @@ export async function renderProbe(root: HTMLElement): Promise<void> {
   context.detail(`device: ${await describeDevice()}`);
   context.detail(`secure context: ${window.isSecureContext}`);
   context.detail(`reference: ${EXPECTED_ON}`);
+  context.detail(await describeLimits());
 
   const steps = new Map<ProbeReport['stage'], Step>(
     STAGES.map(({ stage, title }) => [stage, add(title)]),
