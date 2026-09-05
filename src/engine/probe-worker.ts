@@ -32,6 +32,7 @@ import { loadNetworkBytes } from './net-cache.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8, type Evaluation } from './model-v8.ts';
+import { checkOps, type OpResult } from './op-check.ts';
 import { checkReadback, type ReadbackCheck } from './readback-check.ts';
 
 export interface ProbeRequest {
@@ -40,7 +41,7 @@ export interface ProbeRequest {
 
 /** One finding at a time, so a hang is attributable to a step. */
 export interface ProbeReport {
-  readonly stage: 'backend' | 'readback' | 'network' | 'forward' | 'compare' | 'failed';
+  readonly stage: 'backend' | 'readback' | 'ops' | 'network' | 'forward' | 'compare' | 'failed';
   readonly ok: boolean;
   readonly detail: string;
 }
@@ -88,6 +89,28 @@ async function probe(request: ProbeRequest): Promise<void> {
         ? 'both ways agree with what was uploaded'
         : `worst at index ${readback.syncWorstAt}: expected ${readback.expected.toPrecision(9)}, ` +
           `dataSync ${readback.gotSync.toPrecision(9)}, data() ${readback.gotAsync.toPrecision(9)}`),
+  });
+
+  /*
+   * Still before the network: every case here is a small tensor, and an
+   * operation that disagrees with this device's own CPU is the answer on its
+   * own. The CPU backend is imported for this and nothing else.
+   */
+  await import('@tensorflow/tfjs-backend-cpu');
+  const ops: OpResult[] = await checkOps(tf);
+  const broken: OpResult[] = ops.filter((op: OpResult) => op.worst > 1e-3);
+  post({
+    stage: 'ops',
+    ok: broken.length === 0,
+    detail:
+      `${ops.length} operations, this GPU against this CPU\n` +
+      ops
+        .map(
+          (op: OpResult) =>
+            `${op.worst > 1e-3 ? 'DIFFERS' : '   ok  '} ${op.worst.toExponential(2)}  ` +
+            `${op.name}${op.worst > 1e-3 ? ` (gpu ${op.gpu.toPrecision(6)}, cpu ${op.cpu.toPrecision(6)})` : ''}`,
+        )
+        .join('\n'),
   });
 
   const bytes: Uint8Array = await loadNetworkBytes(request.networkUrl);

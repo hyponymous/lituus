@@ -27,6 +27,7 @@ import { makeReport, type Status, type Step } from './report.ts';
 const STAGES: ReadonlyArray<{ readonly stage: ProbeReport['stage']; readonly title: string }> = [
   { stage: 'backend', title: 'WebGPU in a worker' },
   { stage: 'readback', title: 'Known numbers through the GPU' },
+  { stage: 'ops', title: 'Every operation, GPU against CPU' },
   { stage: 'network', title: `Load ${NETWORK.label}` },
   { stage: 'forward', title: 'One forward pass, fixed input' },
   { stage: 'compare', title: 'Against a device known to be right' },
