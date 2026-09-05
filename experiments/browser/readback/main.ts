@@ -41,6 +41,7 @@ import {
   type GameContext,
 } from '../../../src/engine/evaluate.ts';
 import { buildFeatures, createFeatureScratch, type FeatureScratch, type Inputs } from '../../../src/engine/features-v7.ts';
+import { Canary } from '../../../src/engine/canary.ts';
 import { parseKataGoModelV8 } from '../../../src/engine/load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from '../../../src/engine/model-types.ts';
 import { ModelV8, type Evaluation } from '../../../src/engine/model-v8.ts';
@@ -88,6 +89,12 @@ export interface ReadbackResult {
     readonly floats: number;
     readonly timing: Timing;
   }>;
+  /**
+   * How far the canary's fixed evaluation moved across the run, and what one
+   * check costs. Zero is the expected drift on a healthy device.
+   */
+  readonly canaryDrift: number;
+  readonly canaryMs: number;
   /** One `evaluatePrompt` at `visits`, or null when it was skipped. */
   readonly promptMs: number | null;
   readonly promptVisits: number;
@@ -239,6 +246,10 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
   const warmupMs: number = performance.now() - startedWarmup;
   log(`first pass ${warmupMs.toFixed(0)}ms`);
 
+  // Built here rather than at the end, so its baseline is taken from a device
+  // that has only just started — which is where the worker takes it too.
+  const canary = new Canary(model, board.cols);
+
   const evalSamples: number[] = [];
   for (let i = 0; i < request.evals; i++) {
     const started: number = performance.now();
@@ -279,8 +290,22 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
     log(`prompt at ${request.visits} visits: ${(promptMs / 1000).toFixed(2)}s`);
   }
 
+  /*
+   * Last, deliberately: by here the device has done a few hundred forward
+   * passes and a full search, which is the closest this harness gets to the
+   * conditions a canary exists to detect. On a healthy device the drift is
+   * exactly zero — the same input through the same graph is a deterministic
+   * computation — so anything else printed here is a finding.
+   */
+  const startedCanary: number = performance.now();
+  const canaryDrift: number = canary.drift();
+  const canaryMs: number = performance.now() - startedCanary;
+  log(`canary drift ${canaryDrift.toExponential(2)} in ${canaryMs.toFixed(1)}ms`);
+
   model.dispose();
   return {
+    canaryDrift,
+    canaryMs,
     adapter,
     backend: tf.getBackend() ?? null,
     model: parsed.modelName,
@@ -305,6 +330,8 @@ window.__lituusReadback = async (request: ReadbackRequest): Promise<ReadbackResu
       model: '',
       loadMs: 0,
       warmupMs: 0,
+      canaryDrift: 0,
+      canaryMs: 0,
       evaluate: { count: 0, meanMs: 0, medianMs: 0, minMs: 0, maxMs: 0 },
       reads: [],
       promptMs: null,

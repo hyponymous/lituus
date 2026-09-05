@@ -39,7 +39,12 @@ import {
 } from '../src/analysis.ts';
 import type { Position } from '../src/rules.ts';
 
-const CONFIG: EngineConfig = { network: 'b15c192', visits: 50, backend: 'replay' };
+const CONFIG: EngineConfig = {
+  network: 'b15c192',
+  visits: 50,
+  backend: 'replay',
+  device: null,
+};
 
 /** Eight Black moves, so there are enough prompts for a run to form. */
 const GAME =
@@ -359,6 +364,7 @@ test('the JSON export carries the verdicts, not only the figures from them', () 
     network: 'b15c192',
     visits: 50,
     backend: 'replay',
+    device: null,
     failures: 0,
     incidents: [],
   });

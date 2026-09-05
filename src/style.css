@@ -277,6 +277,15 @@ button.primary {
   font-size: 0.9rem;
 }
 
+/* Marked, not shouted. The toggle still works and the download is still worth
+   paying for on a phone; this is the sentence that stops a session's gaps from
+   being a surprise. */
+.ai-option p.caveat {
+  border-left: 2px solid var(--cost-worse);
+  padding-left: 0.5rem;
+  color: var(--fg);
+}
+
 /* ── Session ─────────────────────────────────────────────────────────────── */
 
 .board {

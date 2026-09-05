@@ -712,6 +712,7 @@ export function toJSON(summary: Summary): string {
               network: summary.ai.config.network,
               visits: summary.ai.config.visits,
               backend: summary.ai.config.backend,
+              device: summary.ai.config.device,
               // What the engine failed to answer, so a run that lost its GPU
               // reads as a broken run rather than an unfinished one. `failures`
               // can exceed the list, which is capped (`INCIDENT_LIMIT`).

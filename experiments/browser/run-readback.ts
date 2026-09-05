@@ -179,6 +179,14 @@ async function main(): Promise<void> {
         `${((100 * fixed) / perPass).toFixed(1)}% of a forward pass`,
     );
   }
+  console.log(
+    `\ncanary drift ${result.canaryDrift.toExponential(2)} ` +
+      `after the run, one check ${result.canaryMs.toFixed(1)}ms`,
+  );
+  if (result.canaryDrift > 0) {
+    console.log('WARNING: a healthy device drifts by exactly zero — this one did not');
+  }
+
   if (result.promptMs !== null) {
     console.log(
       `\none prompt at ${result.promptVisits} visits: ${(result.promptMs / 1000).toFixed(2)}s ` +

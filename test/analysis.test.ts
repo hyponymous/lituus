@@ -11,6 +11,7 @@ import {
   MIN_TRUSTED_VISITS,
   describeEngine,
   emptyAnalysis,
+  withDevice,
   withIncident,
   INCIDENT_LIMIT,
   isTrusted,
@@ -24,7 +25,12 @@ import {
   type Verdict,
 } from '../src/analysis.ts';
 
-const CONFIG: EngineConfig = { network: 'b15c192', visits: 50, backend: 'replay' };
+const CONFIG: EngineConfig = {
+  network: 'b15c192',
+  visits: 50,
+  backend: 'replay',
+  device: null,
+};
 
 function move(point: number, loss: number, visits: number = 50): MoveVerdict {
   return { point, loss, visits, forced: false, pv: [] };
@@ -72,6 +78,31 @@ test('a second verdict for the same move replaces the first', () => {
 
   assert.equal(verdictCount(second), 1);
   assert.equal(verdictFor(second, 5)?.played?.loss, 4.0);
+});
+
+// ── The device ───────────────────────────────────────────────────────────────
+
+test('the device is recorded on the configuration the verdicts carry', () => {
+  const analysis: Analysis = withVerdict(withDevice(emptyAnalysis(CONFIG), 'apple / metal-3, mobile'), verdict(1));
+
+  assert.equal(analysis.config.device, 'apple / metal-3, mobile');
+  assert.equal(analysis.config.network, CONFIG.network);
+  assert.equal(verdictCount(analysis), 1);
+});
+
+test('a described engine names the device when there is one', () => {
+  assert.equal(describeEngine(CONFIG), 'b15c192 @ 50 visits (replay)');
+  assert.equal(
+    describeEngine({ ...CONFIG, device: 'apple / metal-3, mobile' }),
+    'b15c192 @ 50 visits (replay, apple / metal-3, mobile)',
+  );
+});
+
+test('the device does not decide whether two results may be compared', () => {
+  // It names the split this test exists for, and is still the wrong thing to
+  // test on: two laptops report different adapters and agree perfectly, and
+  // every result exported before the field existed reports null.
+  assert.equal(sameEngine(CONFIG, { ...CONFIG, device: 'apple / metal-3, mobile' }), true);
 });
 
 // ── Failures ─────────────────────────────────────────────────────────────────

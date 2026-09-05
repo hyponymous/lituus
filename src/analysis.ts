@@ -34,6 +34,16 @@ export interface EngineConfig {
   readonly visits: number;
   /** How it ran — `webgpu`, or `replay` for recorded verdicts. */
   readonly backend: string;
+  /**
+   * The machine that ran it — `apple / metal-3, mobile` — or null when nothing
+   * has said yet, which is every config until the worker reports ready.
+   *
+   * A point loss is comparable only against the same engine, and the engine
+   * turned out to include the device: the same build on the same network
+   * produced sound numbers on a laptop and nonsense on a phone. Without this
+   * the two results are indistinguishable in the file.
+   */
+  readonly device: string | null;
 }
 
 /**
@@ -215,6 +225,17 @@ export function emptyAnalysis(config: EngineConfig): Analysis {
   return { config, verdicts: new Map(), incidents: [], failures: 0 };
 }
 
+/**
+ * A new analysis that knows what it is running on.
+ *
+ * Separate from `emptyAnalysis` because the answer arrives later: the store is
+ * created when a session starts and the device is not described until the
+ * worker has a backend, several seconds of download later.
+ */
+export function withDevice(analysis: Analysis, device: string): Analysis {
+  return { ...analysis, config: { ...analysis.config, device } };
+}
+
 /** A new analysis that also remembers this failure. */
 export function withIncident(analysis: Analysis, incident: EngineIncident): Analysis {
   return {
@@ -288,6 +309,13 @@ export function isTrusted(verdict: MoveVerdict): boolean {
  *
  * The desktop/mobile split is the case this exists for: the same user studying
  * the same game, on two devices, gets numbers that must not be put side by side.
+ *
+ * `device` is deliberately not part of the test, though it names that split
+ * exactly. It is a description, not a configuration: two laptops report
+ * different adapters and agree perfectly, and every result exported before the
+ * field existed reports null, which would refuse every comparison ever made.
+ * What decides comparability is the network and the visit count; the device is
+ * recorded so a *reader* can ask the question this function cannot.
  */
 export function sameEngine(a: EngineConfig, b: EngineConfig): boolean {
   return a.network === b.network && a.visits === b.visits;
@@ -295,7 +323,10 @@ export function sameEngine(a: EngineConfig, b: EngineConfig): boolean {
 
 /** A configuration as one short string, for an export or a footnote. */
 export function describeEngine(config: EngineConfig): string {
-  return `${config.network} @ ${config.visits} visits (${config.backend})`;
+  const how: string = config.device === null
+    ? config.backend
+    : `${config.backend}, ${config.device}`;
+  return `${config.network} @ ${config.visits} visits (${how})`;
 }
 
 // ── Derived statistics ───────────────────────────────────────────────────────

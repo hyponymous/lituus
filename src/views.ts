@@ -163,6 +163,12 @@ export interface SetupProps {
   readonly onToggleAi: (on: boolean) => void;
   /** Why this record cannot be scored, if it cannot. Disables the toggle. */
   readonly aiUnavailable: string | null;
+  /**
+   * Why scoring may not finish here, if there is a reason. Unlike
+   * `aiUnavailable` this leaves the toggle alone: it is a warning about what
+   * the user is buying, not a refusal to sell it.
+   */
+  readonly aiUnreliable: string | null;
   /** Roughly how large the one-time download is, in bytes. */
   readonly aiDownloadBytes: number;
 }
@@ -212,9 +218,22 @@ function aiOption(props: SetupProps): HTMLElement {
     `Adds a point-loss estimate to the review. One-time ${megabytes} MB download, ` +
       'cached afterwards; the session starts straight away and scoring catches up.';
 
+  /*
+   * The warning is its own paragraph rather than a clause on the end of the
+   * note above. The note is a price; this is a risk, and a reader skimming for
+   * one should not have to read past the other to find it. Only shown when the
+   * toggle can actually be used — a caveat about a control that is disabled for
+   * another reason entirely is noise.
+   */
+  const caveat: Child[] =
+    props.aiUnavailable === null && props.aiUnreliable !== null
+      ? [el('p', { class: 'muted caveat' }, [props.aiUnreliable])]
+      : [];
+
   return el('div', { class: 'ai-option' }, [
     el('label', { for: 'ai-toggle' }, [box, el('span', {}, ['Score my guesses against KataGo'])]),
     el('p', { class: 'muted' }, [note]),
+    ...caveat,
   ]);
 }
 

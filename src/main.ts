@@ -21,6 +21,7 @@ import {
   emptyAnalysis,
   verdictCount,
   verdictFor,
+  withDevice,
   withIncident,
   withVerdict,
   type Analysis,
@@ -31,6 +32,7 @@ import {
   DOWNLOAD_BYTES,
   engineConfig,
   startEngine,
+  unreliableReason,
   unscorableReason,
   type EngineHandle,
   type EngineStatus,
@@ -173,6 +175,10 @@ function startEngineFor(game: Game): void {
   }
 
   const handle: EngineHandle = engine ?? startEngine(game, {
+    // What it turned out to be running on, kept with the verdicts it produces.
+    onDevice: (device: string): void => {
+      if (analysis !== null) analysis = withDevice(analysis, device);
+    },
     onStatus: (status: EngineStatus): void => {
       // The one place a failure with no prompt in flight becomes a record: a
       // download that never finished, or a device lost between moves.
@@ -564,6 +570,7 @@ function draw(): void {
           draw();
         },
         aiUnavailable: unscorableReason(game),
+        aiUnreliable: unreliableReason(),
         aiDownloadBytes: DOWNLOAD_BYTES,
       });
       return;

@@ -289,4 +289,7 @@ export const RECORDED_CONFIG: EngineConfig = {
   network: 'b15c192',
   visits: 50,
   backend: 'replay',
+  // Native KataGo on a machine this build never saw, which is exactly what
+  // "no device recorded" means.
+  device: null,
 };

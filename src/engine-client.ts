@@ -18,6 +18,7 @@
 import type { EngineConfig, Verdict } from './analysis.ts';
 import { EvaluationError, type Evaluator, type Prompt } from './evaluator.ts';
 import type { Game } from './game.ts';
+import { isMobile } from './device.ts';
 import { serialize } from './sgf-writer.ts';
 import { NETWORK, networkUrl } from './engine/network.ts';
 import { NETWORK_BYTES } from './engine/net-cache.ts';
@@ -67,6 +68,12 @@ export interface EngineHandle {
 export interface EngineOptions {
   /** Called whenever the status changes, so the view can redraw. */
   readonly onStatus?: (status: EngineStatus) => void;
+  /**
+   * Called once, with what the engine turned out to be running on. Separate
+   * from `onStatus` because it is not a state: it is a fact about the run that
+   * the store keeps, and it arrives when the backend does.
+   */
+  readonly onDevice?: (device: string) => void;
 }
 
 /**
@@ -86,7 +93,25 @@ export function unscorableReason(game: Game): string | null {
 
 /** The engine that produced a set of verdicts, for the record a score carries. */
 export function engineConfig(): EngineConfig {
-  return { network: NETWORK.label, visits: VISITS, backend: 'webgpu' };
+  // Null until the worker has a backend to ask; `onReady` carries the answer.
+  return { network: NETWORK.label, visits: VISITS, backend: 'webgpu', device: null };
+}
+
+/**
+ * Why scoring may not finish here, or null where nothing is known against it.
+ *
+ * Not a refusal, unlike `unscorableReason` — the toggle stays on and the
+ * download stays offered. A phone can score a session and often does; it can
+ * also run its GPU out partway through, and the engine's own checks then stop
+ * it rather than let it answer. Said before the download starts, because the
+ * download is the part that cannot be taken back.
+ */
+export function unreliableReason(): string | null {
+  if (!isMobile()) return null;
+  return (
+    'On a phone the GPU often gives out partway through a long game. ' +
+    'Scoring stops when that happens, and the review covers the moves it reached.'
+  );
 }
 
 /** Roughly how much there is to download, for copy written before it starts. */
@@ -135,6 +160,7 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
         setStatus({ state: 'warming' });
         return;
       case 'ready':
+        options.onDevice?.(reply.device);
         setStatus({ state: 'ready' });
         return;
       case 'failed':

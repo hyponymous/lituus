@@ -23,7 +23,9 @@ import type * as TF from '@tensorflow/tfjs-core';
 import type { Verdict } from '../analysis.ts';
 import type { Prompt } from '../evaluator.ts';
 import { readGame, type Game, type GameMove } from '../game.ts';
+import { describeDevice } from '../device.ts';
 import { parse } from '../sgf-parser.ts';
+import { Canary } from './canary.ts';
 import { evaluatePrompt, gameContext, type GameContext } from './evaluate.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
@@ -51,7 +53,13 @@ export type WorkerRequest =
 export type WorkerReply =
   | { readonly type: 'progress'; readonly received: number; readonly total: number | null }
   | { readonly type: 'warming' }
-  | { readonly type: 'ready'; readonly network: string; readonly backend: string }
+  | {
+      readonly type: 'ready';
+      readonly network: string;
+      readonly backend: string;
+      /** The GPU and platform, for the record a score carries. */
+      readonly device: string;
+    }
   | { readonly type: 'failed'; readonly reason: string }
   | { readonly type: 'verdict'; readonly verdict: Verdict }
   | { readonly type: 'error'; readonly moveNumber: number; readonly reason: string };
@@ -77,7 +85,23 @@ interface Engine {
   readonly search: Search;
   readonly context: GameContext;
   readonly visits: number;
+  readonly canary: Canary;
 }
+
+/**
+ * Prompts between canary checks.
+ *
+ * A forward pass against a session's own work is nothing — one pass out of the
+ * fifty a single search makes, so under a fiftieth of a check's worth of GPU
+ * every eight prompts. Eight rather than one because the failure this catches
+ * is a device going bad and staying bad, not a single unlucky pass, and eight
+ * prompts is well under a minute of play: the point is to stop before a
+ * summary is built on nonsense, not to find the exact move it started.
+ */
+const CANARY_EVERY = 8;
+
+/** Prompts answered since the last canary check. */
+let sinceCanary = 0;
 
 let engine: Engine | null = null;
 /** Set once init fails, so every later request answers instead of hanging. */
@@ -148,9 +172,21 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
 
   const parsed: ParsedKataGoModelV8 = parseKataGoModelV8(bytes);
   const model = new ModelV8(tf, parsed);
-  engine = { search: new Search(model, context.board), context, visits: request.visits };
+  // Constructed before the engine is published, because taking the baseline is
+  // also the first forward pass: if the device cannot do one at all, this is
+  // where that is found, and the session never sees a ready engine.
+  const canary = new Canary(model, context.board.cols);
+  sinceCanary = 0;
+  engine = { search: new Search(model, context.board), context, visits: request.visits, canary };
 
-  post({ type: 'ready', network: parsed.modelName, backend: tf.getBackend() });
+  post({
+    type: 'ready',
+    network: parsed.modelName,
+    backend: tf.getBackend(),
+    // Asked for after the backend is up, so the adapter reported is the one
+    // that was actually chosen rather than one this call went and requested.
+    device: await describeDevice(),
+  });
 }
 
 function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
@@ -173,6 +209,16 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
     });
     return;
   }
+  // Before the search, not after: a drifted device has already produced this
+  // prompt's answer wrongly, and answering it anyway is how the last one got
+  // exported. The throw is caught by the message loop and reported as an error,
+  // which `ERRORS_BEFORE_FAILED` turns into a stopped engine.
+  if (sinceCanary >= CANARY_EVERY) {
+    sinceCanary = 0;
+    engine.canary.verify();
+  }
+  sinceCanary++;
+
   const prompt: Prompt = {
     moveNumber: request.moveNumber,
     position: move.before,

@@ -15,7 +15,7 @@ import { createQueue, EvaluationError, type Evaluator, type Prompt, type Queue }
 import { createPosition, BLACK, type Position } from '../src/rules.ts';
 import type { EngineConfig, Verdict } from '../src/analysis.ts';
 
-const CONFIG: EngineConfig = { network: 'test', visits: 50, backend: 'test' };
+const CONFIG: EngineConfig = { network: 'test', visits: 50, backend: 'test', device: null };
 const BOARD: Position = createPosition(19, 19);
 
 function prompt(moveNumber: number): Prompt {

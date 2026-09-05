@@ -102,6 +102,7 @@
     "network": "b15c192",
     "visits": 50,
     "backend": "katago",
+    "device": null,
     "failures": 0,
     "incidents": []
   },

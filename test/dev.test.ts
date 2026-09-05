@@ -24,6 +24,7 @@ import { summarize, toJSON, type Summary } from '../src/summary.ts';
 import {
   INCIDENT_LIMIT,
   emptyAnalysis,
+  withDevice,
   withIncident,
   type Analysis,
 } from '../src/analysis.ts';
@@ -218,7 +219,7 @@ test('a result from before timing restores with no times rather than zeros', () 
 
 // ── Engine failures ──────────────────────────────────────────────────────────
 
-const ENGINE = { network: 'b15c192', visits: 50, backend: 'webgpu' };
+const ENGINE = { network: 'b15c192', visits: 50, backend: 'webgpu', device: null };
 
 /** A session whose engine died partway, with more failures than the list keeps. */
 function broken(): Summary {
@@ -264,6 +265,23 @@ test('a result from before the incidents field restores as a run that never fail
   assert.ok(restored);
   assert.equal(restored.failures, 0);
   assert.deepEqual(restored.incidents, []);
+});
+
+test('the device that produced a result survives the round trip', () => {
+  const played: Session = play(GAME, BLACK, new Set([1]));
+  const analysis: Analysis = withDevice(emptyAnalysis(ENGINE), 'apple / metal-3, mobile');
+  const text: string = toJSON(summarize(played, analysis));
+
+  const restored: Analysis | null = restoreAnalysis(text, readGame(parse(GAME)));
+  assert.equal(restored?.config.device, 'apple / metal-3, mobile');
+});
+
+test('a result from before the device field restores as one that did not say', () => {
+  const older = JSON.parse(toJSON(broken())) as { engine: Record<string, unknown> };
+  delete older.engine.device;
+
+  const restored: Analysis | null = restoreAnalysis(JSON.stringify(older), readGame(parse(GAME)));
+  assert.equal(restored?.config.device, null);
 });
 
 // ── Drift ────────────────────────────────────────────────────────────────────

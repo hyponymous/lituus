@@ -55,12 +55,12 @@ test('comparability follows the network and the visits, not the backend', () => 
   // verdicts recorded from native KataGo stay comparable with ones the browser
   // produces — which is what makes the replay evaluator a fixture for this
   // feature rather than a separate thing that merely resembles it.
-  const replayed: EngineConfig = { network: NETWORK.label, visits: VISITS, backend: 'replay' };
+  const replayed: EngineConfig = { network: NETWORK.label, visits: VISITS, backend: 'replay', device: null };
   assert.equal(sameEngine(engineConfig(), replayed), true);
 
   // A different visit count is a different engine, and that is the split this
   // guards: the same user on a desktop and a phone must not compare numbers.
-  const mobile: EngineConfig = { network: 'b6c96', visits: VISITS, backend: 'webgpu' };
+  const mobile: EngineConfig = { network: 'b6c96', visits: VISITS, backend: 'webgpu', device: null };
   assert.equal(sameEngine(engineConfig(), mobile), false);
   assert.equal(sameEngine(engineConfig(), { ...engineConfig(), visits: 25 }), false);
 });

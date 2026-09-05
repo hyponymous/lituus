@@ -559,6 +559,16 @@ network name, visit count, and backend, and they travel into the JSON export
 and the SGF root comment. Any view that puts two results side by side refuses
 to compare point-loss figures produced by different configurations.
 
+It also records the *machine*, as `apple / metal-3, mobile` — the adapter's own
+description of itself plus whether this is a phone. The engine turned out to
+include the device: the same build on the same network produced sound numbers
+on a laptop and nonsense on a phone, and nothing in the file distinguished the
+two. It is deliberately not part of `sameEngine`, which decides comparability.
+A device string is a description rather than a configuration — two laptops
+report different adapters and agree perfectly, and every result exported before
+the field existed reports null, which would refuse every comparison ever made.
+It is recorded so a reader can ask the question the function cannot.
+
 The same value also records what the engine *failed* to do. `Analysis` carries
 an `incidents` list and a `failures` count, written when a prompt is refused or
 when the engine is declared dead, and both travel into the export beside the

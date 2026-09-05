@@ -215,6 +215,11 @@ export function restoreAnalysis(text: string, game: Game): Analysis | null {
     network: asString(config.network, '"engine".network'),
     visits: asNumber(config.visits, '"engine".visits'),
     backend: asString(config.backend, '"engine".backend'),
+    // Absent in anything exported before the field existed, and null is what
+    // that means: nobody recorded it, not that there was no device.
+    device: config.device === undefined || config.device === null
+      ? null
+      : asString(config.device, '"engine".device'),
   });
 
   /*
