@@ -90,6 +90,20 @@ test('the device is recorded on the configuration the verdicts carry', () => {
   assert.equal(verdictCount(analysis), 1);
 });
 
+test('a second device is added to the record, not swapped in', () => {
+  // A result exported from a phone and re-scored on a laptop has two machines
+  // behind it. Naming only the later one would attribute the phone's verdicts
+  // to the laptop, which is the confusion the field exists to end.
+  const phone: Analysis = withDevice(emptyAnalysis(CONFIG), 'apple / apple, mobile');
+  const both: Analysis = withDevice(phone, 'apple / metal-3, desktop');
+
+  assert.equal(both.config.device, 'apple / apple, mobile; apple / metal-3, desktop');
+  // And the same device again is not named twice, however many times an engine
+  // is restarted on it.
+  assert.equal(withDevice(both, 'apple / apple, mobile').config.device, both.config.device);
+  assert.equal(withDevice(phone, 'apple / apple, mobile'), phone);
+});
+
 test('a described engine names the device when there is one', () => {
   assert.equal(describeEngine(CONFIG), 'b15c192 @ 50 visits (replay)');
   assert.equal(

@@ -36,6 +36,7 @@ import {
   withIncident,
   sameEngine,
   verdictFor,
+  withDevice,
   withVerdict,
   type Analysis,
   type MoveVerdict,
@@ -506,6 +507,11 @@ function beginScoring(
   };
 
   const engine: EngineHandle = startEngine(session.game, {
+    // The harness re-scores results from other machines, so this is the one
+    // place a restored analysis can grow a second device — and must say so.
+    onDevice: (device: string): void => {
+      analysis = withDevice(analysis, device);
+    },
     onStatus: (next: EngineStatus): void => {
       status = next;
       handlers.onStatus(line());

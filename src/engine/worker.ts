@@ -25,7 +25,8 @@ import type { Prompt } from '../evaluator.ts';
 import { readGame, type Game, type GameMove } from '../game.ts';
 import { describeDevice } from '../device.ts';
 import { parse } from '../sgf-parser.ts';
-import { Canary } from './canary.ts';
+import { Canary, WRONG_DEVICE } from './canary.ts';
+import { EXPECTED_HEADS, EXPECTED_SIZE, EXPECTED_TOLERANCE } from './canary-expected.ts';
 import { evaluatePrompt, gameContext, type GameContext } from './evaluate.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
@@ -175,8 +176,30 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
   // Constructed before the engine is published, because taking the baseline is
   // also the first forward pass: if the device cannot do one at all, this is
   // where that is found, and the session never sees a ready engine.
-  const canary = new Canary(model, context.board.cols);
+  const canary = new Canary(model, EXPECTED_SIZE);
   sinceCanary = 0;
+
+  /*
+   * Correctness before consistency, and before a single prompt is answered.
+   *
+   * The canary's own check asks whether this device still agrees with itself,
+   * which a device that was wrong from the start passes perfectly — a phone did
+   * exactly that for two whole sessions. This compares it with a machine shown
+   * to agree with native KataGo, and refuses the whole engine rather than
+   * quoting numbers from a device that computes something else. The throw is
+   * caught by the message loop, which reports it as a failure: the session
+   * carries on and the summary reports exact match only, the same degradation a
+   * failed download produces.
+   *
+   * At `EXPECTED_SIZE` regardless of the record's board, because the baked
+   * answer is that size's answer. The extra pass is the largest board there is
+   * and costs one forward pass, once.
+   */
+  const off: number = canary.against(EXPECTED_HEADS);
+  if (off > EXPECTED_TOLERANCE) {
+    throw new Error(`${WRONG_DEVICE} (off by ${off.toExponential(2)})`);
+  }
+
   engine = { search: new Search(model, context.board), context, visits: request.visits, canary };
 
   post({

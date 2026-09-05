@@ -16,6 +16,7 @@
  * arrived intact and in the format we think; a forward pass belongs to step 4.
  */
 
+import { makeReport, type Step } from './report.ts';
 import { parseKataGoModelV8 } from './engine/load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './engine/model-types.ts';
 import { NETWORK, networkUrl } from './engine/network.ts';
@@ -28,66 +29,6 @@ const CACHE_NAME = 'lituus-nets-v1';
 
 /** Gzip's two magic bytes. See `readNetwork` for why they are the real test. */
 const GZIP_MAGIC = [0x1f, 0x8b] as const;
-
-type Status = 'run' | 'ok' | 'warn' | 'bad';
-
-/** One line of the report, updated in place as its step resolves. */
-interface Step {
-  readonly note: (text: string, status?: Status) => void;
-  readonly detail: (text: string) => void;
-}
-
-// ── Rendering ────────────────────────────────────────────────────────────────
-
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node: HTMLElementTagNameMap[K] = document.createElement(tag);
-  if (className !== undefined) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
-function makeReport(root: HTMLElement): (title: string) => Step {
-  root.replaceChildren();
-  const panel: HTMLElement = el('section', 'spike');
-  panel.append(el('h2', undefined, 'Engine deployment spike'));
-  panel.append(
-    el(
-      'p',
-      'spike-blurb',
-      'What the deployed site can actually do: fetch the network same-origin, ' +
-        'decompress it, read its header, cache it, and reach a GPU from a worker.',
-    ),
-  );
-
-  const list: HTMLElement = el('ol', 'spike-steps');
-  panel.append(list);
-  root.append(panel);
-
-  return (title: string): Step => {
-    const item: HTMLElement = el('li', 'spike-step');
-    const head: HTMLElement = el('div', 'spike-head');
-    const label: HTMLElement = el('span', 'spike-label', title);
-    const note: HTMLElement = el('span', 'spike-note spike-run', 'running…');
-    head.append(label, note);
-    const detail: HTMLElement = el('pre', 'spike-detail');
-    item.append(head, detail);
-    list.append(item);
-
-    return {
-      note: (text: string, status: Status = 'ok'): void => {
-        note.textContent = text;
-        note.className = `spike-note spike-${status}`;
-      },
-      detail: (text: string): void => {
-        detail.textContent = detail.textContent === '' ? text : `${detail.textContent}\n${text}`;
-      },
-    };
-  };
-}
 
 const bytes = (n: number): string => `${n.toLocaleString('en-US')} bytes`;
 
@@ -257,7 +198,12 @@ function runWorker(step: Step): Promise<void> {
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 export async function renderSpike(root: HTMLElement): Promise<void> {
-  const add: (title: string) => Step = makeReport(root);
+  const add: (title: string) => Step = makeReport(
+    root,
+    'Engine deployment spike',
+    'What the deployed site can actually do: fetch the network same-origin, ' +
+      'decompress it, read its header, cache it, and reach a GPU from a worker.',
+  );
   const url: string = networkUrl();
 
   const context: Step = add('Context');

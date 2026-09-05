@@ -109,8 +109,9 @@ export function engineConfig(): EngineConfig {
 export function unreliableReason(): string | null {
   if (!isMobile()) return null;
   return (
-    'On a phone the GPU often gives out partway through a long game. ' +
-    'Scoring stops when that happens, and the review covers the moves it reached.'
+    'On a phone the GPU sometimes computes the network incorrectly, or gives ' +
+    'out partway through a long game. Scoring stops when either happens, and ' +
+    'the review covers only the moves it reached.'
   );
 }
 

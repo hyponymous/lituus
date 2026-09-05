@@ -233,7 +233,20 @@ export function emptyAnalysis(config: EngineConfig): Analysis {
  * worker has a backend, several seconds of download later.
  */
 export function withDevice(analysis: Analysis, device: string): Analysis {
-  return { ...analysis, config: { ...analysis.config, device } };
+  const known: string | null = analysis.config.device;
+  if (known === device) return analysis;
+  /*
+   * Both machines, not the latest one.
+   *
+   * A store outlives one engine: a result exported from a phone and re-scored
+   * on a laptop is one set of verdicts with two devices behind it, and naming
+   * only the second would attribute the phone's numbers to the laptop —
+   * precisely the confusion this field was added to end. Segments are joined
+   * rather than replaced, and a device already named is not named twice.
+   */
+  const next: string =
+    known === null || known.split('; ').includes(device) ? (known ?? device) : `${known}; ${device}`;
+  return { ...analysis, config: { ...analysis.config, device: next } };
 }
 
 /** A new analysis that also remembers this failure. */

@@ -47,6 +47,17 @@ export const CANARY_DRIFTED =
   'The GPU stopped giving consistent results, so scoring cannot be trusted.';
 
 /**
+ * What a device that was wrong before the first prompt is told.
+ *
+ * Phrased as a fact about the device rather than an apology, because that is
+ * what it is, and because the alternative on offer is worse than no scoring: a
+ * review whose every point loss is wrong reads exactly like one that is right.
+ */
+export const WRONG_DEVICE =
+  'This device computes the engine differently from the machine it was ' +
+  'calibrated on, so its point losses would be wrong. Scoring is unavailable here.';
+
+/**
  * Fixed inputs, from a fixed generator.
  *
  * Deliberately not a real position. A canary tests the device, not the feature
@@ -55,7 +66,7 @@ export const CANARY_DRIFTED =
  * same bytes and that they exercise the whole network, which any non-degenerate
  * input does.
  */
-function fixedInputs(area: number): { spatial: Float32Array; global: Float32Array } {
+export function canaryInputs(area: number): { spatial: Float32Array; global: Float32Array } {
   const spatial = new Float32Array(area * SPATIAL_CHANNELS);
   const global = new Float32Array(GLOBAL_CHANNELS);
   // A 32-bit xorshift, written out rather than imported: it needs to be the
@@ -72,8 +83,15 @@ function fixedInputs(area: number): { spatial: Float32Array; global: Float32Arra
   return { spatial, global };
 }
 
-/** The heads a drift check compares, copied out of the evaluation's buffer. */
-function heads(evaluation: Evaluation): Float32Array {
+/**
+ * The heads a comparison is made over, copied out of the evaluation's buffer.
+ *
+ * Exported because two checks are made against them and both must be over
+ * exactly the same numbers in exactly the same order: the drift check below,
+ * and the load-time comparison against a device known to agree with native
+ * KataGo (`canary-expected.ts`).
+ */
+export function canaryHeads(evaluation: Evaluation): Float32Array {
   const out = new Float32Array(evaluation.value.length + evaluation.scoreValue.length + 2);
   out.set(evaluation.value, 0);
   out.set(evaluation.scoreValue, evaluation.value.length);
@@ -84,6 +102,16 @@ function heads(evaluation: Evaluation): Float32Array {
   for (const logit of evaluation.policy) total += logit;
   out[out.length - 1] = total;
   return out;
+}
+
+/** The largest relative gap between two head vectors. */
+function furthest(expected: ArrayLike<number>, got: ArrayLike<number>): number {
+  let worst = 0;
+  for (let i = 0; i < expected.length; i++) {
+    const off: number = Math.abs(got[i] - expected[i]) / (1 + Math.abs(expected[i]));
+    if (off > worst) worst = off;
+  }
+  return worst;
 }
 
 export class Canary {
@@ -101,24 +129,38 @@ export class Canary {
   constructor(model: CanaryModel, size: number) {
     this.model = model;
     this.size = size;
-    const inputs = fixedInputs(size * size);
+    const inputs = canaryInputs(size * size);
     this.spatial = inputs.spatial;
     this.global = inputs.global;
-    this.baseline = heads(model.evaluate(this.spatial, this.global, size));
+    this.baseline = canaryHeads(model.evaluate(this.spatial, this.global, size));
   }
 
   /** How far the fixed evaluation has moved, relative to its own magnitude. */
   drift(): number {
-    const now: Float32Array = heads(
+    const now: Float32Array = canaryHeads(
       this.model.evaluate(this.spatial, this.global, this.size),
     );
-    let worst = 0;
-    for (let i = 0; i < this.baseline.length; i++) {
-      const expected: number = this.baseline[i];
-      const off: number = Math.abs(now[i] - expected) / (1 + Math.abs(expected));
-      if (off > worst) worst = off;
-    }
-    return worst;
+    return furthest(this.baseline, now);
+  }
+
+  /**
+   * What this device answered at load, for a caller that wants to compare it
+   * with something other than itself.
+   */
+  get heads(): Float32Array {
+    return this.baseline;
+  }
+
+  /**
+   * How far this device's answer sits from one a known-good device gave.
+   *
+   * The drift check above asks whether a device still agrees with itself, which
+   * is a different and weaker question — a device that was wrong before the
+   * first prompt agrees with itself perfectly. Two phone sessions, three days
+   * and two games apart, produced bit-identical wrong numbers.
+   */
+  against(expected: readonly number[]): number {
+    return furthest(this.baseline, expected);
   }
 
   /** Throws when the device is no longer computing what it did at load. */

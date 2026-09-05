@@ -47,7 +47,7 @@ import {
   updateEngineLine,
 } from './views.ts';
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
-import { SPIKE_HASH } from './engine/spike-hash.ts';
+import { PROBE_HASH, SPIKE_HASH } from './engine/spike-hash.ts';
 import { decode, encode } from './share.ts';
 import { aiWanted as storedAiWanted, setAiWanted } from './settings.ts';
 import type { Color } from './rules.ts';
@@ -640,6 +640,14 @@ function main(): void {
     if (location.hash === SPIKE_HASH) void openSpike();
   });
 
+  // The device probe ships for the same reason and on the same terms. It is
+  // the one that has to be opened on a phone, since the phone is where the
+  // answers stopped matching the laptop's.
+  if (location.hash === PROBE_HASH) void openProbe();
+  window.addEventListener('hashchange', (): void => {
+    if (location.hash === PROBE_HASH) void openProbe();
+  });
+
   // A second link pasted into the same tab only changes the fragment, which
   // is a same-document navigation: nothing reloads and the old game would
   // stay on screen. Handing someone a set of links makes that the normal way
@@ -661,6 +669,13 @@ async function openSpike(): Promise<void> {
   const { renderSpike } = await import('./spike.ts');
   document.body.dataset.screen = 'spike';
   await renderSpike(root);
+}
+
+/** The same handover for the probe, which borrows the spike's screen styling. */
+async function openProbe(): Promise<void> {
+  const { renderProbe } = await import('./probe.ts');
+  document.body.dataset.screen = 'spike';
+  await renderProbe(root);
 }
 
 /**
@@ -687,7 +702,7 @@ async function openSpike(): Promise<void> {
  */
 async function loadFromHash(): Promise<void> {
   const fragment: string = location.hash.slice(1);
-  if (fragment === '' || location.hash === SPIKE_HASH) return;
+  if (fragment === '' || location.hash === SPIKE_HASH || location.hash === PROBE_HASH) return;
   if (import.meta.env.DEV && location.hash === DEV_HASH) return;
   const link: string = `${location.origin}${location.pathname}#${fragment}`;
   try {

@@ -8,7 +8,18 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Canary, CANARY_TOLERANCE, type CanaryModel } from '../src/engine/canary.ts';
+import {
+  Canary,
+  CANARY_TOLERANCE,
+  canaryHeads,
+  canaryInputs,
+  type CanaryModel,
+} from '../src/engine/canary.ts';
+import {
+  EXPECTED_HEADS,
+  EXPECTED_SIZE,
+  EXPECTED_TOLERANCE,
+} from '../src/engine/canary-expected.ts';
 import type { Evaluation } from '../src/engine/model-v8.ts';
 
 const SIZE = 9;
@@ -124,4 +135,75 @@ test('a corrupt policy is caught even when the value head is intact', () => {
 
   broken = true;
   assert.throws(() => canary.verify(), /stopped giving consistent results/);
+});
+
+// ── Against a device known to be right ───────────────────────────────────────
+
+/**
+ * An evaluation whose heads are exactly some head vector — the reference
+ * answer by default. The policy is flat and sums to the recorded total, which
+ * is all `canaryHeads` reads of it.
+ */
+function fromHeads(heads: readonly number[]): Evaluation {
+  const area: number = EXPECTED_SIZE * EXPECTED_SIZE;
+  const policy = new Float32Array(area);
+  policy.fill(heads[8] / area);
+  return {
+    policy,
+    policyPass: heads[7],
+    value: Float32Array.from(heads.slice(0, 3)),
+    scoreValue: Float32Array.from(heads.slice(3, 7)),
+  };
+}
+
+const expectedEvaluation = (): Evaluation => fromHeads(EXPECTED_HEADS);
+
+test('a device that lands on the baked answer is accepted', () => {
+  const model: CanaryModel = { evaluate: () => expectedEvaluation() };
+  const canary = new Canary(model, EXPECTED_SIZE);
+
+  assert.ok(canary.against(EXPECTED_HEADS) <= EXPECTED_TOLERANCE);
+});
+
+test('a device that agrees with itself and not with the reference is caught', () => {
+  // The case the drift check cannot see, and the one that actually happened:
+  // two phone sessions, three days apart, bit-identical to each other and tens
+  // of points from the laptop on the same build.
+  const model: CanaryModel = {
+    evaluate: () => {
+      const wrong = expectedEvaluation();
+      wrong.value[0] += 1;
+      return wrong;
+    },
+  };
+  const canary = new Canary(model, EXPECTED_SIZE);
+
+  assert.equal(canary.drift(), 0, 'consistent with itself');
+  assert.ok(canary.against(EXPECTED_HEADS) > EXPECTED_TOLERANCE, 'and still refused');
+});
+
+test('the baked answer covers every head, not just the first', () => {
+  // The heads are read out of one buffer at computed offsets, so a device — or
+  // a change to the packing — that damages only the tail must still be caught.
+  for (let head = 0; head < EXPECTED_HEADS.length; head++) {
+    const model: CanaryModel = {
+      evaluate: (): Evaluation => {
+        const wrong = expectedEvaluation();
+        const shifted: Float32Array = canaryHeads(wrong);
+        shifted[head] += 10 * (1 + Math.abs(shifted[head]));
+        return fromHeads(Array.from(shifted));
+      },
+    };
+    const canary = new Canary(model, EXPECTED_SIZE);
+    assert.ok(
+      canary.against(EXPECTED_HEADS) > EXPECTED_TOLERANCE,
+      `head ${head} was not compared`,
+    );
+  }
+});
+
+test('the fixed input is built for the board the answer was baked at', () => {
+  const inputs = canaryInputs(EXPECTED_SIZE * EXPECTED_SIZE);
+  assert.equal(inputs.spatial.length, EXPECTED_SIZE * EXPECTED_SIZE * 22);
+  assert.equal(inputs.global.length, 19);
 });

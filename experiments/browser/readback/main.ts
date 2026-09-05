@@ -95,6 +95,12 @@ export interface ReadbackResult {
    */
   readonly canaryDrift: number;
   readonly canaryMs: number;
+  /**
+   * The canary's own answer, full precision. This is where the baked
+   * expectation in `src/engine/canary-expected.ts` comes from: a machine that
+   * agrees with native KataGo, printed so it can be pasted.
+   */
+  readonly canaryHeads: readonly number[];
   /** One `evaluatePrompt` at `visits`, or null when it was skipped. */
   readonly promptMs: number | null;
   readonly promptVisits: number;
@@ -299,6 +305,7 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
    */
   const startedCanary: number = performance.now();
   const canaryDrift: number = canary.drift();
+  const canaryHeads: readonly number[] = Array.from(canary.heads);
   const canaryMs: number = performance.now() - startedCanary;
   log(`canary drift ${canaryDrift.toExponential(2)} in ${canaryMs.toFixed(1)}ms`);
 
@@ -306,6 +313,7 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
   return {
     canaryDrift,
     canaryMs,
+    canaryHeads,
     adapter,
     backend: tf.getBackend() ?? null,
     model: parsed.modelName,
@@ -332,6 +340,7 @@ window.__lituusReadback = async (request: ReadbackRequest): Promise<ReadbackResu
       warmupMs: 0,
       canaryDrift: 0,
       canaryMs: 0,
+      canaryHeads: [],
       evaluate: { count: 0, meanMs: 0, medianMs: 0, minMs: 0, maxMs: 0 },
       reads: [],
       promptMs: null,

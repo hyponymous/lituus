@@ -183,6 +183,9 @@ async function main(): Promise<void> {
     `\ncanary drift ${result.canaryDrift.toExponential(2)} ` +
       `after the run, one check ${result.canaryMs.toFixed(1)}ms`,
   );
+  console.log(
+    `canary heads: ${result.canaryHeads.map((head: number) => head.toPrecision(9)).join(', ')}`,
+  );
   if (result.canaryDrift > 0) {
     console.log('WARNING: a healthy device drifts by exactly zero — this one did not');
   }
