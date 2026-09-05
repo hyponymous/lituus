@@ -130,6 +130,29 @@ const CASES: readonly Case[] = [
   { name: `relu at ${TRUNK}`, shapes: [board(TRUNK)], run: (tf, [x]) => tf.relu(x) },
   { name: `tanh at ${TRUNK}`, shapes: [board(TRUNK)], run: (tf, [x]) => tf.tanh(x) },
   { name: 'softplus', shapes: [[1, 4]], run: (tf, [x]) => tf.softplus(x) },
+  /*
+   * The head packing, exactly as `evaluate` does it: four 1-D segments of
+   * 361, 1, 3 and 4, concatenated so the whole evaluation can be read back in
+   * one call. 361 is not a multiple of four, and an implementation that starts
+   * each segment on a vector boundary would put the tail three floats late —
+   * which is not an arithmetic error and would leave every stage of the network
+   * agreeing while the answer comes out wrong.
+   *
+   * The earlier battery tested `concat 64+64+64` on 2-D tensors: equal
+   * segments, all multiples of four, along axis 1. It could not have found
+   * this.
+   */
+  {
+    name: 'concat 1-D 361+1+3+4 (the head packing)',
+    shapes: [[361], [1], [3], [4]],
+    run: (tf, [policy, pass, value, score]) =>
+      tf.concat([
+        policy as TF.Tensor1D,
+        pass as TF.Tensor1D,
+        value as TF.Tensor1D,
+        score as TF.Tensor1D,
+      ]),
+  },
   {
     name: `concat ${GPOOL}+${GPOOL}+${GPOOL}`,
     shapes: [[1, GPOOL], [1, GPOOL], [1, GPOOL]],
@@ -209,4 +232,50 @@ export async function checkOps(tf: typeof TF): Promise<OpResult[]> {
     return { name: one.name, worst, gpu: gpu[at][where], cpu: cpu[at][where] };
   });
   return results.sort((a: OpResult, b: OpResult) => b.worst - a.worst);
+}
+
+/**
+ * Where the four head segments actually land.
+ *
+ * The battery above says whether the packing differs; this says *how*, which is
+ * what a fix has to be built on. Each segment is filled with a constant that
+ * names it — the policy 1, the pass 2, the value 3, the score 4 — so the
+ * boundaries can be read straight off the result. A healthy device gives
+ * 361 ones, then 2, then three 3s, then four 4s, in 369 floats.
+ */
+export interface PackingCheck {
+  readonly length: number;
+  readonly expectedLength: number;
+  /** The first index holding each segment's marker, or -1 if it is missing. */
+  readonly boundaries: readonly number[];
+  readonly expected: readonly number[];
+  readonly ok: boolean;
+}
+
+export async function checkHeadPacking(tf: typeof TF): Promise<PackingCheck> {
+  const sizes: readonly number[] = [361, 1, 3, 4];
+  const segments: TF.Tensor1D[] = sizes.map(
+    (size: number, which: number) => tf.fill([size], which + 1) as TF.Tensor1D,
+  );
+  const packed: TF.Tensor1D = tf.concat(segments);
+  const values = (await packed.data()) as Float32Array;
+  tf.dispose(segments);
+  packed.dispose();
+
+  const boundaries: number[] = sizes.map((_size: number, which: number) =>
+    values.indexOf(which + 1),
+  );
+  const expected: number[] = sizes.map((_size, which) =>
+    sizes.slice(0, which).reduce((a: number, b: number) => a + b, 0),
+  );
+  const expectedLength: number = sizes.reduce((a: number, b: number) => a + b, 0);
+  return {
+    length: values.length,
+    expectedLength,
+    boundaries,
+    expected,
+    ok:
+      values.length === expectedLength &&
+      boundaries.every((at: number, which: number) => at === expected[which]),
+  };
 }

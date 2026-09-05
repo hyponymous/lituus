@@ -34,7 +34,7 @@ import { checkWeights, weightsFingerprint, type WeightsCheck } from './weights-c
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8, type Evaluation, type TraceStage } from './model-v8.ts';
-import { checkOps, type OpResult } from './op-check.ts';
+import { checkHeadPacking, checkOps, type OpResult, type PackingCheck } from './op-check.ts';
 import { checkReadback, type ReadbackCheck } from './readback-check.ts';
 
 export interface ProbeRequest {
@@ -47,6 +47,7 @@ export interface ProbeReport {
     | 'backend'
     | 'readback'
     | 'ops'
+    | 'packing'
     | 'network'
     | 'parsed'
     | 'forward'
@@ -136,6 +137,26 @@ async function probe(request: ProbeRequest): Promise<void> {
    * decompression that damages the file on this device; a right one after a
    * wrong one is a poisoned cache, which every visit was re-reading.
    */
+  /*
+   * How the four heads are laid out when packed into one tensor, which is how
+   * `evaluate` reads them back. Every stage of the network can agree and the
+   * answer still come out wrong if the tail of this buffer sits three floats
+   * from where the offsets say it does.
+   */
+  const packing: PackingCheck = await checkHeadPacking(tf);
+  post({
+    stage: 'packing',
+    ok: packing.ok,
+    detail:
+      `${packing.length} floats, expected ${packing.expectedLength}\n` +
+      `policy, pass, value, score start at ${packing.boundaries.join(', ')}\n` +
+      `expected                            ${packing.expected.join(', ')}\n` +
+      (packing.ok
+        ? 'the heads are where the offsets say'
+        : 'THE HEADS ARE NOT WHERE THE OFFSETS SAY — every read after the ' +
+          'policy is reading the wrong floats'),
+  });
+
   const cached: boolean = await isNetworkCached(request.networkUrl);
   let bytes: Uint8Array = await loadNetworkBytes(request.networkUrl);
   let weights: WeightsCheck = await checkWeights(bytes);
