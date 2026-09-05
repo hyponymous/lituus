@@ -19,6 +19,7 @@
  */
 
 import type * as TF from '@tensorflow/tfjs-core';
+import { furthestApart, type Difference } from './difference.ts';
 
 /**
  * The network's own dimensions, not round numbers.
@@ -36,6 +37,16 @@ const GPOOL = 64;
 const HEAD = 32;
 const INPUT = 22;
 const SIZE = 19;
+
+/**
+ * How far two backends on one machine may differ before it is a finding.
+ *
+ * The floor here is float noise from a different order of accumulation: the
+ * worst any case reaches on a healthy device is 4.6e-7, on a 192-wide matMul.
+ * A thousandth is three orders above that and far below anything that would
+ * move a move.
+ */
+export const OP_TOLERANCE = 1e-3;
 
 export interface OpResult {
   readonly name: string;
@@ -220,16 +231,9 @@ export async function checkOps(tf: typeof TF): Promise<OpResult[]> {
   await tf.ready();
 
   const results: OpResult[] = CASES.map((one: Case, at: number): OpResult => {
-    let worst = 0;
-    let where = 0;
-    for (let i = 0; i < gpu[at].length; i++) {
-      const off: number = Math.abs(gpu[at][i] - cpu[at][i]) / (1 + Math.abs(cpu[at][i]));
-      if (off > worst) {
-        worst = off;
-        where = i;
-      }
-    }
-    return { name: one.name, worst, gpu: gpu[at][where], cpu: cpu[at][where] };
+    const found: Difference = furthestApart(cpu[at], gpu[at]);
+    const where: number = Math.max(found.at, 0);
+    return { name: one.name, worst: found.worst, gpu: gpu[at][where], cpu: cpu[at][where] };
   });
   return results.sort((a: OpResult, b: OpResult) => b.worst - a.worst);
 }

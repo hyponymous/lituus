@@ -488,15 +488,10 @@ export class ModelV8 {
       const flat = tf.reshape(policyOut, [area, policyOut.shape[3]]);
 
       /*
-       * The four heads as one tensor, because the readback is what costs.
-       *
-       * `dataSync` on the WebGPU backend is a canvas round trip per call (see
-       * `isDegenerate` above), and the per-call part of it is a fixed cost
-       * paid whatever the payload — measured at 2.4ms against 3.9ms for the
-       * 361-float policy, on an M-series Mac, by
-       * `experiments/browser/run-readback.ts`. Reading four times therefore
-       * cost three of those for nothing. Concatenating is one small kernel on
-       * a tensor already on the GPU; unpacking is a `subarray` on the way out.
+       * The four heads, in the order everything downstream indexes them:
+       * policy, pass, value, score. How they are read back — packed into one
+       * tensor or one at a time — is decided outside this graph, by what the
+       * device turned out to do with a concatenation.
        */
       return [
         tf.reshape(tf.slice(flat, [0, 0], [area, 1]), [area]) as TF.Tensor1D,
@@ -523,12 +518,15 @@ export class ModelV8 {
   /**
    * The four heads in one read, at the offsets this device puts them.
    *
-   * The reason for packing at all is that the readback is what costs.
-   * `dataSync` on the WebGPU backend is a canvas round trip per call (see
-   * `isDegenerate` above), and the per-call part is a fixed cost paid whatever
-   * the payload — 2.4ms against 3.9ms for the 361-float policy, on an M-series
-   * Mac, measured by `experiments/browser/run-readback.ts`. Reading four times
-   * paid three of those for nothing.
+   * Packing exists because the readback is what costs. `dataSync` on the WebGPU
+   * backend is a canvas round trip per call (see `isDegenerate` above), and the
+   * per-call part is a fixed cost paid whatever the payload — 2.1ms against
+   * 3.4ms for the 361-float policy, on an M-series Mac, measured by
+   * `experiments/browser/run-readback.ts`. Reading four times paid three of
+   * those for nothing.
+   *
+   * The offsets come from `head-layout.ts` rather than from the lengths,
+   * because on one device they were not the same thing.
    */
   private readPacked(segments: readonly TF.Tensor1D[], layout: HeadLayout): Evaluation {
     // `concat` wants a mutable array; the copy is four references.

@@ -18,6 +18,7 @@
  */
 
 import type * as TF from '@tensorflow/tfjs-core';
+import { furthestApart, type Difference } from './difference.ts';
 
 /**
  * Wide enough to stay on the GPU. The backend forwards an op to the CPU when
@@ -34,7 +35,7 @@ const SIZE = 4096;
  * round to, and a ramp fine enough that a rounding to eight bits per channel
  * shows up on almost every entry.
  */
-export function probeValues(count: number = SIZE): Float32Array {
+function probeValues(count: number = SIZE): Float32Array {
   const out = new Float32Array(count);
   const landmarks: readonly number[] = [
     0, 1, -1, 0.5, -0.5, 1e-8, -1e-8, 1e8, -1e8, 3.4028235e38, 1.1754944e-38, 0.1, -0.1,
@@ -61,23 +62,6 @@ export interface ReadbackCheck {
   readonly count: number;
 }
 
-function worstDiff(a: Float32Array, b: ArrayLike<number>): {
-  worst: number;
-  at: number;
-} {
-  let worst = 0;
-  let at = -1;
-  for (let i = 0; i < a.length; i++) {
-    // Relative to the magnitude, so the 1e38 landmark does not drown the ramp.
-    const diff: number = Math.abs(a[i] - b[i]) / (1 + Math.abs(a[i]));
-    if (diff > worst) {
-      worst = diff;
-      at = i;
-    }
-  }
-  return { worst, at };
-}
-
 /**
  * Put known values on the GPU and read them back both ways.
  *
@@ -93,9 +77,9 @@ export async function checkReadback(tf: typeof TF): Promise<ReadbackCheck> {
   const sync = onGpu.dataSync() as Float32Array;
   const asynchronous = (await onGpu.data()) as Float32Array;
 
-  const bad = worstDiff(expected, sync);
-  const worstAsync = worstDiff(expected, asynchronous);
-  const between = worstDiff(sync, asynchronous);
+  const bad: Difference = furthestApart(expected, sync);
+  const worstAsync: Difference = furthestApart(expected, asynchronous);
+  const between: Difference = furthestApart(sync, asynchronous);
 
   source.dispose();
   onGpu.dispose();

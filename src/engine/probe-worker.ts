@@ -35,7 +35,7 @@ import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8, type Evaluation, type TraceStage } from './model-v8.ts';
 import { discoverHeadLayout, layoutBackend, type HeadLayout } from './head-layout.ts';
-import { checkOps, type OpResult } from './op-check.ts';
+import { checkOps, OP_TOLERANCE, type OpResult } from './op-check.ts';
 import { checkReadback, type ReadbackCheck } from './readback-check.ts';
 
 export interface ProbeRequest {
@@ -111,7 +111,8 @@ async function probe(request: ProbeRequest): Promise<void> {
    */
   await import('@tensorflow/tfjs-backend-cpu');
   const ops: OpResult[] = await checkOps(tf);
-  const broken: OpResult[] = ops.filter((op: OpResult) => op.worst > 1e-3);
+  const differs = (op: OpResult): boolean => op.worst > OP_TOLERANCE;
+  const broken: OpResult[] = ops.filter(differs);
   post({
     stage: 'ops',
     ok: broken.length === 0,
@@ -120,30 +121,22 @@ async function probe(request: ProbeRequest): Promise<void> {
       ops
         .map(
           (op: OpResult) =>
-            `${op.worst > 1e-3 ? 'DIFFERS' : '   ok  '} ${op.worst.toExponential(2)}  ` +
-            `${op.name}${op.worst > 1e-3 ? ` (gpu ${op.gpu.toPrecision(6)}, cpu ${op.cpu.toPrecision(6)})` : ''}`,
+            `${differs(op) ? 'DIFFERS' : '   ok  '} ${op.worst.toExponential(2)}  ${op.name}` +
+            `${differs(op) ? ` (gpu ${op.gpu.toPrecision(6)}, cpu ${op.cpu.toPrecision(6)})` : ''}`,
         )
         .join('\n'),
   });
 
-  /*
-   * The weights, hashed. Everything above says the machine is fine: the bytes
-   * come back off the GPU exactly, and every operation agrees with the device's
-   * own CPU. What is left is what is being multiplied — and until now the only
-   * check on a 37MB download was its compressed length and a plausible-looking
-   * first sixty-four bytes.
-   *
-   * If the hash is wrong, the cached copy is evicted and the network fetched
-   * again, and both hashes are reported. A second wrong hash is a download or
-   * decompression that damages the file on this device; a right one after a
-   * wrong one is a poisoned cache, which every visit was re-reading.
-   */
   /*
    * How the four heads are laid out when packed into one tensor, which is how
    * `evaluate` reads them back. Every stage of the network can agree and the
    * answer still come out wrong if the tail of this buffer sits three floats
    * from where the offsets say it does.
    */
+  // Policy, pass, value, score. The last two are this network's head widths,
+  // written out because the packing is asked about before the network is
+  // loaded — deliberately, so a phone that fails here does not download 37MB
+  // first. `ModelV8` measures the real lengths from the weights it parsed.
   const sizes: readonly number[] = [EXPECTED_SIZE * EXPECTED_SIZE, 1, 3, 4];
   const layout: HeadLayout | null = discoverHeadLayout(layoutBackend(tf), sizes);
   const tight: readonly number[] = sizes.map((_size, which) =>
@@ -165,6 +158,18 @@ async function probe(request: ProbeRequest): Promise<void> {
               'heads are read from where they actually are'),
   });
 
+  /*
+   * The weights, hashed. Everything above says the machine is fine: the bytes
+   * come back off the GPU exactly, and every operation agrees with the device's
+   * own CPU. What is left is what is being multiplied — and until now the only
+   * check on a 37MB download was its compressed length and a plausible-looking
+   * first sixty-four bytes.
+   *
+   * If the hash is wrong, the cached copy is evicted and the network fetched
+   * again, and both hashes are reported. A second wrong hash is a download or
+   * decompression that damages the file on this device; a right one after a
+   * wrong one is a poisoned cache, which every visit was re-reading.
+   */
   const cached: boolean = await isNetworkCached(request.networkUrl);
   let bytes: Uint8Array = await loadNetworkBytes(request.networkUrl);
   let weights: WeightsCheck = await checkWeights(bytes);

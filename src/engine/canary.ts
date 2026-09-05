@@ -20,6 +20,7 @@
  * longer computing what it computed when it started.
  */
 
+import { furthestApart } from './difference.ts';
 import { GLOBAL_CHANNELS, SPATIAL_CHANNELS } from './features-v7.ts';
 import type { Evaluation } from './model-v8.ts';
 
@@ -104,16 +105,6 @@ export function canaryHeads(evaluation: Evaluation): Float32Array {
   return out;
 }
 
-/** The largest relative gap between two head vectors. */
-function furthest(expected: ArrayLike<number>, got: ArrayLike<number>): number {
-  let worst = 0;
-  for (let i = 0; i < expected.length; i++) {
-    const off: number = Math.abs(got[i] - expected[i]) / (1 + Math.abs(expected[i]));
-    if (off > worst) worst = off;
-  }
-  return worst;
-}
-
 export class Canary {
   private readonly model: CanaryModel;
   private readonly size: number;
@@ -140,7 +131,7 @@ export class Canary {
     const now: Float32Array = canaryHeads(
       this.model.evaluate(this.spatial, this.global, this.size),
     );
-    return furthest(this.baseline, now);
+    return furthestApart(this.baseline, now).worst;
   }
 
   /**
@@ -160,7 +151,7 @@ export class Canary {
    * and two games apart, produced bit-identical wrong numbers.
    */
   against(expected: readonly number[]): number {
-    return furthest(this.baseline, expected);
+    return furthestApart(this.baseline, expected).worst;
   }
 
   /** Throws when the device is no longer computing what it did at load. */

@@ -10,6 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   Canary,
+  CANARY_DRIFTED,
   CANARY_TOLERANCE,
   canaryHeads,
   canaryInputs,
@@ -71,7 +72,7 @@ test('an answer that has moved past the tolerance is refused', () => {
   const canary = new Canary(model, SIZE);
 
   shift(10);
-  assert.throws(() => canary.verify(), /stopped giving consistent results/);
+  assert.throws(() => canary.verify(), new RegExp(CANARY_DRIFTED));
 });
 
 test('the refusal quotes how far it drifted', () => {
