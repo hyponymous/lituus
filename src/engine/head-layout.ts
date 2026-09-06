@@ -2,60 +2,28 @@
  * Where the concatenated heads actually land on this device.
  *
  * `ModelV8.evaluate` reads the whole evaluation back in one call by packing the
- * four heads — policy, pass, value, score — into a single tensor. Unpacking
- * then assumes each segment begins where the lengths say it should. On an
- * M-series Mac it does. On an iPhone the network computed identically, stage
- * for stage, and the value, score and pass slots came back holding policy
- * numbers: the arithmetic was right and the offsets were wrong.
+ * four heads — policy, pass, value, score — into a single tensor, then
+ * unpacking each segment from where the lengths say it begins. On an M-series
+ * Mac that is where they are. On an iPhone the network computed identically,
+ * stage for stage, and the value, score and pass slots came back holding policy
+ * numbers.
  *
- * The lengths are 361, 1, 3, 4 for a 19x19 board, and 361 is not a multiple of
- * four. A backend that starts each segment on a vector boundary lays the tail
- * out three floats from where the arithmetic says, and nothing about that is an
- * error — it is a layout, and it was simply never asked for.
- *
- * So it is asked for. Each segment is filled with a marker that names it, the
- * same concatenation is run, and the result says where everything went. What
- * comes back is used as the offsets, whatever they are; a device that packs
- * tightly and one that pads both get read correctly, and neither needs to be
- * known about in advance.
+ * The cause turned out to be the read rather than the layout: a buffer that
+ * does not fill whole rows of tfjs's readback canvas is fetched in two cycles,
+ * and on that device the second one is lost — see `aligned-read.ts`, which is
+ * how every read here is now made. The markers below are what named it, and
+ * they stay: they are the one check that looks at the packed buffer itself and
+ * says whether the heads are all in it, contiguous, and where the arithmetic
+ * expects. A device that fails it is read one head at a time instead of being
+ * quietly unpacked wrong.
  */
 
-import type * as TF from '@tensorflow/tfjs-core';
-
-/**
- * The part of TensorFlow.js this needs — `typeof TF` satisfies it. Named rather
- * than taking the whole module, so the layouts below can be checked against a
- * stand-in that lays segments out the way a device does and no device here
- * will.
- */
-export interface LayoutTensor {
-  dataSync(): ArrayLike<number>;
-  dispose(): void;
-}
-
-export interface LayoutBackend<T extends LayoutTensor> {
-  fill(shape: number[], value: number): T;
-  concat(parts: T[]): T;
-}
-
-/**
- * TensorFlow.js as a `LayoutBackend`.
- *
- * Written out rather than passing the module: `tf.fill` and `tf.concat` are
- * generic over rank, and handing the whole module to a generic parameter leaves
- * nothing to infer the tensor type from. Two lines here, and no cast anywhere.
- */
-export function layoutBackend(tf: typeof TF): LayoutBackend<TF.Tensor> {
-  return {
-    fill: (shape: number[], value: number): TF.Tensor => tf.fill(shape, value),
-    concat: (parts: TF.Tensor[]): TF.Tensor => tf.concat(parts),
-  };
-}
+import { readAligned, type ReadBackend, type ReadTensor } from './aligned-read.ts';
 
 export interface HeadLayout {
   /** Where each segment begins, in the packed buffer. */
   readonly offsets: readonly number[];
-  /** How long the packed buffer is, which padding can make longer than the sum. */
+  /** How long the packed buffer is. */
   readonly length: number;
   /** Whether that is where the lengths alone would have put them. */
   readonly tight: boolean;
@@ -65,21 +33,23 @@ export interface HeadLayout {
  * Pack markers, read them back, and report where each segment went.
  *
  * Returns null when the segments cannot be located — not found, not contiguous,
- * or not the right length. That is not the padding case and no set of offsets
- * would fix it, so the caller reads the heads separately instead.
+ * or not the right length. No set of offsets would fix that, so the caller
+ * reads the heads separately instead.
  *
  * Synchronous, because a search is: this runs once per board size, at the point
  * a model first evaluates, and the answer is kept.
  */
-export function discoverHeadLayout<T extends LayoutTensor>(
-  tf: LayoutBackend<T>,
+export function discoverHeadLayout<T extends ReadTensor>(
+  backend: ReadBackend<T>,
   sizes: readonly number[],
 ): HeadLayout | null {
-  // The marker is the segment's index plus one, so zero — the value padding is
-  // most likely to be — cannot be mistaken for data.
-  const markers: T[] = sizes.map((size: number, which: number) => tf.fill([size], which + 1));
-  const packed: T = tf.concat(markers);
-  const values: ArrayLike<number> = packed.dataSync();
+  // The marker is the segment's index plus one, so zero — the value a lost read
+  // is most likely to leave behind — cannot be mistaken for data.
+  const markers: T[] = sizes.map((size: number, which: number) =>
+    backend.fill([size], which + 1),
+  );
+  const packed: T = backend.concat(markers);
+  const values: Float32Array = readAligned(backend, packed);
 
   const at = (i: number): number => {
     for (let scan = 0; scan < values.length; scan++) if (values[scan] === i) return scan;

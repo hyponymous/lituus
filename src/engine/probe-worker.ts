@@ -34,9 +34,15 @@ import { checkWeights, weightsFingerprint, type WeightsCheck } from './weights-c
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8, type Evaluation, type TraceStage } from './model-v8.ts';
-import { discoverHeadLayout, layoutBackend, type HeadLayout } from './head-layout.ts';
+import { readBackend } from './aligned-read.ts';
+import { discoverHeadLayout, type HeadLayout } from './head-layout.ts';
 import { checkOps, OP_TOLERANCE, type OpResult } from './op-check.ts';
-import { checkReadback, type ReadbackCheck } from './readback-check.ts';
+import {
+  checkReadback,
+  READBACK_TOLERANCE,
+  type LengthCheck,
+  type ReadbackCheck,
+} from './readback-check.ts';
 
 export interface ProbeRequest {
   readonly networkUrl: string;
@@ -89,19 +95,31 @@ async function probe(request: ProbeRequest): Promise<void> {
    * and 37MB later would be a slow way to learn it.
    */
   const readback: ReadbackCheck = await checkReadback(tf);
-  const readbackOk: boolean = readback.syncWorst < 1e-6 && readback.betweenWorst < 1e-6;
+  const suspect = (one: LengthCheck): boolean =>
+    one.syncWorst >= READBACK_TOLERANCE || one.asyncWorst >= READBACK_TOLERANCE;
   post({
     stage: 'readback',
-    ok: readbackOk,
+    ok: readback.ok,
     detail:
-      `${readback.count} known floats through the GPU\n` +
-      `dataSync worst |d| ${readback.syncWorst.toExponential(3)}\n` +
-      `await data() worst |d| ${readback.asyncWorst.toExponential(3)}\n` +
-      `the two against each other ${readback.betweenWorst.toExponential(3)}\n` +
-      (readbackOk
-        ? 'both ways agree with what was uploaded'
-        : `worst at index ${readback.syncWorstAt}: expected ${readback.expected.toPrecision(9)}, ` +
-          `dataSync ${readback.gotSync.toPrecision(9)}, data() ${readback.gotAsync.toPrecision(9)}`),
+      'known floats through the GPU, at lengths either side of a whole ' +
+      'canvas row\n' +
+      'floats  cycles  dataSync   await data()\n' +
+      readback.lengths
+        .map(
+          (one: LengthCheck) =>
+            `${String(one.count).padStart(5)}  ${String(one.passes).padStart(6)}  ` +
+            `${one.syncWorst.toExponential(2)}  ${one.asyncWorst.toExponential(2)}` +
+            (suspect(one)
+              ? `  WRONG at ${one.syncWorstAt}: expected ${one.expected.toPrecision(9)}, ` +
+                `got ${one.gotSync.toPrecision(9)}` +
+                (one.tailRepeatsHead ? ' — and the tail repeats the head' : '')
+              : ''),
+        )
+        .join('\n') +
+      (readback.ok
+        ? '\nevery length comes back exactly, both ways'
+        : '\nA READ THAT NEEDS TWO CYCLES LOSES ONE — the reads are padded to ' +
+          'whole rows to avoid it'),
   });
 
   /*
@@ -128,17 +146,17 @@ async function probe(request: ProbeRequest): Promise<void> {
   });
 
   /*
-   * How the four heads are laid out when packed into one tensor, which is how
-   * `evaluate` reads them back. Every stage of the network can agree and the
-   * answer still come out wrong if the tail of this buffer sits three floats
-   * from where the offsets say it does.
+   * The packed heads, read back and looked at. Every stage of the network can
+   * agree and the answer still come out wrong if this buffer does not contain
+   * what was put in it — which is how the value, score and pass slots came back
+   * holding policy numbers on a phone.
    */
   // Policy, pass, value, score. The last two are this network's head widths,
   // written out because the packing is asked about before the network is
   // loaded — deliberately, so a phone that fails here does not download 37MB
   // first. `ModelV8` measures the real lengths from the weights it parsed.
   const sizes: readonly number[] = [EXPECTED_SIZE * EXPECTED_SIZE, 1, 3, 4];
-  const layout: HeadLayout | null = discoverHeadLayout(layoutBackend(tf), sizes);
+  const layout: HeadLayout | null = discoverHeadLayout(readBackend(tf), sizes);
   const tight: readonly number[] = sizes.map((_size, which) =>
     sizes.slice(0, which).reduce((a: number, b: number) => a + b, 0),
   );
@@ -147,13 +165,14 @@ async function probe(request: ProbeRequest): Promise<void> {
     ok: layout !== null,
     detail:
       layout === null
-        ? 'the segments could not be located in the packed buffer at all — ' +
-          'the heads are read one at a time on this device'
+        ? 'THE SEGMENTS ARE NOT IN THE PACKED BUFFER — the packed read does ' +
+          'not come back intact on this device, and the heads are read one at ' +
+          'a time instead'
         : `${layout.length} floats, ${sizes.reduce((a: number, b: number) => a + b, 0)} of them data\n` +
           `policy, pass, value, score start at ${layout.offsets.join(', ')}\n` +
           `packed tightly they would be at    ${tight.join(', ')}\n` +
           (layout.tight
-            ? 'tightly packed, as the arithmetic assumes'
+            ? 'every head intact and where the arithmetic says'
             : 'PADDED — the offsets are measured rather than assumed, and the ' +
               'heads are read from where they actually are'),
   });

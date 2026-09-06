@@ -25,7 +25,8 @@
 
 import type * as TF from '@tensorflow/tfjs-core';
 import type { ActivationKind, ParsedBatchNorm, ParsedConv2d, ParsedMatMul } from './bin-model-parser.ts';
-import { discoverHeadLayout, layoutBackend, type HeadLayout } from './head-layout.ts';
+import { readAligned, readBackend, type ReadBackend } from './aligned-read.ts';
+import { discoverHeadLayout, type HeadLayout } from './head-layout.ts';
 import type { ParsedKataGoModelV8, ParsedTrunkBlock } from './model-types.ts';
 
 /** Batch norm folded into a scale and a bias, as the parser leaves it. */
@@ -181,6 +182,7 @@ export class ModelV8 {
 
   constructor(tf: typeof TF, parsed: ParsedKataGoModelV8) {
     this.tf = tf;
+    this.reader = readBackend(tf);
     this.name = parsed.modelName;
     this.version = parsed.modelVersion;
     this.postProcess = parsed.postProcessParams;
@@ -385,6 +387,12 @@ export class ModelV8 {
   /** Packed layouts already measured, keyed by the segment lengths. */
   private readonly layouts = new Map<string, HeadLayout | null>();
 
+  /**
+   * How this model reads a buffer back: padded to whole canvas rows, because
+   * one device loses the second pass of a read that needs two (`aligned-read.ts`).
+   */
+  private readonly reader: ReadBackend<TF.Tensor>;
+
   private watch(label: string, x: TF.Tensor): void {
     this.tracer?.(label, x);
   }
@@ -401,6 +409,10 @@ export class ModelV8 {
     const stages: TraceStage[] = [];
     this.tracer = (label: string, x: TF.Tensor): void => {
       const values = tf.tidy(() => ({
+        // Scalars, which is one float and one canvas cycle: the reads that go
+        // wrong are the ones that need two (`aligned-read.ts`). It is why the
+        // phone's trace agreed with the laptop's stage for stage while its
+        // heads did not.
         mean: (tf.mean(x).dataSync() as Float32Array)[0],
         min: (tf.min(x).dataSync() as Float32Array)[0],
         max: (tf.max(x).dataSync() as Float32Array)[0],
@@ -531,10 +543,10 @@ export class ModelV8 {
   private readPacked(segments: readonly TF.Tensor1D[], layout: HeadLayout): Evaluation {
     // `concat` wants a mutable array; the copy is four references.
     const packed: TF.Tensor1D = this.tf.concat([...segments]) as TF.Tensor1D;
-    // Views onto one buffer, not four copies: `dataSync` hands back an array of
+    // Views onto one buffer, not four copies: the read hands back an array of
     // its own, so disposing the tensor does not disturb them, and nothing
     // downstream keeps them past the next call.
-    const heads = packed.dataSync() as Float32Array;
+    const heads: Float32Array = readAligned(this.reader, packed);
     packed.dispose();
 
     const [policyAt, passAt, valueAt, scoreAt] = layout.offsets;
@@ -548,8 +560,8 @@ export class ModelV8 {
 
   /** One read per head, for a device whose packed layout cannot be located. */
   private readSeparately(segments: readonly TF.Tensor1D[]): Evaluation {
-    const [policy, pass, value, score] = segments.map(
-      (segment: TF.Tensor1D) => segment.dataSync() as Float32Array,
+    const [policy, pass, value, score] = segments.map((segment: TF.Tensor1D) =>
+      readAligned(this.reader, segment),
     );
     return { policy, policyPass: pass[0], value, scoreValue: score };
   }
@@ -565,7 +577,7 @@ export class ModelV8 {
     const key: string = sizes.join(',');
     const known: HeadLayout | null | undefined = this.layouts.get(key);
     if (known !== undefined) return known;
-    const found: HeadLayout | null = discoverHeadLayout(layoutBackend(this.tf), sizes);
+    const found: HeadLayout | null = discoverHeadLayout(this.reader, sizes);
     this.layouts.set(key, found);
     return found;
   }

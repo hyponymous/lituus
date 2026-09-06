@@ -26,9 +26,9 @@ import { makeReport, type Status, type Step } from './report.ts';
 /** What each stage is called on screen, in the order the worker reports them. */
 const STAGES: ReadonlyArray<{ readonly stage: ProbeReport['stage']; readonly title: string }> = [
   { stage: 'backend', title: 'WebGPU in a worker' },
-  { stage: 'readback', title: 'Known numbers through the GPU' },
+  { stage: 'readback', title: 'Known numbers back off the GPU, at ten lengths' },
   { stage: 'ops', title: 'Every operation, GPU against CPU' },
-  { stage: 'packing', title: 'Where the four heads land when packed' },
+  { stage: 'packing', title: 'The four heads, packed and read back' },
   { stage: 'network', title: `Load ${NETWORK.label}, and hash it` },
   { stage: 'parsed', title: 'The weights as parsed, not as downloaded' },
   { stage: 'forward', title: 'One forward pass, fixed input' },
