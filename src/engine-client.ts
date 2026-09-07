@@ -65,6 +65,9 @@ export interface EngineHandle {
   readonly stop: () => void;
 }
 
+/** A reading of what the worker holds, as `worker.ts` reports it. */
+export type EngineMemory = Extract<WorkerReply, { type: 'memory' }>;
+
 export interface EngineOptions {
   /** Called whenever the status changes, so the view can redraw. */
   readonly onStatus?: (status: EngineStatus) => void;
@@ -74,6 +77,15 @@ export interface EngineOptions {
    * the store keeps, and it arrives when the backend does.
    */
   readonly onDevice?: (device: string) => void;
+  /**
+   * What the worker holds, after every prompt.
+   *
+   * For a harness watching a long run: whether live bytes climb is the whole
+   * of the leak-or-high-water-mark question, and one reading cannot answer it.
+   * The product ignores this — a failure already carries the two readings that
+   * matter (`lastWords`).
+   */
+  readonly onMemory?: (reading: EngineMemory) => void;
 }
 
 /**
@@ -105,13 +117,18 @@ export function engineConfig(): EngineConfig {
  * also run its GPU out partway through, and the engine's own checks then stop
  * it rather than let it answer. Said before the download starts, because the
  * download is the part that cannot be taken back.
+ *
+ * It used to warn that a phone may compute the network incorrectly, which was
+ * true of one and is no longer true of any: the fault was a readback this build
+ * now pads past (`aligned-read.ts`), and a device that still disagrees with the
+ * reference is refused at load rather than believed. What is left is memory and
+ * time, which are the phone's own.
  */
 export function unreliableReason(): string | null {
   if (!isMobile()) return null;
   return (
-    'On a phone the GPU sometimes computes the network incorrectly, or gives ' +
-    'out partway through a long game. Scoring stops when either happens, and ' +
-    'the review covers only the moves it reached.'
+    'A phone can run its GPU out partway through a long game. Scoring stops ' +
+    'when that happens, and the review covers only the moves it reached.'
   );
 }
 
@@ -146,6 +163,19 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
   /** Failed prompts since the last verdict; see `ERRORS_BEFORE_FAILED`. */
   let consecutiveErrors = 0;
 
+  /**
+   * What the worker said about its memory, first and last, kept for its
+   * obituary. Null until the engine is up.
+   *
+   * Both, because one reading cannot answer the question a kill raises. A
+   * worker holding what it started with was killed by something other than its
+   * own appetite; one holding six times that grew into the ceiling, and the
+   * pool's allocated total says whether the growth was live tensors or freed
+   * buffers kept around.
+   */
+  let firstReading: EngineMemory | null = null;
+  let lastReading: EngineMemory | null = null;
+
   const failEverything = (reason: string): void => {
     for (const { reject } of waiting.values()) reject(new EvaluationError(reason));
     waiting.clear();
@@ -170,6 +200,11 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
         // rather than leaving the queue holding promises that cannot settle.
         failEverything(reply.reason);
         return;
+      case 'memory':
+        firstReading ??= reply;
+        lastReading = reply;
+        options.onMemory?.(reply);
+        return;
       case 'verdict': {
         consecutiveErrors = 0;
         waiting.get(reply.verdict.moveNumber)?.resolve(reply.verdict);
@@ -191,11 +226,31 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
     }
   };
 
+  /**
+   * What the engine was holding when it stopped, if it ever said.
+   *
+   * Appended to the failure because the failure is the only thing that reaches
+   * a reader — the status line, and the incident the export records. A kill
+   * with no reading behind it is silent about why, and the phone is exactly
+   * where that question keeps being asked (`TODO`: leak or high-water mark).
+   */
+  const lastWords = (): string => {
+    if (!lastReading || !firstReading) return '';
+    const mb = (bytes: number): string => `${Math.round(bytes / 1e6)}MB`;
+    return (
+      ` It was holding ${mb(lastReading.gpuBytes)} in ${lastReading.tensors} ` +
+      `tensors ${lastReading.prompts} moves in, against ` +
+      `${mb(firstReading.gpuBytes)} in ${firstReading.tensors} at the start; ` +
+      `${mb(lastReading.gpuAllocated)} ever allocated.`
+    );
+  };
+
   // A worker that dies outright — an out-of-memory kill on a phone is the
   // realistic case — reports nothing else, so this is the only place that
   // failure becomes visible.
   worker.onerror = (event: ErrorEvent): void => {
-    const reason: string = event.message || 'The analysis worker stopped unexpectedly.';
+    const reason: string =
+      (event.message || 'The analysis worker stopped unexpectedly.') + lastWords();
     setStatus({ state: 'failed', reason });
     failEverything(reason);
   };

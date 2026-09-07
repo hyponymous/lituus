@@ -46,6 +46,7 @@ import {
 import {
   engineConfig,
   startEngine,
+  type EngineMemory,
   unscorableReason,
   type EngineHandle,
   type EngineStatus,
@@ -507,6 +508,9 @@ function beginScoring(
   };
 
   const engine: EngineHandle = startEngine(session.game, {
+    // Every reading printed, because settling whether a long run grows takes
+    // the series and not the two ends of it. The product asks for none of this.
+    onMemory: (reading: EngineMemory): void => console.log('MEMWATCH', JSON.stringify(reading)),
     // The harness re-scores results from other machines, so this is the one
     // place a restored analysis can grow a second device — and must say so.
     onDevice: (device: string): void => {

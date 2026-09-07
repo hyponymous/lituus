@@ -48,6 +48,13 @@ export interface ProbeRequest {
   readonly networkUrl: string;
 }
 
+/**
+ * What a step concluded. Three states rather than two, because a device can
+ * behave badly in a way this build is built to step around — and colouring
+ * that red would say the app is broken here when it is not.
+ */
+export type ProbeStatus = 'ok' | 'warn' | 'bad';
+
 /** One finding at a time, so a hang is attributable to a step. */
 export interface ProbeReport {
   readonly stage:
@@ -61,7 +68,9 @@ export interface ProbeReport {
     | 'trace'
     | 'compare'
     | 'failed';
-  readonly ok: boolean;
+  readonly status: ProbeStatus;
+  /** The word shown beside the step's title. */
+  readonly note: string;
   readonly detail: string;
 }
 
@@ -72,8 +81,31 @@ const scope = self as unknown as {
 
 const post = (report: ProbeReport): void => scope.postMessage(report);
 
+/** The ordinary verdict: it agrees, or it does not. */
+const verdict = (ok: boolean): { status: ProbeStatus; note: string } =>
+  ok ? { status: 'ok', note: 'ok' } : { status: 'bad', note: 'differs' };
+
 const message = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * What the backend is holding, in the same terms the engine's own failures
+ * report it: live GPU bytes, tensors, and every byte the buffer pool has
+ * allocated. See `reportMemory` in `worker.ts` for why the two byte figures.
+ */
+function memoryLine(tf: typeof TF): string {
+  // The WebGPU backend's own additions to `MemoryInfo`; see `worker.ts`.
+  const info = tf.memory() as {
+    numTensors: number;
+    numBytesInGPU?: number;
+    numBytesAllocatedInGPU?: number;
+  };
+  const mb = (bytes: number | undefined): string => `${Math.round((bytes ?? 0) / 1e6)}MB`;
+  return (
+    `holding ${mb(info.numBytesInGPU)} on the GPU in ${info.numTensors} tensors, ` +
+    `${mb(info.numBytesAllocatedInGPU)} ever allocated`
+  );
+}
 
 /** Full precision, because the whole point is to compare two machines' digits. */
 const digits = (values: ArrayLike<number>): string =>
@@ -87,7 +119,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   await import('@tensorflow/tfjs-backend-webgpu');
   if (!(await tf.setBackend('webgpu'))) throw new Error('no WebGPU in this worker');
   await tf.ready();
-  post({ stage: 'backend', ok: true, detail: `backend: ${tf.getBackend()}` });
+  post({ stage: 'backend', ...verdict(true), detail: `backend: ${tf.getBackend()}` });
 
   /*
    * Before the network, deliberately. It needs no download and no model, so a
@@ -99,7 +131,14 @@ async function probe(request: ProbeRequest): Promise<void> {
     one.syncWorst >= READBACK_TOLERANCE || one.asyncWorst >= READBACK_TOLERANCE;
   post({
     stage: 'readback',
-    ok: readback.ok,
+    /*
+     * A device that fails only the two-cycle lengths is not marked bad. It is
+     * the known fault, every read this build makes is padded past it, and the
+     * compare step at the end is what says whether that worked. Red is kept for
+     * a device that gets a whole-row read wrong, which nothing here can dodge.
+     */
+    status: readback.ok ? (readback.losesSecondCycle ? 'warn' : 'ok') : 'bad',
+    note: readback.ok ? (readback.losesSecondCycle ? 'known fault' : 'ok') : 'differs',
     detail:
       'known floats through the GPU, at lengths either side of a whole ' +
       'canvas row\n' +
@@ -116,10 +155,16 @@ async function probe(request: ProbeRequest): Promise<void> {
               : ''),
         )
         .join('\n') +
-      (readback.ok
-        ? '\nevery length comes back exactly, both ways'
-        : '\nA READ THAT NEEDS TWO CYCLES LOSES ONE — the reads are padded to ' +
-          'whole rows to avoid it'),
+      (readback.losesSecondCycle
+        ? '\nTHIS DEVICE LOSES THE SECOND CYCLE. Every read that fills whole ' +
+          'rows comes back exactly, every read that does not comes back with ' +
+          'its tail repeating its head, and the asynchronous read is right ' +
+          'throughout. The model pads every read to whole rows, so none of ' +
+          'them take that path — the last step is where that is checked.'
+        : readback.ok
+          ? '\nevery length comes back exactly, both ways'
+          : '\nA READ THAT FILLS WHOLE ROWS IS WRONG HERE, which no padding ' +
+            'can step around'),
   });
 
   /*
@@ -133,7 +178,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   const broken: OpResult[] = ops.filter(differs);
   post({
     stage: 'ops',
-    ok: broken.length === 0,
+    ...verdict(broken.length === 0),
     detail:
       `${ops.length} operations, this GPU against this CPU\n` +
       ops
@@ -162,7 +207,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   );
   post({
     stage: 'packing',
-    ok: layout !== null,
+    ...verdict(layout !== null),
     detail:
       layout === null
         ? 'THE SEGMENTS ARE NOT IN THE PACKED BUFFER — the packed read does ' +
@@ -218,7 +263,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   const model = new ModelV8(tf, parsed);
   post({
     stage: 'network',
-    ok: weights.matches,
+    ...verdict(weights.matches),
     detail: `${parsed.modelName}, v${parsed.modelVersion}\n${detail}`,
   });
 
@@ -231,7 +276,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   const fingerprint = weightsFingerprint(parsed);
   post({
     stage: 'parsed',
-    ok: true,
+    ...verdict(true),
     detail:
       `${fingerprint.floats.toLocaleString('en-US')} floats\n` +
       `fingerprint ${fingerprint.hex}`,
@@ -242,12 +287,15 @@ async function probe(request: ProbeRequest): Promise<void> {
   const evaluation: Evaluation = model.evaluate(inputs.spatial, inputs.global, size);
   post({
     stage: 'forward',
-    ok: true,
+    ...verdict(true),
     detail:
       `heads at ${size}x${size} [win, loss, noResult, scoreMean, ` +
       `scoreStdev, lead, varTimeLeft, pass, policy sum]\n` +
       `${digits(canaryHeads(evaluation))}\n` +
-      `drift against itself: ${canary.drift().toExponential(3)}`,
+      `drift against itself: ${canary.drift().toExponential(3)}\n` +
+      // What a 15-block network and one pass cost to hold, which is the
+      // question behind every worker a phone kills without a word.
+      memoryLine(tf),
   });
 
   /*
@@ -259,7 +307,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   const trace: TraceStage[] = model.traceForward(inputs.spatial, inputs.global, size);
   post({
     stage: 'trace',
-    ok: true,
+    ...verdict(true),
     detail: trace
       .map(
         (one: TraceStage) =>
@@ -272,7 +320,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   const off: number = canary.against(EXPECTED_HEADS);
   post({
     stage: 'compare',
-    ok: off <= EXPECTED_TOLERANCE,
+    ...verdict(off <= EXPECTED_TOLERANCE),
     detail:
       `against ${EXPECTED_ON}\n` +
       `worst relative difference ${off.toExponential(3)}, tolerance ` +
@@ -287,6 +335,6 @@ async function probe(request: ProbeRequest): Promise<void> {
 
 scope.onmessage = (event: MessageEvent<ProbeRequest>): void => {
   void probe(event.data).catch((error: unknown) => {
-    post({ stage: 'failed', ok: false, detail: message(error) });
+    post({ stage: 'failed', status: 'bad', note: 'failed', detail: message(error) });
   });
 };

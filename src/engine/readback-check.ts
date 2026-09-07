@@ -84,7 +84,39 @@ export interface LengthCheck {
 
 export interface ReadbackCheck {
   readonly lengths: readonly LengthCheck[];
+  /**
+   * Whether the reads this build actually makes are safe here: every
+   * single-cycle length exact through `dataSync`, and every length exact
+   * through `data()`. A device can be sound by this measure and still fail the
+   * two-cycle lengths below — that is the fault `aligned-read.ts` exists to
+   * step around, and it is reported rather than counted against the device.
+   */
   readonly ok: boolean;
+  /** Whether it fails the two-cycle lengths, which is the known fault. */
+  readonly losesSecondCycle: boolean;
+}
+
+/**
+ * What a table of lengths says about a device.
+ *
+ * Separate from the measuring, because this is the judgement — whether a device
+ * is sound enough for the reads this build makes, or bad in a way no padding
+ * can step around — and it should be checkable against a table typed in from a
+ * device that is not to hand.
+ */
+export function readbackVerdict(lengths: readonly LengthCheck[]): {
+  readonly ok: boolean;
+  readonly losesSecondCycle: boolean;
+} {
+  const exact = (worst: number): boolean => worst < READBACK_TOLERANCE;
+  return {
+    ok: lengths.every(
+      (one: LengthCheck) => exact(one.asyncWorst) && (one.passes > 1 || exact(one.syncWorst)),
+    ),
+    losesSecondCycle: lengths.some(
+      (one: LengthCheck) => one.passes > 1 && !exact(one.syncWorst),
+    ),
+  };
 }
 
 /**
@@ -144,11 +176,5 @@ export async function checkReadback(tf: typeof TF): Promise<ReadbackCheck> {
   source.dispose();
   onGpu.dispose();
 
-  return {
-    lengths,
-    ok: lengths.every(
-      (one: LengthCheck) =>
-        one.syncWorst < READBACK_TOLERANCE && one.asyncWorst < READBACK_TOLERANCE,
-    ),
-  };
+  return { lengths, ...readbackVerdict(lengths) };
 }

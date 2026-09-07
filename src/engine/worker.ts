@@ -64,6 +64,22 @@ export type WorkerReply =
     }
   | { readonly type: 'failed'; readonly reason: string }
   | { readonly type: 'verdict'; readonly verdict: Verdict }
+  /**
+   * What the backend is holding, after every prompt.
+   *
+   * A worker the operating system kills reports nothing at all — no error, no
+   * last words — and on a phone that is the realistic ending. So the reading is
+   * pushed out while the worker is alive and kept on the main thread, where it
+   * survives to say how much was held when the lights went out.
+   */
+  | {
+      readonly type: 'memory';
+      readonly prompts: number;
+      readonly tensors: number;
+      /** Live bytes in GPU buffers, and every byte ever allocated for one. */
+      readonly gpuBytes: number;
+      readonly gpuAllocated: number;
+    }
   | { readonly type: 'error'; readonly moveNumber: number; readonly reason: string };
 
 /*
@@ -104,6 +120,15 @@ const CANARY_EVERY = 8;
 
 /** Prompts answered since the last canary check. */
 let sinceCanary = 0;
+
+/**
+ * The backend, once it is up, so memory can be sampled outside `initialize`.
+ * Null before the first init and after a device is lost.
+ */
+let backend: typeof TF | null = null;
+
+/** Prompts answered since this worker started, for the memory line. */
+let prompts = 0;
 
 let engine: Engine | null = null;
 /** Set once init fails, so every later request answers instead of hanging. */
@@ -202,6 +227,8 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
   }
   await tf.ready();
   watchForDeviceLoss(tf);
+  backend = tf;
+  prompts = 0;
 
   const parsed: ParsedKataGoModelV8 = parseKataGoModelV8(bytes);
   const model = new ModelV8(tf, parsed);
@@ -233,6 +260,10 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
   }
 
   engine = { search: new Search(model, context.board), context, visits: request.visits, canary };
+
+  // A first reading before any prompt: the weights resident and nothing else,
+  // which is the baseline every later one is read against.
+  reportMemory();
 
   post({
     type: 'ready',
@@ -285,6 +316,39 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
     engine.search, engine.context, prompt, engine.visits,
   );
   post({ type: 'verdict', verdict });
+  prompts++;
+  reportMemory();
+}
+
+/**
+ * Sample what the backend holds and send it out.
+ *
+ * `numBytesInGPU` against `numBytesAllocatedInGPU` is the question worth
+ * asking: the first is what is live, the second counts every buffer the pool
+ * has ever created. Live climbing is a leak of ours; allocated climbing while
+ * live stays flat is the pool keeping freed buffers around, which is a
+ * high-water mark and not the same problem at all.
+ */
+function reportMemory(): void {
+  if (!backend) return;
+  /*
+   * `numBytesInGPU` and `numBytesAllocatedInGPU` are the WebGPU backend's own
+   * additions to `MemoryInfo`; the shared type does not carry them, and typing
+   * them here would mean importing the backend's types into everything that
+   * touches this worker.
+   */
+  const info = backend.memory() as {
+    numTensors: number;
+    numBytesInGPU?: number;
+    numBytesAllocatedInGPU?: number;
+  };
+  post({
+    type: 'memory',
+    prompts,
+    tensors: info.numTensors,
+    gpuBytes: info.numBytesInGPU ?? 0,
+    gpuAllocated: info.numBytesAllocatedInGPU ?? 0,
+  });
 }
 
 scope.onmessage = (event: MessageEvent<WorkerRequest>): void => {

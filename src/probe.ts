@@ -83,8 +83,10 @@ export async function renderProbe(root: HTMLElement): Promise<void> {
         return;
       }
       const step: Step | undefined = steps.get(report.stage);
-      const status: Status = report.ok ? 'ok' : 'bad';
-      step?.note(report.ok ? 'ok' : 'differs', status);
+      // The worker names its own verdict: a step can be neither clean nor
+      // broken, which is what a known fault this build steps around looks like.
+      const status: Status = report.status;
+      step?.note(report.note, status);
       step?.detail(report.detail);
       steps.delete(report.stage);
       if (report.stage === 'compare') {
