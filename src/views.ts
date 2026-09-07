@@ -1198,14 +1198,15 @@ function cellLabel(row: SummaryRow, scored: boolean): string {
   if (delta === null) return `${where} — not scored`;
 
   const against: string = baseline === 'engine' ? 'the engine' : 'the game';
-  const band: CostBand = costBand(row, baseline);
-  if (band === 'better') return `${where} — ${(-delta).toFixed(1)} points better than ${against}`;
-  if (band === 'even') {
-    return row.hit && baseline === 'played'
-      ? `${where} — the same move`
-      : `${where} — the same cost, within half a point`;
-  }
-  return `${where} — ${delta.toFixed(1)} points worse than ${against}`;
+  if (row.hit && baseline === 'played') return `${where} — the same move`;
+  /*
+   * The figure, in the caption's sign convention: negative is what the move
+   * cost you. Not "better"/"worse" against a band, which said "the same cost,
+   * within half a point" for a difference of four tenths — the band is the
+   * cell's colour, and saying it again in words only crowded out the number
+   * the reader hovered to see.
+   */
+  return `${where} — ${signed(-delta, 1)} points versus ${against}`;
 }
 
 /**
@@ -1274,21 +1275,25 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean, engine: 
 
 /**
  * What a move was worth against the one the game played, as the board writes
- * it: "+0.8" for eight tenths better, "-1.2" for worse, "0" for a difference
- * the product declines to resolve.
+ * it: "+0.8" for eight tenths better, "-1.2" for worse.
  *
  * The reference is the played move rather than the engine's best, because that
  * is what the colour of the mark already measures, and what every bar in the
  * strip below measures. Two scales on one board is one too many.
+ *
+ * No floor under it. A mark reading "0" beside a caption reading "-0.7" and
+ * "-0.3" is a contradiction the reader has to resolve, and they cannot: it was
+ * the mark rounding four tenths away, not the engine disagreeing with itself.
+ * `BEAT_MARGIN` still decides colour, which is where a noise floor belongs —
+ * it is a judgement about whether a difference is worth acting on, and the
+ * number is not a judgement.
  *
  * Null when either side is missing: an unmarked ghost is honest about a
  * comparison that cannot be made, where a "0" would not be.
  */
 function gainOver(played: number | null, mine: number | null): string | null {
   if (played === null || mine === null) return null;
-  const gain: number = played - mine;
-  if (Math.abs(gain) < BEAT_MARGIN) return '0';
-  return gain > 0 ? `+${gain.toFixed(1)}` : gain.toFixed(1);
+  return signed(played - mine, 1);
 }
 
 /**
@@ -1300,18 +1305,14 @@ function gainOver(played: number | null, mine: number | null): string | null {
  * that is the direction the arithmetic runs; a reader looking at a move wants
  * the number KataGo, OGS and AI Sensei would show them, which is the negation.
  *
- * A negative loss is search noise, not a move that beat perfect play
- * (`analysis.ts`), and "+0.1" reads as a broken engine rather than as a
- * rounding error. Anything inside the half-point floor the product already
- * trusts (`BEAT_MARGIN`) is reported as zero. A *larger* negative survives the
- * flip and shows as a gain: that would be a real anomaly, and hiding it would
- * be the same mistake in the other direction.
+ * A negative loss is search noise rather than a move that beat perfect play
+ * (`analysis.ts`), and it prints as the gain it looks like. Reporting it as
+ * zero hid the one thing that would tell a reader the search was noisy — and
+ * `signed` already keeps a rounded zero from printing as "-0.0", which is the
+ * only part of it that ever read as a broken engine.
  */
 function asChange(loss: number): string {
-  const noise: boolean = loss < 0 ? loss > -BEAT_MARGIN : loss < 0.05;
-  // Plain "0", not "0.0": a decimal implies a measurement precise to a tenth,
-  // and this is the opposite — the figure the product declines to resolve.
-  return noise ? '0' : (-loss).toFixed(1);
+  return signed(-loss, 1);
 }
 
 /**
