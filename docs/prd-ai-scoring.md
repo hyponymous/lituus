@@ -167,9 +167,27 @@ two or three plies of the follow-up — for the guess and for the played move �
 is the difference between a score and an explanation, and it costs nothing:
 the line is already in the analysis output.
 
-Two or three plies, and no more. At 50 visits the variations run four to
-eight moves and the tail is barely searched. Showing a long line would imply
-a confidence the search does not have.
+**Depth is bought with visits, and that is a different purchase from
+accuracy.** More search buys nothing for a point loss above 50 visits (§3),
+but it is the only thing that buys a longer line. Visits thin out along a
+line — by roughly a constant factor per ply, on a model fitted to the
+harness's own budgets rather than measured — so the tail of a line is simply
+where the search did not go: at the shipping 50 visits, two or three plies and
+no more, and a longer line would imply a confidence the search does not have.
+
+A line may run deeper only where a deeper search paid for it. That makes
+length a property of the individual line rather than a constant, and the
+honest cutoff is the line's own visit counts — show plies while the node
+behind them was visited enough to be worth quoting, stop where it was not.
+The same floor the rest of the product uses for a point loss applies here.
+
+The consequence for the reader is a rule about numbers: **a deeper search may
+lengthen a line and may never revise a figure.** Its scores are measured at a
+different budget from every other number in the review, and two point-loss
+figures for one move that disagree by a point is worse than one figure. This
+is not a new position — `experiments/katago/deepen.ts` re-searches the biggest
+mistakes at a much larger budget and keeps only their lines, for exactly this
+reason.
 
 **Difficulty is measurable, but not from how concentrated the policy is.**
 The tempting version — a forced position peaks the policy on one point, an

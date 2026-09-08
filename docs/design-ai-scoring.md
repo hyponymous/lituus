@@ -514,13 +514,12 @@ The rule, in full:
 The convention is easy to break in exactly one way: writing a new figure
 straight from `loss` because it happens to read plausibly. Both totals in the
 summary headline shipped that way for a day.
-- **The PV is a record, not yet a display.** The evaluator returns six plies,
-  matching `experiments/katago/analyze.ts`, and they travel into the JSON export
-  and the annotated SGF — which are read at leisure and can afford them. No
-  screen shows a PV today, at the reveal or in the summary. When one does it is
-  truncated to two or three plies, and the truncation belongs in the view rather
-  than in the record: six plies on screen would imply a confidence a fifty-visit
-  search does not have.
+- **The PV is a record before it is a display.** The evaluator returns six
+  plies, matching `experiments/katago/analyze.ts`, and they travel into the JSON
+  export and the annotated SGF — which are read at leisure and can afford them.
+  The record keeps its full length and the truncation belongs to whatever shows
+  it; §6.2 is that display, and what it may show is limited by what the search
+  paid for rather than by what the array holds.
 - **PRD §6.4's runs are per colour** and are a group-by over the store. Pure,
   cheap, and the highest-value sentence in the review — build it early, since
   it needs no view work beyond a line of text.
@@ -535,6 +534,136 @@ shape is already prototyped: `experiments/katago/review.ts` writes a
 playthrough back with guesses as variations and refutations only where a move
 cost points and went unpunished, and that wording was iterated against a reader.
 Port it rather than re-inventing it.
+
+### 6.2 The variation mode
+
+The review board is a **comparison**: three candidates for one empty point —
+yours, the record's, the engine's — read against each other. A principal
+variation is a **sequence**. Superimposing the second on the first is what
+makes other tools open a second panel or a game tree, and the way out is not
+to draw both more cleverly but to accept that only one line fits on a board at
+a time. Showing a line means giving up the comparison until you leave it.
+
+So it is a mode, and nearly all of the design is in what the mode *borrows*
+rather than what it adds. Nothing here needs a new panel, a tree, or a second
+board.
+
+**The branches are toggle buttons standing where the cost line's text
+already is.** `costLine` prints the three roles in a fixed order already —
+yours, the record's, the engine's — so the text becomes the control and no new
+furniture appears. They are `aria-pressed` toggles and *not* radios: when two
+of the branches are the same point, both buttons light, and a radiogroup with
+two checked members is invalid and is read aloud wrongly. Positions are fixed
+and never reordered, because cycling is muscle memory and the eye should find
+the engine's button in the same place at every move. A branch with no verdict,
+with a verdict under `MIN_TRUSTED_VISITS`, or one that is a pass, is a
+disabled button — and that button is also where a spinner goes if lines are
+ever fetched on demand, so the loading state lands in a control that already
+exists. The buttons keep `costLine`'s discipline: three fixed slots of the
+same footprint whether disabled, idle or pressed, because the line they
+replace was shaped so that the board never moves under a reader stepping with
+the arrow keys, and a button that wraps on a long coordinate would undo that.
+(`BestMove` carries no visit count, so the engine's branch is not gated the
+way the other two are; it is the search's most-visited child by construction,
+which is the gate.)
+
+**Each button carries the same number the cost line carries today** —
+`costAgainst(row, baseline)`, the branch's cost against whichever baseline the
+reader chose — so all three are visible at once and cycling is not the only way
+to compare. No new figure is introduced. Two were considered and rejected. The
+*lead* after each move (`rootScoreLead − loss`, available now) differs from the
+loss by one constant shared by all three branches, so it makes the identical
+comparison; what it adds is absolute context, and what that costs is a frame —
+the recorded leads are side-to-move, and `analysis.ts` says of `rootScoreLead`
+to prefer a loss wherever one will do. It would also have been the one figure
+on the screen the baseline toggle does not reach. The *value at the end of the
+line* is the same quantity again, measured worse: a child's subtree average
+already is the value of the line under best play, and the leaf three plies
+down has single-digit visits at 50, so its own evaluation is very nearly the
+raw network's opinion — the intuition the search exists to correct. Per-ply
+values, so the score visibly swings as a refutation lands, are a different
+feature and want a budget that makes the deep nodes real.
+
+**The board is replayed, not annotated, and shows the position at the end of
+the line.** The plies are played through `rules.ts` — `playRecorded`, the
+tolerant path SGF moves take — and the resulting position is drawn, with the
+line's stones numbered and nothing else marked: the other branches' marks are
+gone, and so is the `last` dot, which would sit on a numbered stone. This is
+the only version that can be honest: markers pinned to the pre-move position
+cannot show a capture, and a line that captures is exactly the line worth
+reading. A line is legal under KataGo's rules, which are not quite
+`rules.ts`'s on suicide and ko, so the replay truncates at the first ply the
+rules refuse rather than throwing. There is no stepping through plies; the
+end position is the deliverable, and playing the stones in on entry is the
+sequence, if it is wanted at all.
+
+**The line is numbered 1, 2, 3 from its own start**, with the caption naming
+the move it branches from. Continuing the record's numbering was the
+alternative and was rejected for visual noise — three-digit numbers inside
+every stone of a line, to remove an ambiguity a caption removes.
+
+**Two plies can want the same point**, by snapback or by any recapture, and a
+numbered stone can be captured inside the line and vanish from the final
+position, taking its number with it. Both are the same defect — a final
+position cannot name every ply — and both take the printed-diagram answer: a
+footnote under the board, *"⑤ at ①"*, which Go books have used for a century
+and readers already know. With no ply stepping the footnote is not a nicety
+but the only way a recapture can be read at all, so the pure module owes one
+for every ply the end position cannot show.
+
+**Depth belongs to the line, not to a constant.** PRD §5's rule: a line is
+trustworthy exactly as deep as the search actually went, and the cutoff is
+the line's own visit counts against the same floor a point loss uses. That
+gives two regimes in one view, and they should be named rather than blurred.
+*Recorded* lines carry no per-ply visits; the harness truncated them with
+their budget in mind (six plies at 500 visits, twelve at 4000), and they are
+trusted at the length they were recorded. *Live* lines come back fifteen plies
+long from `search.ts` whatever the budget, and are cut by visit count once the
+search reports visits alongside the PV — and at three until it does. The
+underlying claim, that visits fall by roughly a constant factor per ply, is a
+model fitted to three of the harness's own choices and has not been measured
+directly; the conformance harness could measure it in an afternoon.
+
+**Any deeper search is a second layer that may lengthen lines and may never
+revise a number** (PRD §5). The invariant is worth a test of its own, because
+it is the thing that would rot first: the moment a deepened search's loss
+reaches a band, a hit rate, or a total, revisiting a move silently changes the
+score of a session that is already finished.
+
+**The renderer needs one new thing.** `drawMarker` skips a marker's label
+whenever the point is occupied (`goban.ts`), because every numbered mark today
+sits on an empty point. A numbered line is numbers on *stones*, so it needs a
+marker kind that labels an occupied point, with the text colour chosen against
+the stone under it.
+
+**Entering and leaving.** Clicking a mark enters on that branch; the keyboard
+enters on our own prediction, so that entry is one rule rather than a judgment
+that changes per move — falling through, in the buttons' fixed order, to the
+first branch that is enabled when ours is not. Where all three branches are
+one point (a hit that was also the engine's move) there is one line and three
+lit buttons, and the mode still has its use: the continuation of a good move.
+Up and down cycle the branches in that order. Left and right — the move
+navigation, with its Shift and Ctrl variants — **leave the mode and then
+navigate**, so the reader who pressed → to see the next miss gets the next
+miss and not a dead key; the mode is not sticky across moves, since a mode
+that follows you is a second thing to keep track of on every move. Leaving is
+otherwise Esc, clicking the pressed button again — the strip already works
+this way, so the gesture is learned — and, for touch, the nav row relabeled
+while the mode is on. The caption reads as a breadcrumb, so it says where you
+are and offers the way back in the same words.
+
+**The deep lines already exist and have never reached the app.**
+`joinRecorded` takes analysis, guesses and backfill; `*-deep.jsonl` is read
+only by the SGF export (`experiments/katago/review.ts`). Adding it as a fourth
+input is the whole of the data work, and it puts real deep lines on a board
+with no engine involved.
+
+**The core is pure and belongs outside the view.** Position plus line to the
+end position, its numbered markers, and the footnotes. It walks ply by ply
+internally — that is how a recapture is noticed at all — but what it returns
+is the one position the board draws. Captures, recaptures, truncation and
+passes are all decided there, with tests, rather than inside a closure in
+`views.ts`.
 
 ## 7. Board sizes, rules, komi
 
