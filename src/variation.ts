@@ -34,6 +34,22 @@ import {
 } from './rules.ts';
 
 /**
+ * How many plies of a line are worth putting on a board today.
+ *
+ * Depth is bought with visits, and every line the app can currently reach was
+ * searched at 50 of them (PRD §5): the recorded rows and the live engine share
+ * one budget, so there is one answer rather than the recorded-versus-live split
+ * §6.2 describes. Two or three plies is what that budget paid for, and the
+ * tail of a fifteen-ply line from `search.ts` is simply where the search did
+ * not go.
+ *
+ * This becomes a per-line question the moment a deeper search reaches the app
+ * — the line's own visit counts against the same floor a point loss uses — and
+ * not before.
+ */
+export const SHOWN_PLIES = 3;
+
+/**
  * A ply the end position cannot name, and where it went.
  *
  * Two causes, one shape. Either a later ply took the same point — a snapback

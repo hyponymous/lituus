@@ -675,6 +675,59 @@ section .muted {
   font-variant-numeric: tabular-nums;
 }
 
+/* The three slots of the cost line are also the variation mode's controls, so
+   they have to read as the text they replace until they are used: no chrome,
+   the inherited font, and the same footprint whether disabled, idle or pressed
+   — the line was shaped so that the board and the strip never move under a
+   reader stepping with the arrow keys, and a control that changed width on
+   press would undo exactly that. So the pressed state is carried by the ground
+   and the underline, never by weight or size. */
+.branch {
+  padding: 0.1rem 0.25rem;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-variant-numeric: inherit;
+  line-height: 1;
+  /* An underline rather than a border: the caption clips to one line's height,
+     and a border-bottom is drawn below the text where the clip lands. */
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 2px;
+}
+
+.branch:hover:not(:disabled) {
+  text-decoration-color: var(--accent);
+}
+
+.branch[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  text-decoration: underline solid var(--accent);
+}
+
+/* A branch with no line to walk is the line as it always was: muted like the
+   rest of the caption, and at full opacity, because the number in it is the
+   figure the reader came for. The base `button:disabled` dims to 0.4, which
+   would take the cost with it. */
+.branch:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 1;
+}
+
+/* Out of the layout when there is nothing to say, which is everywhere but the
+   variation mode. It sits below the cost line rather than under the board, so
+   that entering the mode does not push the caption off the board it captions. */
+.footnote:empty {
+  display: none;
+}
+
+.footnote {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Sits between the board and the strip: the board says where you are, these
    move you, the strip says where that is in the session.
 

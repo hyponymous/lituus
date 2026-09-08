@@ -44,14 +44,22 @@ import {
 import {
   BEAT_MARGIN,
   BLUNDER_LOSS,
+  MIN_TRUSTED_VISITS,
   describeEngine,
   lossOf,
   type Comparison,
+  type MoveVerdict,
   type Verdict,
 } from './analysis.ts';
+import {
+  SHOWN_PLIES,
+  footnoteLine,
+  variationFrom,
+  type Variation,
+} from './variation.ts';
 import { annotatedFilename, annotatedSgf } from './annotate.ts';
 import { baselineWanted, setBaselineWanted } from './settings.ts';
-import { BLACK, WHITE, type Color } from './rules.ts';
+import { BLACK, WHITE, type Color, type Position } from './rules.ts';
 
 type Attrs = Record<string, string>;
 type Child = Node | string;
@@ -1456,29 +1464,122 @@ function skippedLine(summary: Summary, move: GameMove, verdict: Verdict | undefi
   return slots.join(' · ');
 }
 
-function costLine(summary: Summary, row: SummaryRow, verdict: Verdict | undefined): string {
-  /*
-   * Three slots, always in the same order and always the same shape: your
-   * move, the game's, the engine's. The sentence this replaces read well on
-   * its own and ran to two or three lines, so the board and the chart under it
-   * moved every time the cursor did — and a reader stepping through with the
-   * arrow keys is looking at precisely the thing that jumped.
-   *
-   * The words still exist where words belong. `cellLabel` puts a sentence on
-   * every cell's tooltip, which is read one at a time and shifts nothing.
+type BranchKey = 'yours' | 'played' | 'engine';
+
+/**
+ * One slot of the cost line, and the line behind it.
+ *
+ * The slots are the mode's controls (design §6.2): the text under the board
+ * already names the three candidates in a fixed order, so it becomes the
+ * control and no new furniture appears.
+ */
+export interface Branch {
+  readonly key: BranchKey;
+  /** The slot's text, exactly as the cost line has always printed it. */
+  readonly text: string;
+  /** Where this branch played, or null for a pass or a slot with no answer. */
+  readonly point: number | null;
+  /**
+   * The plies to walk, cut to what the search paid for. Empty where there is
+   * nothing worth walking, which is what disables the button.
    */
+  readonly line: readonly number[];
+}
+
+/** The engine's move, where it is a point on the board rather than a pass. */
+function bestPointOn(board: Position, verdict: Verdict | undefined): number | undefined {
+  /*
+   * A best move that is a pass is numbered past the last intersection, and
+   * marking it would put a mark at no intersection at all — most likely now
+   * that the end of a game is prompted, which is exactly where the engine
+   * wants to pass.
+   */
+  const point: number | undefined = verdict?.best.point;
+  return point !== undefined && point < board.rows * board.cols ? point : undefined;
+}
+
+/**
+ * The three branches of a prompted position, in the order they are printed.
+ *
+ * Three slots, always in the same order and always the same shape: your move,
+ * the game's, the engine's. The sentence this replaces read well on its own
+ * and ran to two or three lines, so the board and the chart under it moved
+ * every time the cursor did — and a reader stepping through with the arrow
+ * keys is looking at precisely the thing that jumped.
+ *
+ * The words still exist where words belong. `cellLabel` puts a sentence on
+ * every cell's tooltip, which is read one at a time and shifts nothing.
+ *
+ * Their positions are fixed and never reordered: cycling them is muscle
+ * memory, and the eye should find the engine's slot in the same place at
+ * every move.
+ *
+ * Exported for its own tests: everything that decides whether a line is worth
+ * walking is here, in a function that touches no DOM, and those rules are what
+ * would rot first.
+ */
+export function branches(
+  summary: Summary,
+  row: SummaryRow,
+  made: Guess,
+  verdict: Verdict | undefined,
+): Branch[] {
   const cost = (loss: number | null): string => (loss === null ? ' —' : ` ${asChange(loss)}`);
-  const slots: string[] = [
-    `you ${row.guess}${cost(row.loss)}`,
-    `${colorName(summary.color)} ${row.actual}${cost(row.playedLoss)}`,
+
+  /*
+   * A line worth entering is a line the search actually read. An estimate
+   * under `MIN_TRUSTED_VISITS` is not worth quoting as a number and is not
+   * worth walking either, and one ply is the mark the comparison board already
+   * carries — a mode that shows what leaving it shows is a mode with nothing
+   * in it. A pass needs no case of its own: `MoveVerdict.pv` is truncated at
+   * one, so a branch that passes has no line at all.
+   */
+  const walkable = (move: MoveVerdict | null | undefined): readonly number[] => {
+    if (!move || move.visits < MIN_TRUSTED_VISITS) return [];
+    return cut(move.pv);
+  };
+  const cut = (pv: readonly number[]): readonly number[] => {
+    const shown: readonly number[] = pv.slice(0, SHOWN_PLIES);
+    return shown.length > 1 ? shown : [];
+  };
+
+  const slots: Branch[] = [
+    {
+      key: 'yours',
+      text: `you ${row.guess}${cost(row.loss)}`,
+      point: made.guess,
+      line: walkable(verdict?.guessed),
+    },
+    {
+      key: 'played',
+      text: `${colorName(summary.color)} ${row.actual}${cost(row.playedLoss)}`,
+      point: made.actual,
+      line: walkable(verdict?.played),
+    },
   ];
 
   // The engine's slot is kept even when it has nothing to say, so that a
   // verdict landing later fills a gap rather than pushing the line wider.
-  if (verdict) slots.push(`engine ${pointName(summary.board, verdict.best.point)}`);
-  else if (summary.ai !== null) slots.push('engine —');
+  if (verdict) {
+    // `BestMove` carries no visit count, and is not gated the way the other
+    // two are: it is the search's most-visited child by construction, which is
+    // the gate.
+    slots.push({
+      key: 'engine',
+      text: `engine ${pointName(summary.board, verdict.best.point)}`,
+      point: bestPointOn(summary.board, verdict) ?? null,
+      line: cut(verdict.best.pv),
+    });
+  } else if (summary.ai !== null) {
+    slots.push({ key: 'engine', text: 'engine —', point: null, line: [] });
+  }
 
-  return slots.join(' · ');
+  return slots;
+}
+
+/** The same three slots as one line of text, for a board with no engine on it. */
+function costLine(list: readonly Branch[]): string {
+  return list.map((branch) => branch.text).join(' · ');
 }
 
 /**
@@ -1505,6 +1606,12 @@ function reviewPanel(
   const board: HTMLElement = el('div', { class: 'board' });
   const caption: HTMLElement = el('p', { class: 'caption muted' });
   const cost: HTMLElement = el('p', { class: 'caption cost muted' });
+  /*
+   * The note a printed diagram carries: the plies the end position cannot
+   * name. Empty and out of the layout except in the variation mode, which is
+   * the only place a board here shows a sequence rather than a comparison.
+   */
+  const note: HTMLElement = el('p', { class: 'caption footnote muted' });
   const nav: HTMLElement = el('div', { class: 'nav' });
   const strip: HTMLElement = el('div', {
     // Bars need a scale, and with no engine there is nothing to scale. The
@@ -1512,7 +1619,14 @@ function reviewPanel(
     class: scored ? 'strip chart' : 'strip',
     id: STRIP_ID,
   });
-  const panel: HTMLElement = el('div', { class: 'review' }, [board, caption, cost, nav, strip]);
+  const panel: HTMLElement = el('div', { class: 'review' }, [
+    board,
+    caption,
+    cost,
+    note,
+    nav,
+    strip,
+  ]);
 
   /**
    * Verdicts by move number, rebuilt from the *current* summary on every draw.
@@ -1528,6 +1642,15 @@ function reviewPanel(
   let at: Cursor = null;
   /** The verdict the caption was last drawn from, so a redraw can be skipped. */
   let shown: Verdict | undefined;
+  /**
+   * The branch whose line is on the board, or null for the comparison.
+   *
+   * A mode, because a board holds one line at a time: three candidates for one
+   * empty point is a comparison, and a variation is a sequence (design §6.2).
+   * It is not sticky across moves — see `onKey` — so it lives here with the
+   * cursor rather than anywhere a move can outlive it.
+   */
+  let showing: BranchKey | null = null;
 
   const found: Set<number> = engineMoves(summary);
   const stops: readonly Stop[] = reviewStops(summary);
@@ -1562,17 +1685,108 @@ function reviewPanel(
     if (target !== undefined) go(target);
   };
 
-  /** The engine's move, where it is a point on the board rather than a pass. */
-  const bestPointOf = (verdict: Verdict | undefined): number | undefined => {
-    /*
-     * A best move that is a pass is numbered past the last intersection, and
-     * marking it would put a mark at no intersection at all — most likely now
-     * that the end of a game is prompted, which is exactly where the engine
-     * wants to pass.
-     */
+  const bestPointOf = (verdict: Verdict | undefined): number | undefined =>
+    bestPointOn(current(summary).board, verdict);
+
+  /**
+   * The branches of the stop being read, or none where there are none to read:
+   * the final position, and a prompt the session skipped past.
+   *
+   * Rebuilt on demand rather than held, for the same reason `verdictsNow` is:
+   * a verdict landing an hour into a heal turns an empty slot into a line.
+   */
+  const branchesHere = (): Branch[] => {
+    const stop: Stop | undefined = at === null ? undefined : stops[at];
+    if (!stop || stop.index === null) return [];
     const live: Summary = current(summary);
-    const point: number | undefined = verdict?.best.point;
-    return point !== undefined && point < live.board.rows * live.board.cols ? point : undefined;
+    return branches(
+      live,
+      live.rows[stop.index],
+      session.guesses[stop.index],
+      verdictsNow().get(stop.moveNumber),
+    );
+  };
+
+  /** Show a branch's line, or leave the mode. The board is redrawn either way. */
+  const enter = (key: BranchKey | null): void => {
+    showing = key;
+    drawBoard();
+  };
+
+  /**
+   * Move through the branches that have a line, entering the mode if it is off.
+   *
+   * Entry is on our own prediction, falling through in the buttons' fixed order
+   * to the first branch that has one: one rule, rather than a judgment that
+   * changes per move. Returns whether it did anything, so a key press that
+   * cannot act still scrolls the page.
+   */
+  const cycle = (step: number): boolean => {
+    const usable: Branch[] = branchesHere().filter((branch) => branch.line.length > 0);
+    if (usable.length === 0) return false;
+
+    const from: number = usable.findIndex((branch) => branch.key === showing);
+    if (from === -1) enter(usable[0].key);
+    else enter(usable[(from + step + usable.length) % usable.length].key);
+    return true;
+  };
+
+  /**
+   * The cost line as controls.
+   *
+   * Toggle buttons and *not* radios: where two of the branches are the same
+   * point both buttons light, and a radiogroup with two checked members is
+   * invalid and is read aloud wrongly. They keep the line's discipline —
+   * three slots of the same footprint whether disabled, idle or pressed — so
+   * that the board never moves under a reader stepping with the arrow keys.
+   *
+   * With no engine there is never a line to show, so the slots stay the plain
+   * text they have always been rather than a row of permanently dead buttons.
+   */
+  const drawBranches = (list: readonly Branch[]): void => {
+    if (!scored) {
+      cost.textContent = costLine(list);
+      return;
+    }
+
+    const nodes: Child[] = [];
+    for (const branch of list) {
+      if (nodes.length > 0) nodes.push(' · ');
+      const pressed: boolean = showing === branch.key;
+      const node: HTMLElement = el(
+        'button',
+        { type: 'button', class: 'branch', 'aria-pressed': String(pressed) },
+        [branch.text],
+      );
+      if (branch.line.length === 0) {
+        node.toggleAttribute('disabled', true);
+      } else {
+        const where: string = branch.point === null ? 'this move' : pointName(current(summary).board, branch.point);
+        node.title = pressed ? `Back to the comparison (Esc)` : `Show the line after ${where}`;
+        node.addEventListener('click', () => enter(pressed ? null : branch.key));
+      }
+      nodes.push(node);
+    }
+    cost.replaceChildren(...nodes);
+  };
+
+  /**
+   * One branch's line, played out to the position it ends in.
+   *
+   * Markers pinned to the position before the move cannot show a capture, and
+   * a line that captures is the line worth reading — so the board is replayed
+   * rather than annotated, and everything else comes off it: the other
+   * branches' marks, and the `last` dot, which would sit on a numbered stone.
+   */
+  const drawVariation = (branch: Branch, move: GameMove, where: string): void => {
+    const walk: Variation = variationFrom(move.before, branch.line, move.color);
+    renderGoban(walk.position, board, { showCoordinates: true, markers: walk.markers });
+
+    // A breadcrumb: where you are, and the way back in the same words.
+    const from: string =
+      branch.point === null ? '' : ` · after ${pointName(walk.position, branch.point)}`;
+    caption.textContent = `${where}${from} · Esc to go back`;
+    note.textContent = footnoteLine(walk);
   };
 
   /*
@@ -1623,6 +1837,7 @@ function reviewPanel(
 
     caption.textContent = `${where} · skipped`;
     cost.textContent = skippedLine(current(summary), move, verdict);
+    note.textContent = '';
   };
 
   /** A prompt the session answered: your move, the game's, and the engine's. */
@@ -1632,6 +1847,23 @@ function reviewPanel(
     const move: GameMove = session.game.moves[row.moveNumber - 1];
     const verdict: Verdict | undefined = verdictsNow().get(row.moveNumber);
     shown = verdict;
+
+    /*
+     * The mode first, since it decides what the board is. A branch can lose
+     * its line under the mode — a heal replacing a verdict, a summary still
+     * filling in — and the answer is the comparison, never an empty board.
+     */
+    const list: Branch[] = branchesHere();
+    const chosen: Branch | undefined = list.find(
+      (branch) => branch.key === showing && branch.line.length > 0,
+    );
+    if (!chosen) showing = null;
+    drawBranches(list);
+    if (chosen) {
+      drawVariation(chosen, move, where);
+      return;
+    }
+    note.textContent = '';
 
     /*
      * Blue for the move the game played, red for yours, green for the
@@ -1720,16 +1952,30 @@ function reviewPanel(
       showCoordinates: true,
       markers: marks,
       ghosts: summary.color,
+      // Clicking a mark shows that branch's line. The marks are the three
+      // candidates, so the board is already the control; a click anywhere else
+      // is a click on the wood and means nothing here.
+      onPoint: (point: number): void => {
+        const branch: Branch | undefined = list.find(
+          (one) => one.point === point && one.line.length > 0,
+        );
+        if (branch) enter(branch.key);
+      },
     });
 
     // Where you are; the line below says what happened. Which move each side
     // played was in both, and naming it twice is what made the pair wrap.
     const took: string = row.elapsedMs === null ? '' : ` · ${duration(row.elapsedMs)}`;
     caption.textContent = `${where}${took}`;
-    cost.textContent = costLine(current(summary), row, verdict);
   };
 
   const drawBoard = (): void => {
+    drawStop();
+    // Last, because the stop decides whether the mode survived it.
+    relabel();
+  };
+
+  const drawStop = (): void => {
     if (at === null) {
       renderGoban(finalPosition(session.game), board, { showCoordinates: true });
       const { result } = session.game.meta;
@@ -1737,6 +1983,7 @@ function reviewPanel(
         ? `Final position — ${result}`
         : 'Final position — the record does not give a result.';
       cost.textContent = '';
+      note.textContent = '';
       return;
     }
 
@@ -1748,11 +1995,28 @@ function reviewPanel(
 
   const go = (next: Cursor): void => {
     at = next;
+    // The mode is not sticky across moves: a mode that follows the cursor is a
+    // second thing to keep track of on every move. Every way of moving comes
+    // through here, so this is the one place that has to say so.
+    showing = null;
     drawBoard();
 
     cells.forEach((cell, index) => cell.classList.toggle('selected', index === at));
     for (const { node, spec } of controls) {
       node.toggleAttribute('disabled', spec.target(at) === undefined);
+    }
+  };
+
+  /*
+   * What the transport row does changes in the mode: it leaves the line first
+   * and then moves. Saying so is the touch reader's only warning — they have
+   * no Esc, and the pressed button is the only other way out.
+   */
+  const relabel = (): void => {
+    for (const { node, spec } of controls) {
+      const title: string = showing === null ? spec.title : `${spec.title} — leaves the line`;
+      node.title = title;
+      node.setAttribute('aria-label', title);
     }
   };
 
@@ -1774,11 +2038,44 @@ function reviewPanel(
       target instanceof HTMLElement && ['INPUT', 'TEXTAREA'].includes(target.tagName);
     if (typing) return;
 
+    /*
+     * The mode borrows the keys that are already here rather than adding any.
+     * Up and down cycle the branches in the order the buttons stand in; Esc
+     * leaves, as it does everywhere; and left and right — the move navigation,
+     * with its Shift and Ctrl variants — leave the mode and *then* navigate,
+     * so a reader who pressed → to see the next miss gets the next miss and
+     * not a dead key.
+     */
+    if (event.key === 'Escape') {
+      if (showing === null) return;
+      event.preventDefault();
+      enter(null);
+      return;
+    }
+
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      if (event.ctrlKey || event.shiftKey) return;
+      // Only once it acts, so an arrow key with no line behind it still
+      // scrolls the page.
+      if (cycle(event.key === 'ArrowUp' ? -1 : 1)) event.preventDefault();
+      return;
+    }
+
     const key: NavButton['key'] | undefined = shortcutFor(event);
     if (!key) return;
 
     const spec: NavButton | undefined = controls.find((c) => c.spec.key === key)?.spec;
     if (!spec) return;
+
+    if (showing !== null) {
+      event.preventDefault();
+      const target: Target = spec.target(at);
+      // Leaving is the half that always happens: at the end of the session
+      // there is nowhere to go, and the key should still get out of the line.
+      if (target === undefined) enter(null);
+      else go(target);
+      return;
+    }
 
     // Only once it is going to act, so an arrow key the review cannot use
     // still scrolls the page.
