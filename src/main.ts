@@ -56,6 +56,12 @@ type Screen =
   | {
       readonly name: 'landing';
       readonly error?: string;
+      /**
+       * The text that failed to load, put back in the box. Someone hand-fixing
+       * a record gets their edits back with the complaint about them, rather
+       * than an empty box and no way to see what was wrong.
+       */
+      readonly sgf?: string;
       /** Set when the error is a link that would not open, so it can be shown. */
       readonly failedLink?: string;
     }
@@ -358,7 +364,7 @@ function show(next: Screen): void {
  */
 function loadGame(sgf: string): boolean {
   if (sgf.trim() === '') {
-    show({ name: 'landing', error: 'Paste a game record first, or drop an .sgf file.' });
+    show({ name: 'landing', sgf, error: 'Paste a game record first, or choose an .sgf file.' });
     return false;
   }
 
@@ -367,6 +373,7 @@ function loadGame(sgf: string): boolean {
     // technically true and no help at all.
     show({
       name: 'landing',
+      sgf,
       error: 'That looks like an exported result, not a game record. Load the .sgf it was played on.',
     });
     return false;
@@ -382,7 +389,7 @@ function loadGame(sgf: string): boolean {
     const detail: string = error instanceof Error ? error.message : String(error);
     const prefix: string =
       error instanceof GameError ? '' : "That doesn't look like a valid SGF file. ";
-    show({ name: 'landing', error: `${prefix}${detail}` });
+    show({ name: 'landing', sgf, error: `${prefix}${detail}` });
     return false;
   }
 }
@@ -551,6 +558,7 @@ function draw(): void {
   switch (screen.name) {
     case 'landing':
       renderLanding(root, {
+        sgf: screen.sgf,
         error: screen.error,
         failedLink: screen.failedLink,
         onLoad: loadGame,

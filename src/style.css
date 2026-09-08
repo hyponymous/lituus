@@ -156,6 +156,17 @@ p {
   resize: vertical;
 }
 
+/* Hidden, not absent: the button clicks it, so it has to stay in the tree and
+   stay focusable enough to open the picker. `display: none` would keep some
+   browsers from opening it at all. */
+.file-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .error {
   padding: 0.75rem 1rem;
   border-left: 3px solid var(--miss);
@@ -204,8 +215,16 @@ button {
   cursor: pointer;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   border-color: var(--accent);
+}
+
+/* Matches `.nav-button:disabled` below: dimmed, and no hover promise it will
+   not keep. */
+button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.4;
 }
 
 button.primary {

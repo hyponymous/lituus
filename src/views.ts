@@ -83,6 +83,8 @@ function colorName(color: Color): string {
 // ── Landing ──────────────────────────────────────────────────────────────────
 
 export interface LandingProps {
+  /** Text to start the box with: what failed to load, so it is not lost. */
+  readonly sgf?: string;
   readonly error?: string;
   /**
    * The fragment of a link that failed to open, if that is why there is an
@@ -100,17 +102,48 @@ export function renderLanding(root: HTMLElement, props: LandingProps): void {
     spellcheck: 'false',
     placeholder: 'Paste SGF text here, or drop a .sgf file anywhere on the page.',
   }) as HTMLTextAreaElement;
+  area.value = props.sgf ?? '';
 
   const load = (): void => props.onLoad(area.value);
+
+  /**
+   * The third way in, for the file that is neither in the clipboard nor worth
+   * dragging: a real file picker. The input itself is hidden and driven by the
+   * button, because a bare file input cannot be styled to sit beside one.
+   */
+  const picker = el('input', {
+    type: 'file',
+    accept: '.sgf,application/x-go-sgf',
+    class: 'file-picker',
+  }) as HTMLInputElement;
+  picker.addEventListener('change', (): void => {
+    const file: File | undefined = picker.files?.[0];
+    // Clear the input first, so picking the same file twice still fires.
+    picker.value = '';
+    if (file) void file.text().then(props.onLoad);
+  });
+
+  // Nothing to load until there is text, and a button that only ever answers
+  // "paste something first" is worse than one that waits.
+  const loadButton = button('Load game', load, { class: 'primary' }) as HTMLButtonElement;
+  const syncLoadButton = (): void => {
+    loadButton.disabled = area.value.trim() === '';
+  };
+  syncLoadButton();
+  area.addEventListener('input', syncLoadButton);
 
   const parts: Child[] = [
     el('h2', {}, ['Load a game']),
     el('p', { class: 'muted' }, [
-      'Paste a game record, or drop an .sgf file onto the page. ' +
+      'Paste a game record, choose an .sgf file, or drop one onto the page. ' +
         'Nothing is uploaded; the whole session runs in this tab.',
     ]),
     area,
-    el('div', { class: 'actions' }, [button('Load game', load, { class: 'primary' })]),
+    el('div', { class: 'actions' }, [
+      loadButton,
+      button('Choose a file…', () => picker.click()),
+      picker,
+    ]),
   ];
 
   if (props.error) {
