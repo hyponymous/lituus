@@ -43,9 +43,12 @@ import {
  * tail of a fifteen-ply line from `search.ts` is simply where the search did
  * not go.
  *
- * This becomes a per-line question the moment a deeper search reaches the app
- * — the line's own visit counts against the same floor a point loss uses — and
- * not before.
+ * A line that a *separate*, deeper search bought is the exception, and it says
+ * so: `MoveVerdict.pvVisits` is the receipt, and such a line is shown at the
+ * length it was recorded rather than at this one. That is length belonging to
+ * the line instead of to a constant (PRD §5). Cutting a live line by its own
+ * per-ply visit counts is the same rule again, and waits on `search.ts`
+ * reporting them.
  */
 export const SHOWN_PLIES = 3;
 

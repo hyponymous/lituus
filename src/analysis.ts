@@ -89,6 +89,24 @@ export interface MoveVerdict {
    * imply a confidence the search does not have.
    */
   readonly pv: readonly number[];
+  /**
+   * The budget behind the *line*, where a separate, deeper search bought it.
+   *
+   * Absent on almost everything, and that absence is the common case rather
+   * than a gap: a line found by the same search as the numbers is trustworthy
+   * exactly as deep as that search went, which is what `SHOWN_PLIES` says.
+   * Present only where a second pass re-read this move at a much larger budget
+   * (`experiments/katago/deepen.ts`) and the line may honestly run longer.
+   *
+   * It is deliberately not `visits`, and does not replace it. `visits` is the
+   * budget behind the *estimate* — behind `loss` — and a deeper search may
+   * lengthen a line and may never revise a figure (`docs/prd-ai-scoring.md`
+   * §5): two point-loss figures for one move, measured at two budgets and
+   * disagreeing by a point, is worse than one figure. Keeping them in separate
+   * fields is what stops the deeper number leaking into a band, a rate or a
+   * total.
+   */
+  readonly pvVisits?: number;
 }
 
 /**

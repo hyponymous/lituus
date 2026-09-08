@@ -108,6 +108,18 @@ test('a line is cut to what the search paid for', () => {
   assert.equal(list[0].line[0], at('D16'), 'and starts with the move it is the line for');
 });
 
+test('a line a deeper search paid for is shown at the length it was recorded', () => {
+  // Length belongs to the line, not to a constant (PRD §5): the pass that
+  // bought this one truncated it with its own budget in mind, so the view
+  // trusts it whole where it cuts everything else.
+  const deep: MoveVerdict = { ...move(at('D16'), 1.2, 50), pvVisits: 4000 };
+  const list: Branch[] = slots(verdict({ guessed: deep }));
+
+  assert.equal(list[0].line.length, deep.pv.length);
+  assert.ok(deep.pv.length > SHOWN_PLIES, 'and it is longer than the constant it escapes');
+  assert.equal(list[1].line.length, SHOWN_PLIES, 'the branch beside it is cut as ever');
+});
+
 test('a branch the search barely looked at has no line to walk', () => {
   // Under MIN_TRUSTED_VISITS: not worth quoting as a number, so not worth
   // walking either.

@@ -57,6 +57,14 @@ export interface RecordedRow {
   readonly guess?: string;
   readonly guessLoss?: number;
   readonly guessPv?: readonly string[];
+  /**
+   * Where a line came from the deepening pass rather than from the run, the
+   * budget it was searched at. Per line, because the pass may have re-read one
+   * of the two moves and not the other. Never a number's provenance — the
+   * deepening pass revises no figure.
+   */
+  readonly playedPvVisits?: number;
+  readonly guessPvVisits?: number;
 }
 
 /** The `analyze.ts` / backfill row shape, as those files are written. */
@@ -96,7 +104,23 @@ export interface RecordedBackfill {
 }
 
 /**
- * Join the three files the harnesses write into one row per position.
+ * The `deepen.ts` row shape: a longer line for a move that earned one.
+ *
+ * Lines and nothing else, which is the file's own discipline as well as this
+ * module's. The pass re-searches the handful of biggest mistakes at a much
+ * larger budget, and keeps only their variations: its scores would be measured
+ * at a different budget from every other number in the review (PRD §5).
+ */
+export interface RecordedDeep {
+  readonly turn: number;
+  /** What that pass spent, far above the run's own budget. */
+  readonly visits: number;
+  readonly playedPv?: readonly string[];
+  readonly guessPv?: readonly string[];
+}
+
+/**
+ * Join the files the harnesses write into one row per position.
  *
  * The backfill pass repairs positions whose played move the root search barely
  * looked at, so it wins over the base analysis wherever it has an opinion — but
@@ -105,6 +129,12 @@ export interface RecordedBackfill {
  * meaningless root, so the loss has to be measured against the *unrestricted*
  * query's root, which stays here (`docs/prd-ai-scoring.md` §5).
  *
+ * The deepening pass is the opposite kind of input: it wins on *lines* and on
+ * nothing else. It never carries a loss, a visit count for an estimate, or a
+ * root, because a figure it produced would be measured at a budget no other
+ * figure in the review shares — so a deeper search may lengthen a line here
+ * and may never revise a number (PRD §5).
+ *
  * Everything is keyed by `turn`, which is what the harnesses agree on; the
  * move number comes from the analysis rows.
  */
@@ -112,13 +142,16 @@ export function joinRecorded(
   analysis: readonly RecordedAnalysis[],
   guesses: readonly RecordedGuess[] = [],
   backfill: readonly RecordedBackfill[] = [],
+  deep: readonly RecordedDeep[] = [],
 ): RecordedRow[] {
   const repairs = new Map(backfill.map((row) => [row.turn, row]));
   const guessed = new Map(guesses.map((row) => [row.turn, row]));
+  const deeper = new Map(deep.map((row) => [row.turn, row]));
 
   return analysis.map((row: RecordedAnalysis): RecordedRow => {
     const repair: RecordedBackfill | undefined = repairs.get(row.turn);
     const guess: RecordedGuess | undefined = guessed.get(row.turn);
+    const long: RecordedDeep | undefined = deeper.get(row.turn);
 
     // A repair supersedes the base row's verdict on the played move, and brings
     // the full visit budget with it — that is what forcing buys.
@@ -129,7 +162,9 @@ export function joinRecorded(
       played: row.played,
       pointLoss: repaired ? (repair?.pointLoss ?? null) : row.pointLoss,
       playedVisits: repaired ? null : (row.playedVisits ?? null),
-      playedPv: repaired ? repair?.playedPv : row.playedPv,
+      // The deep line wins where there is one, and only over the line.
+      playedPv: long?.playedPv ?? (repaired ? repair?.playedPv : row.playedPv),
+      playedPvVisits: long?.playedPv === undefined ? undefined : long.visits,
       backfilled: repaired,
       best: row.best,
       bestScoreLead: row.bestScoreLead,
@@ -141,7 +176,8 @@ export function joinRecorded(
       rootVisits: row.rootVisits,
       guess: guess?.guess,
       guessLoss: guess?.guessLoss,
-      guessPv: guess?.guessPv,
+      guessPv: long?.guessPv ?? guess?.guessPv,
+      guessPvVisits: long?.guessPv === undefined ? undefined : long.visits,
     };
   });
 }
@@ -192,6 +228,7 @@ function guessVerdict(
     visits,
     forced: true,
     pv: variation(board, row.guessPv),
+    ...(row.guessPvVisits === undefined ? {} : { pvVisits: row.guessPvVisits }),
   };
 }
 
@@ -208,6 +245,7 @@ function playedVerdict(board: Position, row: RecordedRow, visits: number): MoveV
     visits: row.backfilled === true ? visits : (row.playedVisits ?? 0),
     forced: row.backfilled === true,
     pv: variation(board, row.playedPv),
+    ...(row.playedPvVisits === undefined ? {} : { pvVisits: row.playedPvVisits }),
   };
 }
 

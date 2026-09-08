@@ -19,6 +19,7 @@ import {
   joinRecorded,
   type RecordedAnalysis,
   type RecordedBackfill,
+  type RecordedDeep,
   type RecordedGuess,
   type RecordedRow,
 } from '../src/replay.ts';
@@ -81,6 +82,65 @@ test('the join pairs analysis, guesses and backfill by turn', () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].guess, 'D16');
   assert.equal(rows[0].guessLoss, 2.75);
+});
+
+const DEEP: RecordedDeep = {
+  turn: 0,
+  visits: 4000,
+  playedPv: ['Q16', 'R16', 'R17', 'Q17', 'S16'],
+  guessPv: ['D16', 'C4', 'D3', 'C6', 'F3'],
+};
+
+test('a deeper pass wins on the lines, and carries the budget that bought them', () => {
+  const rows: RecordedRow[] = joinRecorded([ANALYSIS], [GUESS], [], [DEEP]);
+
+  assert.deepEqual(rows[0].playedPv, DEEP.playedPv, 'the long line, not the run\'s two plies');
+  assert.deepEqual(rows[0].guessPv, DEEP.guessPv);
+  assert.equal(rows[0].playedPvVisits, 4000);
+  assert.equal(rows[0].guessPvVisits, 4000);
+});
+
+test('a deeper pass revises no number', () => {
+  const plain: RecordedRow = joinRecorded([ANALYSIS], [GUESS])[0];
+  const deep: RecordedRow = joinRecorded([ANALYSIS], [GUESS], [], [DEEP])[0];
+
+  /*
+   * The invariant of PRD §5, and the thing that would rot first: the moment a
+   * deepened search's loss reaches a band, a rate or a total, revisiting a
+   * move silently changes the score of a session that is already finished.
+   */
+  const figures = (row: RecordedRow): unknown =>
+    [row.pointLoss, row.playedVisits, row.guessLoss, row.rootScoreLead, row.rootVisits,
+     row.bestScoreLead, row.best, row.backfilled];
+  assert.deepEqual(figures(deep), figures(plain));
+});
+
+test('a deep row that carries only one line leaves the other where it was', () => {
+  // The pass re-reads the played move and the guess independently, and either
+  // may be missing — a budget on the line that did not come from it would be
+  // a claim about a search that never ran.
+  const rows: RecordedRow[] = joinRecorded(
+    [ANALYSIS],
+    [GUESS],
+    [],
+    [{ turn: 0, visits: 4000, playedPv: DEEP.playedPv }],
+  );
+
+  assert.equal(rows[0].playedPvVisits, 4000);
+  assert.deepEqual(rows[0].guessPv, GUESS.guessPv, 'still the guesses pass\' own line');
+  assert.equal(rows[0].guessPvVisits, undefined);
+});
+
+test('a deep line reaches the verdict as the line, with its own budget beside it', async () => {
+  const verdict: Verdict = await evaluate(joinRecorded([ANALYSIS], [GUESS], [], [DEEP]));
+
+  assert.deepEqual(verdict.played?.pv, DEEP.playedPv?.map(at));
+  assert.equal(verdict.played?.pvVisits, 4000);
+  assert.equal(verdict.played?.visits, 18, 'the estimate is still the run\'s own');
+  assert.equal(verdict.guessed?.pvVisits, 4000);
+  // The pass re-reads the played move and the guess, never the root, so
+  // `BestMove` has no such field to carry and its line is the run's own.
+  assert.deepEqual(verdict.best.pv, ANALYSIS.bestPv?.map(at));
 });
 
 test('a backfilled repair supersedes the base verdict on the played move', () => {

@@ -162,6 +162,11 @@ function restoreMove(board: Position, value: unknown, what: string): MoveVerdict
     visits: asNumber(row.visits, `${what}.visits`),
     forced: row.forced === true,
     pv: restoreLine(board, row.pv),
+    // Absent in anything exported before the field existed, and in every
+    // result whose lines all came from the run's own budget.
+    ...(row.pvVisits === undefined
+      ? {}
+      : { pvVisits: asNumber(row.pvVisits, `${what}.pvVisits`) }),
   };
 }
 

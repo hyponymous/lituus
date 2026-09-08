@@ -1536,10 +1536,18 @@ export function branches(
    */
   const walkable = (move: MoveVerdict | null | undefined): readonly number[] => {
     if (!move || move.visits < MIN_TRUSTED_VISITS) return [];
-    return cut(move.pv);
+    return cut(move.pv, move.pvVisits);
   };
-  const cut = (pv: readonly number[]): readonly number[] => {
-    const shown: readonly number[] = pv.slice(0, SHOWN_PLIES);
+
+  /*
+   * Length belongs to the line rather than to a constant (PRD §5). A line runs
+   * deeper only where a deeper search paid for it, and `pvVisits` is that
+   * receipt: with one, the line is trusted at the length it was recorded,
+   * since the pass that bought it truncated it with its own budget in mind.
+   * Without one it is cut to what the run's budget paid for.
+   */
+  const cut = (pv: readonly number[], bought?: number): readonly number[] => {
+    const shown: readonly number[] = bought === undefined ? pv.slice(0, SHOWN_PLIES) : pv;
     return shown.length > 1 ? shown : [];
   };
 

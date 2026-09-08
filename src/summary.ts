@@ -712,6 +712,11 @@ function exportMove(verdict: MoveVerdict | null, board: Position): object | null
         visits: verdict.visits,
         forced: verdict.forced,
         pv: verdict.pv.map((point: number) => pointName(board, point)),
+        // Only where a deeper pass bought the line, which is a handful of
+        // moves in a game and none at all in most. Omitted rather than
+        // written null, so a result with no deep lines is the file it always
+        // was and the fixture check stays quiet.
+        ...(verdict.pvVisits === undefined ? {} : { pvVisits: verdict.pvVisits }),
       };
 }
 

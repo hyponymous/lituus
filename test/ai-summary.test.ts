@@ -464,6 +464,30 @@ test('an exported result restores its verdicts and recomputes the same figures',
   assert.deepEqual(driftFrom(exported, summarize(session, analysis)), []);
 });
 
+test("a deep line's budget survives the export, and a plain line adds no field", () => {
+  const deep: MoveVerdict = {
+    ...move(at('D16'), 0.5),
+    pv: [at('D16'), at('Q4'), at('C6'), at('D4')],
+    pvVisits: 4000,
+  };
+  const { summary } = play(['D16'], [verdict({ moveNumber: 1, guessed: deep })]);
+  const exported: string = toJSON(summary);
+
+  // A line bought by a second, deeper pass is the only thing that carries one,
+  // so the field has to survive the trip or the length rule loses its receipt.
+  assert.match(exported, /"pvVisits": 4000/);
+  assert.equal(
+    (exported.match(/pvVisits/g) ?? []).length,
+    1,
+    'and nothing else gains one: an omitted field is what "the run\'s own budget" means',
+  );
+
+  const session: Session = restoreSession(exported);
+  const analysis: Analysis | null = restoreAnalysis(exported, session.game);
+  assert.equal(analysis?.verdicts.get(1)?.guessed?.pvVisits, 4000);
+  assert.equal(analysis?.verdicts.get(1)?.played?.pvVisits, undefined);
+});
+
 test('the round trip is exact for losses that sit on a rounding boundary', () => {
   // The bug this catches: verdicts exported finer than the figures derived from
   // them round twice on the way back — 0.5249 to 0.525 to 0.53, where the
