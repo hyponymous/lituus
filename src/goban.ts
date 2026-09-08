@@ -120,8 +120,10 @@ function ghostFill(color: string, ghosts: Color): string {
 /**
  * `last` marks the stone most recently played, as a board would by memory.
  * The others belong to the reveal: where the move went, where you guessed.
+ * `line` is the odd one out: it belongs to a variation replayed onto the
+ * board, so it is a number on a stone rather than a mark on an empty point.
  */
-export type MarkerKind = 'actual' | 'guess' | 'hit' | 'last' | 'best';
+export type MarkerKind = 'actual' | 'guess' | 'hit' | 'last' | 'best' | 'line';
 
 export interface Marker {
   readonly index: number;
@@ -406,6 +408,19 @@ function drawMarker(svg: SVGElement, pos: Position, marker: Marker, ghosts: Colo
     svg.appendChild(
       svgEl('circle', { cx: x, cy: y, r: CELL * 0.13, fill, class: 'mark mark-last' }),
     );
+    return;
+  }
+
+  /*
+   * A ply of a variation. Every other numbered mark sits on an empty point,
+   * and this one sits on the stone it *is*: the line has been played out, so
+   * there is nothing to draw but the number, in whichever ink reads against
+   * the stone under it.
+   */
+  if (marker.kind === 'line') {
+    if (marker.label === undefined) return;
+    const dark: boolean = stoneAt(pos, marker.index) === BLACK;
+    drawLabel(svg, x, y, marker.label, dark ? WHITE_STONE : LABEL_TEXT, marker.kind);
     return;
   }
 
