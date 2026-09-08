@@ -21,7 +21,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { driftFrom, restoreAnalysis, restoreSession } from '../src/dev.ts';
-import { summarize, toText, type Summary } from '../src/summary.ts';
+import { asChange, edge, summarize, toText, type Summary } from '../src/summary.ts';
 import { annotatedSgf } from '../src/annotate.ts';
 import { readGame } from '../src/game.ts';
 import { parse } from '../src/sgf-parser.ts';
@@ -84,6 +84,64 @@ test('the text export names the engine and what was given up', () => {
   // a small negative is a real number here, since a move can beat the
   // engine's own root evaluation by a fraction of a point.
   assert.doesNotMatch(text, /-0\.0+(?!\d)/);
+});
+
+/*
+ * The direction, on every surface at once.
+ *
+ * Move 16 of the fixture: the guess R6 lost 2.72 points and the played move S3
+ * lost -0.23, both from KataGo. So the guess reads as -2.7 wherever it is
+ * printed, the played move as +0.2, and the comparison between them as -3.0 —
+ * and any surface that disagrees with the others has doubled the one negation
+ * a display is allowed. The unit-level half of this is `review-numbers.test.ts`.
+ */
+const COSTLY = { move: 16, loss: 2.72, playedLoss: -0.23 } as const;
+
+test('the fixture still holds the losses these tests read the sign from', () => {
+  const { summary } = restore();
+  const row = summary.rows.find((one) => one.moveNumber === COSTLY.move);
+
+  assert.ok(row, `move ${COSTLY.move} should be one of the predictions`);
+  assert.equal(row.loss, COSTLY.loss);
+  assert.equal(row.playedLoss, COSTLY.playedLoss);
+  assert.equal(row.hit, false);
+});
+
+test('a costly guess reads as a cost in the text export', () => {
+  const { summary } = restore();
+  const text: string = toText(summary);
+  const line: string | undefined = text
+    .split('\n')
+    .find((one) => one.trimStart().startsWith(`${COSTLY.move} `));
+
+  assert.ok(line, 'the move should have a line of its own');
+  assert.match(line, /miss/);
+  assert.match(line, /-2\.7/, 'a guess that cost 2.72 points is -2.7, never +2.7');
+});
+
+test('a costly guess reads the same way in the annotated record', () => {
+  const { session, summary } = restore();
+  const sgf: string = annotatedSgf(session, summary);
+
+  // "Your guess (lituus). -2.7 — the game played +0.2." — the comment for the
+  // one move, with both figures the way up a reader expects them.
+  assert.match(sgf, /Your guess \(lituus\)\. -2\.7/);
+  assert.match(sgf, /the game played \+0\.2/);
+});
+
+test('the summary headline is your loss against the game s, not its negation', () => {
+  const { summary } = restore();
+  const { ai } = summary;
+  assert.ok(ai?.against, 'the fixture is a scored session');
+
+  // Both sides as costs, and the edge between them from the same two numbers.
+  assert.equal(asChange(ai.against.yourLoss), edge(ai.against.yourLoss, 0));
+  const better: boolean = ai.against.yourLoss < ai.against.playedLoss;
+  assert.equal(
+    edge(ai.against.yourLoss, ai.against.playedLoss).startsWith('+'),
+    better,
+    'the headline is positive exactly when your predictions cost less',
+  );
 });
 
 test('the annotated record still parses back as the game that was played', () => {

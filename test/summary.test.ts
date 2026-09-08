@@ -24,7 +24,7 @@ import {
   longestStreak,
   percent,
   phaseOf,
-  signed,
+  asChange,
   summarize,
   tenukiAgreement,
   toJSON,
@@ -612,12 +612,12 @@ test('percentages round to whole numbers', () => {
 });
 
 test('a signed loss decides its sign at the precision it prints', () => {
-  assert.equal(signed(0), '+0.0', 'negating zero must not produce "-0.0"');
-  assert.equal(signed(3.14), '-3.1');
-  assert.equal(signed(-0.4), '+0.4');
+  assert.equal(asChange(0), '+0.0', 'negating zero must not produce "-0.0"');
+  assert.equal(asChange(3.14), '-3.1');
+  assert.equal(asChange(-0.4), '+0.4');
 
   // A phase median lives two decimals down, where a tenth is a real figure
   // rather than a rounding artifact.
-  assert.equal(signed(0.04, 2), '-0.04');
-  assert.equal(signed(0.001, 2), '+0.00', 'too small to show is too small to sign');
+  assert.equal(asChange(0.04, 2), '-0.04');
+  assert.equal(asChange(0.001, 2), '+0.00', 'too small to show is too small to sign');
 });

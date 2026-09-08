@@ -30,7 +30,7 @@ import {
 } from './analysis.ts';
 import type { GameNode, GameTree, Props } from './sgf-parser.ts';
 import { serialize } from './sgf-writer.ts';
-import { signed, summarize, toText, type Summary } from './summary.ts';
+import { asChange, summarize, toText, type Summary } from './summary.ts';
 import { BLACK, toRowCol, type Color, type Position } from './rules.ts';
 import type { Session } from './session.ts';
 
@@ -156,13 +156,14 @@ function guessComment(verdict: Verdict | undefined): string {
   if (mine === null) return 'Your guess (lituus).';
 
   const theirs: number | null = verdict ? lossOf(verdict.played) : null;
-  const line: string = `Your guess (lituus). ${signed(mine)}`;
+  const line: string = `Your guess (lituus). ${asChange(mine)}`;
   if (theirs === null) return line;
 
-  const edge: number = theirs - mine;
-  if (edge > MIN_EDGE) return `${line} — better than the game's ${signed(theirs)}.`;
-  if (-edge > MIN_EDGE) return `${line} — the game played ${signed(theirs)}.`;
-  return `${line} (game ${signed(theirs)}).`;
+  // How much better yours was, as a number to compare rather than to print.
+  const gap: number = theirs - mine;
+  if (gap > MIN_EDGE) return `${line} — better than the game's ${asChange(theirs)}.`;
+  if (-gap > MIN_EDGE) return `${line} — the game played ${asChange(theirs)}.`;
+  return `${line} (game ${asChange(theirs)}).`;
 }
 
 /**

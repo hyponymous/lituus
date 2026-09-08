@@ -23,12 +23,13 @@ import {
 import {
   costAgainst,
   costBand,
+  asChange,
   duration,
+  edge,
   emptyPhaseLabel,
   longestStreak,
   percent,
   perPrediction,
-  signed,
   tenukiAgreement,
   failureNote,
   toJSON,
@@ -805,8 +806,8 @@ function headline(summary: Summary): Child[] {
   // Negated, like every figure on this screen: these are losses, and a loss
   // reads negative to a reader (design §6.1).
   const pair: HTMLElement = el('div', { class: 'pair' }, [
-    stat(signed(against.yourLoss, 1), 'you'),
-    stat(signed(against.playedLoss, 1), them),
+    stat(asChange(against.yourLoss, 1), 'you'),
+    stat(asChange(against.playedLoss, 1), them),
   ]);
 
   /*
@@ -827,12 +828,11 @@ function headline(summary: Summary): Child[] {
    * the phrase is the comparison. It also means a level session needs no
    * special case: "+0.4 points vs Black's play" claims nothing.
    */
-  const net: number = against.playedLoss - against.yourLoss;
   return [
-    el('p', { class: 'headline' }, [signed(-net, 1)]),
+    el('p', { class: 'headline' }, [edge(against.yourLoss, against.playedLoss, 1)]),
     el('p', { class: 'pair-unit' }, [`points vs ${them}'s play, ${across}`]),
     el('p', { class: 'pair-aside muted' }, [
-      `${versus}: you ${signed(against.yourLoss, 1)}, ${them} ${signed(against.playedLoss, 1)}.`,
+      `${versus}: you ${asChange(against.yourLoss, 1)}, ${them} ${asChange(against.playedLoss, 1)}.`,
     ]),
   ];
 }
@@ -1075,7 +1075,7 @@ function phaseLabel(
   const moves: number = phase.cost?.moves ?? 0;
   return (
     `${phase.phase}: ${rate}. Average points per prediction vs the engine's best: ` +
-    `you ${signed(per.yours, 2)}, ${them} ${signed(per.played, 2)}, ` +
+    `you ${asChange(per.yours, 2)}, ${them} ${asChange(per.played, 2)}, ` +
     `across the ${moves} both could be scored.`
   );
 }
@@ -1115,7 +1115,7 @@ function phaseBar(
     label = `${phase.phase}: ${rate}, and nothing the engine could score on both sides`;
     if (baseline === 'played') track.push(el('div', { class: 'bar-axis' }));
   } else if (baseline === 'engine') {
-    value = `${signed(per.yours, 2)} · ${signed(per.played, 2)}`;
+    value = `${asChange(per.yours, 2)} · ${asChange(per.played, 2)}`;
     label = phaseLabel(phase, rate, per, colorName(color));
     track.push(...pairedBars(per.yours, per.played, ceiling));
   } else {
@@ -1125,8 +1125,10 @@ function phaseBar(
      * for a figure derived from a whole phase. `signed` handles the sign, so
      * an edge in your favour reads "+0.43" like every other good number here.
      */
+    // The bar needs the number; the label goes through `edge` like every other
+    // figure, so the sign is decided in one place rather than here.
     const delta: number = per.yours - per.played;
-    value = signed(delta, 2);
+    value = edge(per.yours, per.played, 2) ?? '';
     label = phaseLabel(phase, rate, per, colorName(color));
     track.push(el('div', { class: 'bar-axis' }), edgeBar(delta, ceiling));
   }
@@ -1346,8 +1348,9 @@ function cellLabel(row: SummaryRow, scored: boolean): string {
    * within half a point" for a difference of four tenths — the band is the
    * cell's colour, and saying it again in words only crowded out the number
    * the reader hovered to see.
+   *
    */
-  return `${where} — ${signed(-delta, 1)} points versus ${against}`;
+  return `${where} — ${asChange(delta, 1)} points versus ${against}`;
 }
 
 /**
@@ -1431,60 +1434,6 @@ function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean, engine: 
   if (!cell.firstElementChild) cell.append(el('span', { class: 'bar' }));
 }
 
-/**
- * What a move was worth against the one the game played, as the board writes
- * it: "+0.8" for eight tenths better, "-1.2" for worse.
- *
- * The reference is the played move rather than the engine's best, because that
- * is what the colour of the mark already measures, and what every bar in the
- * strip below measures. Two scales on one board is one too many.
- *
- * No floor under it. A mark reading "0" beside a caption reading "-0.7" and
- * "-0.3" is a contradiction the reader has to resolve, and they cannot: it was
- * the mark rounding four tenths away, not the engine disagreeing with itself.
- * `BEAT_MARGIN` still decides colour, which is where a noise floor belongs —
- * it is a judgement about whether a difference is worth acting on, and the
- * number is not a judgement.
- *
- * Null when either side is missing: an unmarked ghost is honest about a
- * comparison that cannot be made, where a "0" would not be.
- */
-function gainOver(played: number | null, mine: number | null): string | null {
-  if (played === null || mine === null) return null;
-  return signed(played - mine, 1);
-}
-
-/**
- * A point loss as the board tools write it: as the change to your score, so a
- * move that cost six points reads "-6.0" rather than "6.0".
- *
- * The sign flips here and nowhere else. `loss` is positive-is-worse throughout
- * the engine and the summary, because it is a difference between two leads and
- * that is the direction the arithmetic runs; a reader looking at a move wants
- * the number KataGo, OGS and AI Sensei would show them, which is the negation.
- *
- * A negative loss is search noise rather than a move that beat perfect play
- * (`analysis.ts`), and it prints as the gain it looks like. Reporting it as
- * zero hid the one thing that would tell a reader the search was noisy — and
- * `signed` already keeps a rounded zero from printing as "-0.0", which is the
- * only part of it that ever read as a broken engine.
- */
-function asChange(loss: number): string {
-  return signed(-loss, 1);
-}
-
-/**
- * What the engine made of one prediction, as a sentence under the caption.
- *
- * Three facts, in the order a reader asks for them: what your move cost, what
- * the game's move cost, and what the engine would have played instead. The
- * first two are the comparison the whole review is built on and the third is
- * the only one that is new information — so the engine's move comes last, and
- * only when it is neither of the two moves already on the board.
- *
- * A missing number is said rather than skipped. "Not scored" and "cost
- * nothing" are different claims, and a blank would be read as the second.
- */
 /**
  * The line under the board for a prompt the session skipped.
  *
@@ -1711,8 +1660,12 @@ function reviewPanel(
      */
     const band: CostBand | 'engine' | null =
       made.guess === best ? 'engine' : live.ai === null ? null : costBand(row, baseline);
+    /*
+     * What your move was worth against the baseline: against the engine's best,
+     * which by definition gave up nothing, or against the move the game played.
+     */
     const gained: string | null =
-      baseline === 'engine' ? gainOver(0, row.loss) : gainOver(row.playedLoss, row.loss);
+      baseline === 'engine' ? edge(row.loss, 0) : edge(row.loss, row.playedLoss);
     // A pass has no place on the board, so it carries no mark. What it cost is
     // still in the line under the board, where it is labelled.
     const yours: Marker | null = made.guess === null ? null : {
@@ -1759,7 +1712,7 @@ function reviewPanel(
       // The engine's own move gave up nothing, so against the game's move it
       // is worth simply what the game's move cost — and against itself, zero.
       const better: string | null =
-        baseline === 'engine' ? '0' : gainOver(row.playedLoss, 0);
+        baseline === 'engine' ? '0' : edge(0, row.playedLoss);
       marks.push({ index: best, kind: 'best', ...(better === null ? {} : { label: better }) });
     }
 

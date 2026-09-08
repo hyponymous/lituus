@@ -609,6 +609,12 @@ function colorName(color: Color): string {
 /**
  * Points from the guessing player's side: positive is good, negative is lost.
  *
+ * Takes a LOSS — positive is worse, as every loss in this codebase is — and
+ * prints it as the change to the score. The negation happens here and must not
+ * happen again at the call site: handing this an already-flipped figure prints
+ * every number backwards, which is how the review came to report a guess that
+ * cost three points as "+3.0".
+ *
  * The convention `experiments/katago/review.ts` settled on against a reader:
  * `+0.4` is four tenths of a point to the good, `-3.1` is three points thrown
  * away. "Lost 3.1" in prose is unambiguous and unreadable in a column of thirty.
@@ -623,9 +629,46 @@ function colorName(color: Color): string {
  * median over a phase is tenths of a point, and at one decimal a whole column
  * of them reads "+0.0".
  */
-export function signed(loss: number, digits = 1): string {
+function signed(loss: number, digits = 1): string {
   const value: number = -loss + 0;
   return `${value < -0.5 * 10 ** -digits ? '-' : '+'}${Math.abs(value).toFixed(digits)}`;
+}
+
+/**
+ * A loss, as the change to your score. The one way a figure reaches a screen.
+ *
+ * `signed` is deliberately not exported. Every display in this product crosses
+ * exactly one negation — losses are positive-is-worse below this line and
+ * negative-is-worse above it — and the way that has twice gone wrong is a call
+ * site doing the flip as well, by negating or by subtracting in reader order.
+ * These two functions take losses and only losses, so there is no arithmetic
+ * left at a call site to get backwards.
+ */
+export function asChange(loss: number, digits = 1): string {
+  return signed(loss, digits);
+}
+
+/**
+ * Your loss against someone else's: positive when yours cost less.
+ *
+ * The arguments are in loss order — mine, then theirs — which is the order the
+ * subtraction runs in and the order the sentence is read in. Null when either
+ * side is missing: an unmarked figure is honest about a comparison that cannot
+ * be made, where a "0" would not be.
+ */
+export function edge(mine: number, theirs: number, digits?: number): string;
+export function edge(
+  mine: number | null,
+  theirs: number | null,
+  digits?: number,
+): string | null;
+export function edge(
+  mine: number | null,
+  theirs: number | null,
+  digits = 1,
+): string | null {
+  if (mine === null || theirs === null) return null;
+  return signed(mine - theirs, digits);
 }
 
 /** A percentage for display. Rounded to whole numbers; nobody needs decimals. */
@@ -890,8 +933,8 @@ export function toText(summary: Summary): string {
     const cost: string =
       per === null || phase.cost === null
         ? ''
-        : `you ${signed(per.yours, 2)}, game ${signed(per.played, 2)} per prediction ` +
-          `(${signed(per.yours - per.played, 2)}, across ${phase.cost.moves})`;
+        : `you ${asChange(per.yours, 2)}, game ${asChange(per.played, 2)} per prediction ` +
+          `(${edge(per.yours, per.played, 2)}, across ${phase.cost.moves})`;
     lines.push(`  ${phase.phase.padEnd(8)} ${detail.padEnd(18)}${cost}`.trimEnd());
   }
 
@@ -917,8 +960,8 @@ export function toText(summary: Summary): string {
     lines.push('', `Engine: ${describeEngine(ai.config)}`);
     if (ai.graded > 0) {
       lines.push(
-        `Your guesses vs the engine's best: ${signed(ai.totalLoss, 1)} across ` +
-          `${ai.graded} of them, median ${signed(ai.medianLoss, 2)}`,
+        `Your guesses vs the engine's best: ${asChange(ai.totalLoss, 1)} across ` +
+          `${ai.graded} of them, median ${asChange(ai.medianLoss, 2)}`,
       );
     }
     if (ai.against !== null) {
@@ -929,14 +972,14 @@ export function toText(summary: Summary): string {
       // Signed, like every figure a reader sees (design §6.1). Raw losses put
       // a minus on the side that did *better*, which is how "them -6.8 points"
       // came to mean the opposite of how it read.
-      const mean = (total: number): string => signed(total / against.moves, 2);
-      const total = (loss: number): string => signed(loss, 1).padStart(7);
+      const mean = (total: number): string => asChange(total / against.moves, 2);
+      const total = (loss: number): string => asChange(loss, 1).padStart(7);
       lines.push(
         `Vs the engine's best, across ${against.moves}:`,
         `  you   ${total(against.yourLoss)}, ` +
-          `median ${signed(against.yourMedian, 2)}, mean ${mean(against.yourLoss)}`,
+          `median ${asChange(against.yourMedian, 2)}, mean ${mean(against.yourLoss)}`,
         `  them  ${total(against.playedLoss)}, ` +
-          `median ${signed(against.playedMedian, 2)}, mean ${mean(against.playedLoss)}`,
+          `median ${asChange(against.playedMedian, 2)}, mean ${mean(against.playedLoss)}`,
         `  net   ${total(against.yourLoss - against.playedLoss)} to you`,
       );
     }
@@ -975,7 +1018,7 @@ export function toText(summary: Summary): string {
   lines.push('', 'Moves:');
   for (const row of summary.rows) {
     const mark: string = row.hit ? 'hit ' : 'miss';
-    const cost: string = row.loss === null ? '' : `  ${signed(row.loss).padStart(6)}`;
+    const cost: string = row.loss === null ? '' : `  ${asChange(row.loss).padStart(6)}`;
     const beat: string = row.beat ? '  beat the game' : '';
     lines.push(
       `  ${String(row.moveNumber).padStart(4)}  ${mark}  ${row.guess} / ${row.actual}${cost}${beat}`,
