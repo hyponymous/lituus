@@ -197,13 +197,14 @@ export interface Summary {
   /** True when the user stopped before the record ran out. */
   readonly abandoned: boolean;
   /**
-   * Move numbers the session went past without answering, in order.
+   * Move numbers the session did not answer, in order — the prompts a skip
+   * jumped over, and the ones left when a session ended early.
    *
-   * Not predictions: they are in no rate, no phase and no export, because they
-   * are moves the user did not answer. They are here so the review can walk
-   * the game rather than only the answers — a board that jumps thirty moves
-   * between one prediction and the next shows a position nobody watched
-   * develop.
+   * Not predictions: they are in no rate and no phase, because they are moves
+   * the user did not answer. They are here so the review can walk the game
+   * rather than only the answers — a board that jumps thirty moves between one
+   * prediction and the next shows a position nobody watched develop, and a run
+   * ended at move 20 of 200 still has a game behind it worth reading.
    */
   readonly skipped: readonly number[];
   /**
@@ -476,22 +477,25 @@ export function duration(ms: number): string {
 }
 
 /**
- * The prompts the session moved past without answering.
+ * The prompts the session did not answer: every one a skip went past, and
+ * every one left on the table when the user ended the session early.
  *
  * Derived rather than recorded. A skip leaves no trace in the guesses — that
- * is the point of it — but every prompt of this colour behind the cursor with
- * no guess against it was skipped, and every prompt at or beyond the cursor
- * was never reached. Those two are different things and only the first belongs
- * to the run.
+ * is the point of it — but a prompt of this colour with no guess against it is
+ * one the run went by, whichever way it went by.
+ *
+ * Jumped-over and never-reached are not distinguished, deliberately. They
+ * differ in what the user meant and not in what happened, and what the review
+ * does with them is the same: walk them, showing the game's move and the
+ * engine's, with nothing of the user's to mark. The score already tells the
+ * other story — `abandoned` and a `total` counting the whole game are what say
+ * a run stopped short.
  */
 function skippedPrompts(session: Session): number[] {
   const answered = new Set<number>(session.guesses.map((made: Guess) => made.moveNumber));
-  // Where the session stopped: the prompt it was sitting on when the user left,
-  // or past the end of the record when it simply ran out.
-  const stoppedAt: number = session.game.moves[session.cursor]?.number ?? Infinity;
 
   return promptableMoves(session.game, session.color)
-    .filter((move) => move.number < stoppedAt && !answered.has(move.number))
+    .filter((move) => !answered.has(move.number))
     .map((move) => move.number);
 }
 

@@ -131,7 +131,8 @@ test('a verdict for a prompt nobody answered is carried, and changes no figure',
   analysis = withVerdict(analysis, verdict({ moveNumber: 3, guessed: null }));
   const after: Summary = summarize(session, analysis);
 
-  assert.deepEqual([...after.skipped], [3]);
+  // Move 3 jumped over, and 7 onward left behind when the session ended.
+  assert.deepEqual([...after.skipped], [3, 7, 9, 11]);
   assert.deepEqual(
     (after.verdicts ?? []).map((one) => one.moveNumber),
     [1, 3, 5],

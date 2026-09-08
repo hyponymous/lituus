@@ -88,7 +88,7 @@ test('prompts the session jumped over are reported as skipped', () => {
   const jumped: Session = skipPrompts(answered, 2);
   const summary: Summary = summarize(endSession(advance(guess(jumped, jumped.move?.index ?? 0))));
 
-  assert.deepEqual([...summary.skipped], [3, 5]);
+  assert.deepEqual([...summary.skipped], [3, 5, 9, 11]);
   assert.deepEqual(
     summary.rows.map((row) => row.moveNumber),
     [1, 7],
@@ -98,13 +98,16 @@ test('prompts the session jumped over are reported as skipped', () => {
   assert.equal(summary.score.hits, 2);
 });
 
-test('prompts after the session ended are not reported as skipped', () => {
+test('prompts left when the session ended early are skipped too', () => {
   const game: Game = longGame(12);
   const start: Session = startSession(game, BLACK);
   const summary: Summary = summarize(endSession(advance(guess(start, start.move?.index ?? 0))));
 
-  assert.deepEqual([...summary.skipped], []);
+  // Answered move 1 and walked away: the rest of Black's moves are unanswered,
+  // and the review walks them like any other skip.
+  assert.deepEqual([...summary.skipped], [3, 5, 7, 9, 11]);
   assert.equal(summary.abandoned, true);
+  assert.equal(summary.score.guessed, 1);
 });
 
 test('a session played straight through skips nothing', () => {
