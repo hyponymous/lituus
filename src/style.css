@@ -233,6 +233,16 @@ button.primary {
 }
 
 /*
+ * The skips are not answers. They are drawn quieter than `Pass` beside them,
+ * because a session is meant to be played rather than walked past — the way
+ * out of a move should be findable without being the thing the eye lands on.
+ */
+.actions button.skip {
+  color: var(--muted);
+  padding: 0.5rem 0.75rem;
+}
+
+/*
  * Leaving is not a move. `Pass` is an answer and sits with the loop's own
  * controls; this pushes the way out to the far end, so the click that ends a
  * session is nowhere near the click that answers a prompt.
@@ -782,6 +792,17 @@ section .muted {
 .strip.chart .cell:not(.up):not(.down) .bar {
   top: calc(50% - 0.5px);
   height: 1px;
+}
+
+/* A prompt the session skipped is a gap in the run rather than a result:
+   nothing was answered, so there is nothing to measure and no band to measure
+   it in. A hairline on the axis in both strips — enough to find and click, not
+   enough to read as a prediction. */
+.strip .cell.skipped .bar {
+  top: calc(50% - 0.5px);
+  bottom: auto;
+  height: 1px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
 }
 
 /* A band names a colour rather than painting anything, so the bar and anything

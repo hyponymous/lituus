@@ -20,6 +20,7 @@ import {
   lastPlayed,
   passGuess,
   score,
+  skipPrompts,
   startSession,
   type Score,
   type Session,
@@ -286,6 +287,63 @@ test('a pass by the opponent is played through without comment', () => {
   const next: Session = advance(guess(start, point(start.position, 'dd')));
 
   assert.equal(next.move?.number, 3);
+});
+
+// ── Skipping ─────────────────────────────────────────────────────────────────
+
+/**
+ * A game of `count` moves on a 19x19 board, alternating colors, every stone two
+ * points from the last so nothing is ever adjacent and no move is a capture.
+ */
+function spacedGame(count: number): Game {
+  const letters = 'abcdefghijklmnopqrs';
+  const moves: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const point: string = letters[(i % 9) * 2] + letters[Math.floor(i / 9) * 2];
+    moves.push(`;${i % 2 === 0 ? 'B' : 'W'}[${point}]`);
+  }
+  return load(`(;SZ[19]${moves.join('')})`);
+}
+
+test('skipping n prompts passes over n questions of your own color', () => {
+  const game: Game = spacedGame(30);
+  const session: Session = startSession(game, BLACK);
+  const skipped: Session = skipPrompts(session, 3);
+
+  // Black is prompted on the odd moves, so three prompts on is move 7.
+  assert.equal(skipped.phase, 'prompt');
+  assert.equal(skipped.move?.number, 7);
+  assert.equal(skipped.guesses.length, 0);
+});
+
+test('skipping one prompt lands where advancing past an answer would', () => {
+  const start: Session = startSession(spacedGame(30), BLACK);
+  const answered: Session = advance(guess(start, point(start.position, 'aa')));
+
+  assert.equal(skipPrompts(start, 1).cursor, answered.cursor);
+  assert.equal(skipPrompts(start, 1).guesses.length, 0);
+  assert.equal(answered.guesses.length, 1);
+});
+
+test('a skip longer than the game ends the session rather than overrunning', () => {
+  const skipped: Session = skipPrompts(startSession(load(SIMPLE), BLACK), 50);
+
+  assert.equal(skipped.phase, 'done');
+  assert.equal(skipped.cursor, load(SIMPLE).moves.length);
+});
+
+test('skipping no prompts is refused, so a control cannot silently do nothing', () => {
+  const session: Session = startSession(load(SIMPLE), BLACK);
+
+  assert.throws(() => skipPrompts(session, 0), SessionError);
+  assert.throws(() => skipPrompts(session, -1), SessionError);
+});
+
+test('skipping prompts is refused outside a prompt, like every other skip', () => {
+  const start: Session = startSession(load(SIMPLE), BLACK);
+
+  assert.throws(() => skipPrompts(guess(start, point(start.position, 'dd')), 1), SessionError);
+  assert.throws(() => skipPrompts(endSession(start), 1), SessionError);
 });
 
 // ── Ending ───────────────────────────────────────────────────────────────────

@@ -10,7 +10,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from '../src/sgf-parser.ts';
 import { readGame, type Game } from '../src/game.ts';
-import { advance, guess, startSession, type Session } from '../src/session.ts';
+import {
+  advance,
+  endSession,
+  guess,
+  skipPrompts,
+  startSession,
+  type Session,
+} from '../src/session.ts';
 import { pointFromName } from '../src/goban.ts';
 import {
   costAgainst,
@@ -101,6 +108,40 @@ function play(guesses: readonly (string | null)[], verdicts: readonly Verdict[])
   for (const one of verdicts) analysis = withVerdict(analysis, one);
   return { session, summary: summarize(session, analysis) };
 }
+
+// ── Skipped prompts ──────────────────────────────────────────────────────────
+
+test('a verdict for a prompt nobody answered is carried, and changes no figure', () => {
+  const game: Game = readGame(parse(GAME));
+  let session: Session = startSession(game, 1);
+  // Answer move 1, skip move 3, answer move 5.
+  session = advance(guess(session, at('Q16'), 1000));
+  session = skipPrompts(session, 1);
+  // Not D16: move 3 played there while the skip went past it.
+  session = advance(guess(session, at('C10'), 1000));
+  session = endSession(session);
+
+  let analysis: Analysis = emptyAnalysis(CONFIG);
+  for (const one of [verdict({ moveNumber: 1 }), verdict({ moveNumber: 5 })]) {
+    analysis = withVerdict(analysis, one);
+  }
+  const before: Summary = summarize(session, analysis);
+
+  // The review asked about the skipped move, and its verdict has no guess.
+  analysis = withVerdict(analysis, verdict({ moveNumber: 3, guessed: null }));
+  const after: Summary = summarize(session, analysis);
+
+  assert.deepEqual([...after.skipped], [3]);
+  assert.deepEqual(
+    (after.verdicts ?? []).map((one) => one.moveNumber),
+    [1, 3, 5],
+    'in move order, skipped prompts among the answered ones',
+  );
+  // Every derived figure joins on the guesses, so none of them moved.
+  assert.deepEqual(after.ai, before.ai);
+  assert.deepEqual(after.rows, before.rows);
+  assert.deepEqual(after.phases, before.phases);
+});
 
 // ── No engine ────────────────────────────────────────────────────────────────
 

@@ -217,10 +217,20 @@ export function evaluatePrompt(
   // one, numbered past the last intersection, and `search.ts` treats it as
   // always legal in the main phase.
   const played: MoveVerdict | null = verdictFor(prompt.played ?? pass);
-  // A hit is the same move twice; do not pay for it twice. Two passes are the
-  // same move on the same terms.
+  /*
+   * A hit is the same move twice; do not pay for it twice. Two passes are the
+   * same move on the same terms.
+   *
+   * No guess at all is a prompt nobody answered, and it is asked about for the
+   * position rather than for a comparison: the best move and the played move
+   * are the whole answer, and there is no third search to run.
+   */
   const guessed: MoveVerdict | null =
-    prompt.guess === prompt.played ? played : verdictFor(prompt.guess ?? pass);
+    prompt.guess === undefined
+      ? null
+      : prompt.guess === prompt.played
+        ? played
+        : verdictFor(prompt.guess ?? pass);
 
   return {
     moveNumber: prompt.moveNumber,

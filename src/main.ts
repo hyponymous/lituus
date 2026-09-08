@@ -12,6 +12,7 @@ import {
   endSession,
   guess,
   passGuess,
+  skipPrompts,
   startSession,
   type Guess,
   type Session,
@@ -45,6 +46,7 @@ import {
   renderSetup,
   renderSummary,
   updateEngineLine,
+  type SkipOption,
 } from './views.ts';
 import { DEV_HASH, renderDev, type DevProps } from './dev.ts';
 import { PROBE_HASH, SPIKE_HASH } from './engine/spike-hash.ts';
@@ -285,12 +287,19 @@ function scoreEveryGap(session: Session): void {
   }
 }
 
-/** Ask the engine about the position the user has just guessed at. */
+/**
+ * Ask the engine about a prompted position.
+ *
+ * `guessed` is `undefined` where nobody answered — a prompt the session
+ * skipped, asked about because the review has stopped on it. That is a
+ * different question from a predicted pass, and it is one search cheaper: the
+ * verdict comes back with a best move, the played move, and `guessed` null.
+ */
 function enqueue(
   session: Session,
   moveNumber: number,
   played: number | null,
-  guessed: number | null,
+  guessed: number | null | undefined,
 ): void {
   const move = session.game.moves.find((candidate) => candidate.number === moveNumber);
   if (!queue || !move) return;
@@ -299,18 +308,34 @@ function enqueue(
   // costs nothing; one that changes it pays for the change and no more. A
   // verdict names a pass the engine's way, one past the last intersection, so
   // the comparison is made in that numbering rather than this one.
+  //
+  // With no guess there is nothing to have changed: any verdict about the
+  // position is the whole answer, and asking again would buy the same one.
   const known: Verdict | null = analysis ? verdictFor(analysis, moveNumber) : null;
   const asPoint: number = guessed ?? session.game.cols * session.game.rows;
-  if (known && known.guessed?.point === asPoint) return;
+  if (known && (guessed === undefined || known.guessed?.point === asPoint)) return;
 
   const prompt: Prompt = {
     moveNumber,
     position: move.before,
     color: move.color,
     played,
-    guess: guessed,
+    ...(guessed === undefined ? {} : { guess: guessed }),
   };
   queue.submit(prompt);
+}
+
+/**
+ * Ask about a prompt the session skipped, for a reader looking at it.
+ *
+ * Dropped when scoring is off, so a review of an unscored session asks for
+ * nothing. The queue already refuses a move number it has seen, so repeating
+ * the request on every redraw costs nothing.
+ */
+function lookAt(session: Session, moveNumber: number): void {
+  const move = session.game.moves.find((candidate) => candidate.number === moveNumber);
+  if (!move) return;
+  enqueue(session, moveNumber, move.index, undefined);
 }
 
 /** One line about the engine for the session view, or null when scoring is off. */
@@ -480,6 +505,38 @@ function elapsed(): number | null {
   return promptedAt === null ? null : Math.round(performance.now() - promptedAt);
 }
 
+/** How many prompts the long skip covers. Short enough to stay a hop, not a leave. */
+const SKIP_MANY = 10;
+
+/**
+ * The skips to offer from here, in the order they are shown.
+ *
+ * Each one is worked out by taking it: the session it would produce is the
+ * lookahead, so a control is offered only when it lands on another prompt, and
+ * the offer can never disagree with what pressing it does. That is what hides
+ * "Skip 10" in the last few moves of a game, where it would otherwise be a way
+ * to the summary rather than a way through the record.
+ */
+function skipsFor(session: Session): SkipOption[] {
+  if (session.phase !== 'prompt') return [];
+
+  const skips: SkipOption[] = [];
+
+  const offer = (label: string, title: string, to: Session): void => {
+    if (to.phase !== 'prompt') return;
+    skips.push({ label, title, onSkip: (): void => show({ name: 'session', session: to }) });
+  };
+
+  offer('Skip', 'Move on without answering this one', skipPrompts(session, 1));
+  offer(
+    `Skip ${SKIP_MANY}`,
+    `Skip the next ${SKIP_MANY} predictions`,
+    skipPrompts(session, SKIP_MANY),
+  );
+
+  return skips;
+}
+
 function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
@@ -491,6 +548,7 @@ function drawSession(session: Session): void {
       challengeLink: (): Promise<string> => challenge,
       ai: aiWanted,
       aiUnavailable: unscorableReason(session.game),
+      onLookAt: (moveNumber: number): void => lookAt(session, moveNumber),
       onToggleAi: (on: boolean): void => {
         aiWanted = on;
         setAiWanted(on);
@@ -528,6 +586,7 @@ function drawSession(session: Session): void {
 
   renderSession(root, {
     session,
+    skips: skipsFor(session),
     onGuess: (index: number): void => commit(guess(session, index, elapsed())),
     onPass: (): void => commit(passGuess(session, elapsed())),
     onAdvance: next,

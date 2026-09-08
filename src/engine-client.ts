@@ -279,7 +279,7 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
           type: 'evaluate',
           moveNumber: prompt.moveNumber,
           played: prompt.played,
-          guess: prompt.guess,
+          ...(prompt.guess === undefined ? {} : { guess: prompt.guess }),
         };
         worker.postMessage(evaluateRequest);
       });

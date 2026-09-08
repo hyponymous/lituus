@@ -107,8 +107,9 @@ function stubNetwork(opine: (stones: Map<number, Stone>, white: boolean) => Opin
   };
 }
 
+/** `guess` omitted is a prompt nobody answered, as `Prompt` means it. */
 function evaluate(
-  network: Network, moveNumber: number, played: string, guess: string, visits = 40,
+  network: Network, moveNumber: number, played: string, guess?: string, visits = 40,
 ): Verdict {
   const context: GameContext = gameContext(game());
   const session: Session = startSession(game(), 1);
@@ -121,7 +122,7 @@ function evaluate(
     position: move.before,
     color: move.color,
     played: asMove(played),
-    guess: asMove(guess),
+    ...(guess === undefined ? {} : { guess: asMove(guess) }),
   };
   void session;
   return evaluatePrompt(new Search(network, context.board), context, prompt, visits);
@@ -197,6 +198,26 @@ test('a move the root search ignores is forced, and says so', () => {
   // is worth quoting — which is the entire reason for running it.
   assert.ok(verdict.played.visits >= MIN_TRUSTED_VISITS);
   assert.equal(verdict.played.pv[0], ignored);
+});
+
+test('a prompt nobody guessed costs one search and reports no guess', () => {
+  const ignored: number = at('A2');
+  let calls = 0;
+  const network: Network = stubNetwork(() => {
+    calls += 1;
+    return { policy: new Map([[at('C6'), 6], [ignored, -6]]) };
+  });
+  // The played move is the one the root barely looks at, so a guess at that
+  // same point would have bought a second, forced search. Without a guess the
+  // played move still gets it, and nothing else does.
+  const verdict: Verdict = evaluate(network, 5, 'A2', undefined, 30);
+
+  assert.equal(verdict.guessed, null);
+  assert.ok(verdict.played);
+  assert.equal(verdict.played.point, ignored);
+  assert.ok(verdict.best.point);
+  // Root plus one forced search for the played move: the guess adds nothing.
+  assert.equal(calls, 60);
 });
 
 test('a miss is two verdicts about two different moves', () => {

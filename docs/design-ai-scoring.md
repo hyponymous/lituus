@@ -395,6 +395,21 @@ silently reporting a median over half the game.
 Jobs for prompts already in the store are dropped, which is what makes a same
 colour replay nearly free (§3).
 
+**A prompt with no guess.** A session can move past a prompt without answering
+it — the skip controls on the session screen — and the review still walks those
+moves, showing the game's move and the engine's. So `Prompt.guess` is optional:
+absent means nobody guessed, which is a different question from `null`, a
+predicted pass. An absent guess is one search cheaper (no forced job for a move
+nobody chose) and comes back with `Verdict.guessed` null.
+
+These are asked for **on demand, from the review**, not up front. A skip can
+pass over fifty positions, and searching all of them would queue an hour of
+work behind the predictions the user actually made; the reader stopping on a
+position is the signal that it is worth a search. `Summary.verdicts` is
+therefore wider than `Summary.ai`: it holds every position the engine looked
+at, answered or skipped, while every derived figure still joins on the guesses.
+A verdict with no guess behind it changes no number on the summary.
+
 ### 5.4 What building it found
 
 Everything above survived contact. What follows is what building it added to

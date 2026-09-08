@@ -24,6 +24,7 @@ import {
   costAgainst,
   costBand,
   duration,
+  emptyPhaseLabel,
   longestStreak,
   percent,
   perPrediction,
@@ -43,6 +44,7 @@ import {
   BEAT_MARGIN,
   BLUNDER_LOSS,
   describeEngine,
+  lossOf,
   type Comparison,
   type Verdict,
 } from './analysis.ts';
@@ -311,6 +313,14 @@ export function renderSetup(root: HTMLElement, props: SetupProps): void {
 
 // ── Session ──────────────────────────────────────────────────────────────────
 
+/** One skip control: what it says, what it means, and what it does. */
+export interface SkipOption {
+  readonly label: string;
+  /** The long form, for the tooltip — the label has room for two words. */
+  readonly title: string;
+  readonly onSkip: () => void;
+}
+
 export interface SessionProps {
   readonly session: Session;
   readonly onGuess: (index: number) => void;
@@ -318,6 +328,16 @@ export interface SessionProps {
   readonly onPass: () => void;
   readonly onAdvance: () => void;
   readonly onEnd: () => void;
+  /**
+   * Ways to move past prompts without answering them, in the order they should
+   * be offered. Empty when none of them would land anywhere — near the end of
+   * a game every skip runs off the record, and a control that jumps straight
+   * to the summary is not a skip.
+   *
+   * main.ts decides what is on the list and what each one does; the view only
+   * draws them, so the phase boundaries and the counting live in one place.
+   */
+  readonly skips?: readonly SkipOption[];
   /** One line about the engine, or null when scoring is off. */
   readonly engine?: string | null;
   /** True while the engine is still failing, so the line can be styled as such. */
@@ -472,10 +492,19 @@ function sessionStatus(session: Session): string {
  * questions that the answer changes how a user paces themselves.
  */
 function progressBar(session: Session): HTMLElement {
-  const { guessed, total }: Score = score(session);
-  // The prompt on screen counts as reached, not answered. Without it the bar
-  // sits at zero while the user is already looking at the first question.
-  const reached: number = Math.min(guessed + (session.phase === 'prompt' ? 1 : 0), total);
+  const { total }: Score = score(session);
+  /*
+   * Prompts passed, not prompts answered. The prompt on screen counts as
+   * reached: without it the bar sits at zero while the user is already looking
+   * at the first question. Counted from the cursor rather than from the
+   * guesses so that a skipped opening moves the bar — the question the bar
+   * answers is how far through the game you are, and a skip is progress
+   * through the game even though it answers nothing.
+   */
+  const upTo: number = Math.min(session.cursor + 1, session.game.moves.length);
+  const reached: number = session.game.moves
+    .slice(0, upTo)
+    .filter((move) => move.color === session.color).length;
   const label = `${reached} of ${total}`;
 
   return el(
@@ -533,10 +562,31 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
    * click on the goban. It is offered only while a prompt is waiting, for the
    * same reason a click on the board is: the reveal must not be pre-empted.
    */
+  /*
+   * "Next" during a reveal, because the skips below took the other word. Both
+   * only ever move forward, but they move past different things — one past an
+   * answer already on screen, the others past questions never asked — and the
+   * distinction is worth a plainer label than two Skips a second apart.
+   */
   const controls: Child[] = [
-    ...(revealing ? [button('Skip', props.onAdvance)] : [button('Pass', props.onPass)]),
-    // Set apart from the two above it, which drive the loop. Leaving is not a
-    // move, and it should not sit flush against the control that answers one.
+    ...(revealing ? [button('Next', props.onAdvance)] : [button('Pass', props.onPass)]),
+    /*
+     * The skips are neither answers nor a leave, so they sit between the two.
+     * They are offered only while a prompt is waiting, and each disappears once
+     * it has nowhere left to land, which is why none of them is a toggle:
+     * there is nothing to switch back to once the moves are behind you.
+     *
+     * Skipped prompts go unanswered rather than counting as misses — see
+     * `skipPrompts` — so the run reads as incomplete on the summary, which is
+     * the cost of taking one.
+     */
+    ...(revealing
+      ? []
+      : (props.skips ?? []).map((skip) =>
+          button(skip.label, skip.onSkip, { class: 'skip', title: skip.title }),
+        )),
+    // Set apart from the controls above it, which drive the loop. Leaving is
+    // not a move, and it should not sit flush against the ones that answer one.
     button('End session', props.onEnd, { class: 'leave' }),
   ];
 
@@ -586,6 +636,19 @@ export interface SummaryProps {
   readonly onToggleAi: (on: boolean) => void;
   /** Why this session cannot be scored, if it cannot. Disables the toggle. */
   readonly aiUnavailable: string | null;
+  /**
+   * Ask the engine about a prompt the session skipped, when the review stops
+   * on one that has no verdict yet.
+   *
+   * On demand rather than up front: a skip can pass over fifty positions, and
+   * searching all of them would queue an hour of work behind the predictions
+   * the user actually made. The reader looking at a position is the signal
+   * that it is worth a search.
+   *
+   * main.ts ignores the request when scoring is off or already done, so this
+   * may be called on every redraw of a skipped stop.
+   */
+  readonly onLookAt?: (moveNumber: number) => void;
 }
 
 /**
@@ -898,9 +961,15 @@ export function refreshSummaryAnalysis(summary: Summary, remeasured = false): vo
   if (strip) {
     const scored: boolean = summary.ai !== null;
     const found: Set<number> = engineMoves(summary);
+    /*
+     * By move number, not by position. The strip also holds the prompts the
+     * session skipped, so its cells and `summary.rows` are no longer the same
+     * list — and a skipped cell has no verdict to repaint anyway.
+     */
+    const rows = new Map(summary.rows.map((row) => [row.moveNumber, row]));
     const cells: NodeListOf<HTMLElement> = strip.querySelectorAll('.cell');
-    cells.forEach((cell, index) => {
-      const row: SummaryRow | undefined = summary.rows[index];
+    cells.forEach((cell) => {
+      const row: SummaryRow | undefined = rows.get(Number(cell.dataset.move));
       if (row) dressCell(cell, row, scored, found.has(row.moveNumber));
     });
   }
@@ -1023,9 +1092,14 @@ function phaseLabel(
  * predictions matching, their difference is damped toward zero by
  * construction. `perPrediction` records the argument in full.
  */
-function phaseBar(phase: PhaseResult, ceiling: number | null, color: Color): HTMLElement {
+function phaseBar(
+  phase: PhaseResult,
+  empty: string,
+  ceiling: number | null,
+  color: Color,
+): HTMLElement {
   const rate: string =
-    phase.guessed > 0 ? `${percent(phase.rate)} (${phase.hits}/${phase.guessed})` : 'not reached';
+    phase.guessed > 0 ? `${percent(phase.rate)} (${phase.hits}/${phase.guessed})` : empty;
   const per = perPrediction(phase.cost);
 
   const track: Child[] = [];
@@ -1086,8 +1160,8 @@ function phaseBar(phase: PhaseResult, ceiling: number | null, color: Color): HTM
  */
 function phaseSection(summary: Summary): Child[] {
   const ceiling: number | null = summary.ai === null ? null : phaseCeiling(summary);
-  const rows: HTMLElement[] = summary.phases.map((phase) =>
-    phaseBar(phase, ceiling, summary.color),
+  const rows: HTMLElement[] = summary.phases.map((phase, index) =>
+    phaseBar(phase, emptyPhaseLabel(summary.phases, index), ceiling, summary.color),
   );
 
   /*
@@ -1115,12 +1189,43 @@ function phaseBars(summary: Summary): HTMLElement {
 }
 
 /**
- * Where the review is looking: a prediction by index, or `null` for the final
- * position. Null is the slot *after* the last prediction rather than a
- * separate mode — that is what lets "last" mean the end of the game, which is
- * where the review opens and where the session itself left off.
+ * Where the review is looking: a stop by index, or `null` for the final
+ * position. Null is the slot *after* the last stop rather than a separate
+ * mode — that is what lets "last" mean the end of the game, which is where the
+ * review opens and where the session itself left off.
  */
 type Cursor = number | null;
+
+/**
+ * One stop on the walk through a finished session.
+ *
+ * A prediction carries `index`, its place in `summary.rows` and in
+ * `session.guesses` — the two are parallel, and the review reads both. A
+ * prompt the session skipped carries null: nothing was answered there, so
+ * there is no row, no guess, and no prediction to mark on the board.
+ */
+interface Stop {
+  readonly moveNumber: number;
+  /** Index into `summary.rows` and `session.guesses`, or null where skipped. */
+  readonly index: number | null;
+}
+
+/**
+ * Every prompt the session reached, answered or skipped, in move order.
+ *
+ * Skipped prompts are stops because the review's job is the game, not the
+ * scoreboard: stepping from move 11 to move 51 with nothing in between shows a
+ * position the reader never watched arrive. They are stops and nothing more —
+ * no rate counts them, and the nav's misses step straight over them, since a
+ * prompt nobody answered was not missed.
+ */
+function reviewStops(summary: Summary): Stop[] {
+  const stops: Stop[] = [
+    ...summary.rows.map((row, index) => ({ moveNumber: row.moveNumber, index })),
+    ...summary.skipped.map((moveNumber) => ({ moveNumber, index: null })),
+  ];
+  return stops.sort((a, b) => a.moveNumber - b.moveNumber);
+}
 
 /**
  * Where a control would go from here, or `undefined` for nowhere.
@@ -1133,10 +1238,13 @@ type Cursor = number | null;
 type Target = Cursor | undefined;
 
 /** The nearest miss in `step`'s direction, or undefined if there is none. */
-function missFrom(summary: Summary, at: Cursor, step: number): Target {
-  const from: number = at === null ? summary.rows.length : at;
-  for (let i = from + step; i >= 0 && i < summary.rows.length; i += step) {
-    if (!summary.rows[i].hit) return i;
+function missFrom(summary: Summary, stops: readonly Stop[], at: Cursor, step: number): Target {
+  const from: number = at === null ? stops.length : at;
+  for (let i = from + step; i >= 0 && i < stops.length; i += step) {
+    const { index } = stops[i];
+    // A skipped prompt is not a miss. Nobody answered it, so there is nothing
+    // there for "previous miss" to be about.
+    if (index !== null && !summary.rows[index].hit) return i;
   }
   return undefined;
 }
@@ -1157,22 +1265,22 @@ interface NavButton {
  * panel act on a control and decide whether to disable it from one definition
  * rather than two that can disagree.
  */
-function navButtons(summary: Summary): NavButton[] {
-  const last: number = summary.rows.length - 1;
-  const empty: boolean = summary.rows.length === 0;
+function navButtons(summary: Summary, stops: readonly Stop[]): NavButton[] {
+  const last: number = stops.length - 1;
+  const empty: boolean = stops.length === 0;
 
   return [
     {
       key: 'first',
       label: '⏮',
-      title: 'First prediction (Ctrl+Left)',
+      title: 'First move (Ctrl+Left)',
       target: (at) => (empty || at === 0 ? undefined : 0),
     },
     {
       key: 'prevMiss',
       label: '◀◀',
       title: 'Previous miss (Shift+Left)',
-      target: (at) => missFrom(summary, at, -1),
+      target: (at) => missFrom(summary, stops, at, -1),
     },
     {
       key: 'prev',
@@ -1193,7 +1301,7 @@ function navButtons(summary: Summary): NavButton[] {
       key: 'nextMiss',
       label: '▶▶',
       title: 'Next miss (Shift+Right)',
-      target: (at) => missFrom(summary, at, 1),
+      target: (at) => missFrom(summary, stops, at, 1),
     },
     {
       key: 'last',
@@ -1261,6 +1369,23 @@ function engineMoves(summary: Summary): Set<number> {
     if (verdict.guessed?.point === verdict.best.point) found.add(verdict.moveNumber);
   }
   return found;
+}
+
+/**
+ * A cell for a prompt nobody answered: no band, no bar, no hit or miss.
+ *
+ * Drawn as the gap it is rather than as a neutral result. Every other cell in
+ * the strip stands for a prediction, and a skipped prompt that looked like one
+ * would put a move the user never saw into the run they are reading.
+ */
+function dressSkippedCell(cell: HTMLElement, moveNumber: number): void {
+  const selected: boolean = cell.classList.contains('selected');
+  const label = `Move ${moveNumber}: skipped, no prediction`;
+
+  cell.className = `cell skipped${selected ? ' selected' : ''}`;
+  cell.title = label;
+  cell.setAttribute('aria-label', label);
+  if (!cell.firstElementChild) cell.append(el('span', { class: 'bar' }));
 }
 
 function dressCell(cell: HTMLElement, row: SummaryRow, scored: boolean, engine: boolean): void {
@@ -1360,6 +1485,28 @@ function asChange(loss: number): string {
  * A missing number is said rather than skipped. "Not scored" and "cost
  * nothing" are different claims, and a blank would be read as the second.
  */
+/**
+ * The line under the board for a prompt the session skipped.
+ *
+ * The same three slots as `costLine`, in the same order, with yours saying
+ * what happened to it: stepping between an answered move and a skipped one
+ * must not move the board and the chart under it, which is exactly what a
+ * shorter line would do.
+ */
+function skippedLine(summary: Summary, move: GameMove, verdict: Verdict | undefined): string {
+  const played: number | null = verdict ? lossOf(verdict.played) : null;
+  const slots: string[] = [
+    'you skipped',
+    `${colorName(summary.color)} ${pointName(summary.board, move.index)}` +
+      (played === null ? ' —' : ` ${asChange(played)}`),
+  ];
+
+  if (verdict) slots.push(`engine ${pointName(summary.board, verdict.best.point)}`);
+  else if (summary.ai !== null) slots.push('engine —');
+
+  return slots.join(' · ');
+}
+
 function costLine(summary: Summary, row: SummaryRow, verdict: Verdict | undefined): string {
   /*
    * Three slots, always in the same order and always the same shape: your
@@ -1400,7 +1547,11 @@ function costLine(summary: Summary, row: SummaryRow, verdict: Verdict | undefine
  * it, and it should not survive a re-render — so it stays a closure here
  * rather than becoming a screen main.ts has to hold.
  */
-function reviewPanel(session: Session, summary: Summary): HTMLElement {
+function reviewPanel(
+  session: Session,
+  summary: Summary,
+  onLookAt?: (moveNumber: number) => void,
+): HTMLElement {
   const scored: boolean = summary.ai !== null;
   const board: HTMLElement = el('div', { class: 'board' });
   const caption: HTMLElement = el('p', { class: 'caption muted' });
@@ -1430,9 +1581,14 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
   let shown: Verdict | undefined;
 
   const found: Set<number> = engineMoves(summary);
-  const cells: HTMLElement[] = summary.rows.map((row, index) => {
-    const cell: HTMLElement = el('button', { type: 'button' });
-    dressCell(cell, row, scored, found.has(row.moveNumber));
+  const stops: readonly Stop[] = reviewStops(summary);
+  const cells: HTMLElement[] = stops.map((stop, index) => {
+    // The move number, not the position in the strip: a late verdict repaints
+    // cells from a summary that knows rows, and the two are no longer the same
+    // list once skipped prompts sit between them.
+    const cell: HTMLElement = el('button', { type: 'button', 'data-move': String(stop.moveNumber) });
+    if (stop.index === null) dressSkippedCell(cell, stop.moveNumber);
+    else dressCell(cell, summary.rows[stop.index], scored, found.has(stop.moveNumber));
     // Clicking the cell already showing steps back out to the final position,
     // so the strip is a toggle and there is no dead end to click out of.
     cell.addEventListener('click', () => go(at === index ? null : index));
@@ -1441,7 +1597,7 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
   strip.append(...cells);
 
   const controls: readonly { readonly node: HTMLElement; readonly spec: NavButton }[] =
-    navButtons(summary).map((spec) => {
+    navButtons(summary, stops).map((spec) => {
       const node: HTMLElement = el(
         'button',
         { type: 'button', class: 'nav-button', title: spec.title, 'aria-label': spec.title },
@@ -1457,19 +1613,73 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     if (target !== undefined) go(target);
   };
 
-  const drawBoard = (): void => {
-    if (at === null) {
-      renderGoban(finalPosition(session.game), board, { showCoordinates: true });
-      const { result } = session.game.meta;
-      caption.textContent = result
-        ? `Final position — ${result}`
-        : 'Final position — the record does not give a result.';
-      cost.textContent = '';
-      return;
+  /** The engine's move, where it is a point on the board rather than a pass. */
+  const bestPointOf = (verdict: Verdict | undefined): number | undefined => {
+    /*
+     * A best move that is a pass is numbered past the last intersection, and
+     * marking it would put a mark at no intersection at all — most likely now
+     * that the end of a game is prompted, which is exactly where the engine
+     * wants to pass.
+     */
+    const live: Summary = current(summary);
+    const point: number | undefined = verdict?.best.point;
+    return point !== undefined && point < live.board.rows * live.board.cols ? point : undefined;
+  };
+
+  /*
+   * The stone before this one, dotted as a board dots its last move. On the
+   * position after the move that reading came free; here it is the only thing
+   * saying which move the position is waiting on.
+   */
+  const previousMark = (moveNumber: number): Marker | null => {
+    const previous: GameMove | undefined = session.game.moves[moveNumber - 2];
+    return previous?.index != null ? { index: previous.index, kind: 'last' } : null;
+  };
+
+  /**
+   * A prompt the session skipped past: the game's move and the engine's, and
+   * no third mark, because nothing was predicted here.
+   *
+   * Otherwise it is drawn exactly as an answered prompt is — the position
+   * before the move, the previous stone dotted, the same line underneath — so
+   * that stepping through the game does not change what the reader is looking
+   * at, only what there is to say about it.
+   */
+  const drawSkipped = (moveNumber: number, where: string): void => {
+    const move: GameMove = session.game.moves[moveNumber - 1];
+    const verdict: Verdict | undefined = verdictsNow().get(moveNumber);
+    shown = verdict;
+
+    // Nobody asked the engine about this position during the session, because
+    // nobody was asked to predict it. Ask now, for the one being read.
+    if (!verdict) onLookAt?.(moveNumber);
+
+    const best: number | undefined = bestPointOf(verdict);
+    const marks: Marker[] = [];
+    if (move.index !== null) {
+      marks.push({ index: move.index, kind: 'actual', label: String(moveNumber) });
     }
 
-    const row = current(summary).rows[at];
-    const made: Guess = session.guesses[at];
+    const previous: Marker | null = previousMark(moveNumber);
+    if (previous) marks.push(previous);
+    // Only when it is a second point: on the played stone it is already the
+    // mark that is there.
+    if (best !== undefined && best !== move.index) marks.push({ index: best, kind: 'best' });
+
+    renderGoban(move.before, board, {
+      showCoordinates: true,
+      markers: marks,
+      ghosts: summary.color,
+    });
+
+    caption.textContent = `${where} · skipped`;
+    cost.textContent = skippedLine(current(summary), move, verdict);
+  };
+
+  /** A prompt the session answered: your move, the game's, and the engine's. */
+  const drawPrediction = (index: number, where: string): void => {
+    const row: SummaryRow = current(summary).rows[index];
+    const made: Guess = session.guesses[index];
     const move: GameMove = session.game.moves[row.moveNumber - 1];
     const verdict: Verdict | undefined = verdictsNow().get(row.moveNumber);
     shown = verdict;
@@ -1485,17 +1695,7 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
      * position with a single ring on it, which is what a hit is.
      */
     const live: Summary = current(summary);
-    /*
-     * The engine's move, where it is a point on the board. A best move that is
-     * a pass is numbered past the last intersection, and marking it would put
-     * a mark at no intersection at all — most likely now that the end of a
-     * game is prompted, which is exactly where the engine wants to pass.
-     */
-    const bestPoint: number | undefined = verdict?.best.point;
-    const best: number | undefined =
-      bestPoint !== undefined && bestPoint < live.board.rows * live.board.cols
-        ? bestPoint
-        : undefined;
+    const best: number | undefined = bestPointOf(verdict);
 
     /*
      * Your move, in the colour of how it turned out: a ghost stone where you
@@ -1549,13 +1749,8 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
           ];
     if (yours && !made.hit) marks.push(yours);
 
-    /*
-     * The stone before this one, dotted as a board dots its last move. On the
-     * position after the move that reading came free; here it is the only
-     * thing saying which move the position is waiting on.
-     */
-    const previous: GameMove | undefined = session.game.moves[row.moveNumber - 2];
-    if (previous?.index != null) marks.push({ index: previous.index, kind: 'last' });
+    const previous: Marker | null = previousMark(row.moveNumber);
+    if (previous) marks.push(previous);
 
     // The engine's move only when it is a third point: on the guess or on the
     // played stone it is already the mark that is there.
@@ -1577,8 +1772,25 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
     // Where you are; the line below says what happened. Which move each side
     // played was in both, and naming it twice is what made the pair wrap.
     const took: string = row.elapsedMs === null ? '' : ` · ${duration(row.elapsedMs)}`;
-    caption.textContent = `Move ${row.moveNumber} · ${at + 1} of ${summary.rows.length}${took}`;
+    caption.textContent = `${where}${took}`;
     cost.textContent = costLine(current(summary), row, verdict);
+  };
+
+  const drawBoard = (): void => {
+    if (at === null) {
+      renderGoban(finalPosition(session.game), board, { showCoordinates: true });
+      const { result } = session.game.meta;
+      caption.textContent = result
+        ? `Final position — ${result}`
+        : 'Final position — the record does not give a result.';
+      cost.textContent = '';
+      return;
+    }
+
+    const stop: Stop = stops[at];
+    const where = `Move ${stop.moveNumber} · ${at + 1} of ${stops.length}`;
+    if (stop.index === null) drawSkipped(stop.moveNumber, where);
+    else drawPrediction(stop.index, where);
   };
 
   const go = (next: Cursor): void => {
@@ -1635,11 +1847,14 @@ function reviewPanel(session: Session, summary: Summary): HTMLElement {
       return;
     }
     if (at === null) return;
-    const row: SummaryRow | undefined = current(summary).rows[at];
-    if (!row) return;
+    // Through the stop, because the strip and the rows are different lists: a
+    // skipped prompt has no row, and its verdict is looked up by move number.
+    const stop: Stop | undefined = stops[at];
+    if (!stop) return;
+    const moveNumber: number = stop.moveNumber;
     // A changed baseline changes every mark on the board without changing a
     // single verdict, so it says so rather than being caught by the guard.
-    if (!force && verdictsNow().get(row.moveNumber) === shown) return;
+    if (!force && verdictsNow().get(moveNumber) === shown) return;
     drawBoard();
   };
 
@@ -1834,7 +2049,7 @@ export function renderSummary(root: HTMLElement, props: SummaryProps): void {
     );
   }
 
-  parts.push(reviewPanel(props.session, summary));
+  parts.push(reviewPanel(props.session, summary, props.onLookAt));
 
   if (result.guessed > 0) {
     // A wrapper rather than the section itself, so there is somewhere to write

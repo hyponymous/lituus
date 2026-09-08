@@ -9,7 +9,7 @@
 
 import { pointName } from './goban.ts';
 import { serialize } from './sgf-writer.ts';
-import { describe, type Game } from './game.ts';
+import { describe, promptableMoves, type Game } from './game.ts';
 import { countPrompts, score, type Guess, type Score, type Session } from './session.ts';
 import {
   BEAT_MARGIN,
@@ -197,6 +197,16 @@ export interface Summary {
   /** True when the user stopped before the record ran out. */
   readonly abandoned: boolean;
   /**
+   * Move numbers the session went past without answering, in order.
+   *
+   * Not predictions: they are in no rate, no phase and no export, because they
+   * are moves the user did not answer. They are here so the review can walk
+   * the game rather than only the answers — a board that jumps thirty moves
+   * between one prediction and the next shows a position nobody watched
+   * develop.
+   */
+  readonly skipped: readonly number[];
+  /**
    * What the engine made of the session, or null when there was no engine.
    *
    * Subordinate to `score` by design, not by accident: a hit rate is a number
@@ -205,11 +215,19 @@ export interface Summary {
    */
   readonly ai: AiResult | null;
   /**
-   * The verdicts behind `ai`, in move order, or null with no engine.
+   * Every verdict the session has, in move order, or null with no engine.
    *
    * Kept alongside the derived figures rather than instead of them: the
    * figures are what a reader wants, and these are what lets a saved result be
    * recomputed and checked (`docs/design-ai-scoring.md` §9.4).
+   *
+   * Wider than `ai`, which is computed from the guesses alone. A prompt the
+   * session skipped can also carry a verdict — the review asks about the one
+   * the reader is looking at — and such a verdict has a best move and a played
+   * move but `guessed` null, because nobody predicted anything there. Every
+   * consumer of these already joins on the guesses or reads `guessed`, so the
+   * extra entries change no figure; they are positions the engine looked at,
+   * which is what this field is for.
    */
   readonly verdicts: readonly Verdict[] | null;
   /**
@@ -457,6 +475,26 @@ export function duration(ms: number): string {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 }
 
+/**
+ * The prompts the session moved past without answering.
+ *
+ * Derived rather than recorded. A skip leaves no trace in the guesses — that
+ * is the point of it — but every prompt of this colour behind the cursor with
+ * no guess against it was skipped, and every prompt at or beyond the cursor
+ * was never reached. Those two are different things and only the first belongs
+ * to the run.
+ */
+function skippedPrompts(session: Session): number[] {
+  const answered = new Set<number>(session.guesses.map((made: Guess) => made.moveNumber));
+  // Where the session stopped: the prompt it was sitting on when the user left,
+  // or past the end of the record when it simply ran out.
+  const stoppedAt: number = session.game.moves[session.cursor]?.number ?? Infinity;
+
+  return promptableMoves(session.game, session.color)
+    .filter((move) => move.number < stoppedAt && !answered.has(move.number))
+    .map((move) => move.number);
+}
+
 function phaseResults(game: Game, rows: readonly SummaryRow[]): PhaseResult[] {
   return PHASES.map((phase) => {
     const inPhase: readonly SummaryRow[] = rows.filter((row) => row.phase === phase);
@@ -487,6 +525,19 @@ function phaseResults(game: Game, rows: readonly SummaryRow[]): PhaseResult[] {
 }
 
 /**
+ * What to call a phase with nothing in it. Skipped if the session went on to
+ * answer a later phase, not reached if it stopped before getting there.
+ *
+ * Read off the ordering rather than recorded, because a skip leaves no trace
+ * in the guesses — which is the point of it. A session that skipped the
+ * opening and then quit immediately reads as "not reached"; nothing in the
+ * data separates that case, and neither reading misleads about the score.
+ */
+export function emptyPhaseLabel(phases: readonly PhaseResult[], index: number): string {
+  return phases.slice(index + 1).some((later) => later.guessed > 0) ? 'skipped' : 'not reached';
+}
+
+/**
  * Everything the summary knows about one session.
  *
  * `analysis` is optional and absent by default, so a session that never had an
@@ -499,6 +550,7 @@ export function summarize(session: Session, analysis?: Analysis): Summary {
   const { game, color } = session;
   // Any position serves for naming points; they all share the board's shape.
   const board: Position = game.initial;
+  const skipped: readonly number[] = skippedPrompts(session);
 
   const rows: SummaryRow[] = session.guesses.map((made: Guess) => {
     const from: number | null = referencePoint(game, made.moveNumber);
@@ -533,10 +585,12 @@ export function summarize(session: Session, analysis?: Analysis): Summary {
     streaks: streaksOf(rows),
     timing: timingOf(session.guesses),
     abandoned: session.guesses.length < countPrompts(game, color),
+    skipped,
     ai: analysis ? aiResult(analysis, session.guesses, board) : null,
     verdicts: analysis
-      ? session.guesses
-          .map((made: Guess) => verdictFor(analysis, made.moveNumber))
+      ? [...session.guesses.map((made: Guess) => made.moveNumber), ...skipped]
+          .sort((a: number, b: number) => a - b)
+          .map((moveNumber: number) => verdictFor(analysis, moveNumber))
           .filter((verdict): verdict is Verdict => verdict !== null)
       : null,
     board,
@@ -814,11 +868,11 @@ export function toText(summary: Summary): string {
   }
 
   lines.push('', 'By phase:');
-  for (const phase of summary.phases) {
+  for (const [index, phase] of summary.phases.entries()) {
     const detail: string =
       phase.guessed > 0
         ? `${phase.hits} / ${phase.guessed} (${percent(phase.rate)})`
-        : 'not reached';
+        : emptyPhaseLabel(summary.phases, index);
     /*
      * The points clause is appended rather than substituted: the exact-match
      * rate stays the headline (PRD §5), and a text export is read where a bar

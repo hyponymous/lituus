@@ -36,8 +36,14 @@ export interface Prompt {
    * A pass is `null` here, as it is everywhere above the engine line; the
    * engine numbers one past the last intersection, and `evaluate.ts` is where
    * the two meet.
+   *
+   * Absent when nobody guessed — a prompt the session skipped past, asked
+   * about because a reader is looking at it in the review. Absent and null are
+   * different questions: a predicted pass is a move and is searched like one,
+   * where an absent guess is one search fewer and comes back with
+   * `Verdict.guessed` null.
    */
-  readonly guess: number | null;
+  readonly guess?: number | null;
 }
 
 export interface Evaluator {

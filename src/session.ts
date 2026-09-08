@@ -192,6 +192,48 @@ export function advance(session: Session): Session {
 }
 
 /**
+ * Skip the next `count` prompts, answering none of them.
+ *
+ * Counted in prompts rather than in moves of the record, because prompts are
+ * the unit the session is measured in everywhere else — the progress bar, the
+ * score, and the questions the user is actually being asked. Skipping ten in a
+ * game where both sides are still playing walks about twenty moves down the
+ * record, and the board shows all of them.
+ *
+ * The passed-over prompts are not guesses and are not scored, so they cost the
+ * rate nothing — but `score.total` still counts every promptable move, so a run
+ * that skipped some reads as incomplete, the same way one ended early does.
+ * That is the honest reading: those moves were not answered.
+ *
+ * The board needs no catching up. The game model carries the position before
+ * every move, so landing on a later prompt shows the position with all the
+ * intervening moves already on it.
+ *
+ * Only from a prompt: a reveal has an answer on screen that has not been read
+ * yet, and there is nothing ahead of `done`.
+ */
+export function skipPrompts(session: Session, count: number): Session {
+  if (session.phase !== 'prompt') {
+    throw new SessionError(`Cannot skip while ${session.phase}.`);
+  }
+  if (count < 1) {
+    throw new SessionError(`A skip must move at least one prompt, not ${count}.`);
+  }
+
+  let cursor: number = session.cursor;
+  // Past the end, `nextPrompt` answers with the length of the record and every
+  // further step is a no-op, so a skip longer than the game settles on `done`.
+  for (let i = 0; i < count; i++) cursor = nextPrompt(session.game, session.color, cursor + 1);
+
+  return at({
+    game: session.game,
+    color: session.color,
+    guesses: session.guesses,
+    cursor,
+  });
+}
+
+/**
  * End the session early. The guesses made so far stand — the user abandoned
  * the game, they did not get those moves wrong.
  */

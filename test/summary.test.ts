@@ -12,6 +12,7 @@ import {
   canGuess,
   endSession,
   guess,
+  skipPrompts,
   startSession,
   type Session,
 } from '../src/session.ts';
@@ -19,6 +20,7 @@ import {
   STREAK_MIN,
   TENUKI_RADIUS,
   duration,
+  emptyPhaseLabel,
   longestStreak,
   percent,
   phaseOf,
@@ -75,6 +77,40 @@ function playSession(game: Game, color: 1 | -1, hits: Set<number>): Session {
 }
 
 const SIMPLE = '(;SZ[19]PB[Ada]BR[3d]PW[Bo]WR[4d];B[dd];W[pp];B[cc];W[qq])';
+
+// ── Skipped prompts ──────────────────────────────────────────────────────────
+
+test('prompts the session jumped over are reported as skipped', () => {
+  const game: Game = longGame(12);
+  const start: Session = startSession(game, BLACK);
+  // Answer move 1, skip the next two prompts, answer move 7.
+  const answered: Session = advance(guess(start, start.move?.index ?? 0));
+  const jumped: Session = skipPrompts(answered, 2);
+  const summary: Summary = summarize(endSession(advance(guess(jumped, jumped.move?.index ?? 0))));
+
+  assert.deepEqual([...summary.skipped], [3, 5]);
+  assert.deepEqual(
+    summary.rows.map((row) => row.moveNumber),
+    [1, 7],
+  );
+  // A skip is not an answer, and not a miss either.
+  assert.equal(summary.score.guessed, 2);
+  assert.equal(summary.score.hits, 2);
+});
+
+test('prompts after the session ended are not reported as skipped', () => {
+  const game: Game = longGame(12);
+  const start: Session = startSession(game, BLACK);
+  const summary: Summary = summarize(endSession(advance(guess(start, start.move?.index ?? 0))));
+
+  assert.deepEqual([...summary.skipped], []);
+  assert.equal(summary.abandoned, true);
+});
+
+test('a session played straight through skips nothing', () => {
+  const summary: Summary = summarize(playSession(load(SIMPLE), BLACK, new Set([1])));
+  assert.deepEqual([...summary.skipped], []);
+});
 
 // ── Phases ───────────────────────────────────────────────────────────────────
 
@@ -552,6 +588,18 @@ test('the text export says so when the session was cut short', () => {
 test('a phase with no moves reads as "not reached" rather than 0%', () => {
   const text: string = toText(summarize(playSession(load(SIMPLE), BLACK, new Set([1]))));
   assert.match(text, /endgame\s+not reached/);
+});
+
+test('an empty phase with answers after it reads as skipped, not as not reached', () => {
+  // Only the ordering matters here: a skip leaves no other trace to read.
+  const phases = [
+    { phase: 'opening', guessed: 0, hits: 0, rate: 0, cost: null },
+    { phase: 'middle', guessed: 4, hits: 1, rate: 0.25, cost: null },
+    { phase: 'endgame', guessed: 0, hits: 0, rate: 0, cost: null },
+  ] as const;
+
+  assert.equal(emptyPhaseLabel(phases, 0), 'skipped');
+  assert.equal(emptyPhaseLabel(phases, 2), 'not reached');
 });
 
 test('percentages round to whole numbers', () => {

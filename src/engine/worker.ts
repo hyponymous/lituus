@@ -48,7 +48,8 @@ export type WorkerRequest =
       readonly moveNumber: number;
       /** Board indices, or null for a pass, exactly as `Prompt` carries them. */
       readonly played: number | null;
-      readonly guess: number | null;
+      /** Absent where nobody guessed, exactly as `Prompt` means it. */
+      readonly guess?: number | null;
     };
 
 /** Worker to main thread. */
@@ -310,7 +311,9 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
     position: move.before,
     color: move.color,
     played: request.played,
-    guess: request.guess,
+    // Spread, so an absent guess stays absent rather than becoming an explicit
+    // `undefined` that a structured clone would drop anyway.
+    ...(request.guess === undefined ? {} : { guess: request.guess }),
   };
   const verdict: Verdict = evaluatePrompt(
     engine.search, engine.context, prompt, engine.visits,
