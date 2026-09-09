@@ -164,9 +164,9 @@ function restoreMove(board: Position, value: unknown, what: string): MoveVerdict
     pv: restoreLine(board, row.pv),
     // Absent in anything exported before the field existed, and in every
     // result whose lines all came from the run's own budget.
-    ...(row.pvVisits === undefined
+    ...(row.pvBudget === undefined
       ? {}
-      : { pvVisits: asNumber(row.pvVisits, `${what}.pvVisits`) }),
+      : { pvBudget: asNumber(row.pvBudget, `${what}.pvBudget`) }),
   };
 }
 
@@ -274,6 +274,9 @@ export function restoreAnalysis(text: string, game: Game): Analysis | null {
         point: bestPoint,
         scoreLead: asNumber(best.scoreLead, `verdicts[${at}].best.scoreLead`),
         pv: restoreLine(board, best.pv),
+        ...(best.pvBudget === undefined
+          ? {}
+          : { pvBudget: asNumber(best.pvBudget, `verdicts[${at}].best.pvBudget`) }),
       },
       played: restoreMove(board, row.played, `verdicts[${at}].played`),
       guessed: restoreMove(board, row.guessed, `verdicts[${at}].guessed`),

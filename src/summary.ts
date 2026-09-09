@@ -716,7 +716,7 @@ function exportMove(verdict: MoveVerdict | null, board: Position): object | null
         // moves in a game and none at all in most. Omitted rather than
         // written null, so a result with no deep lines is the file it always
         // was and the fixture check stays quiet.
-        ...(verdict.pvVisits === undefined ? {} : { pvVisits: verdict.pvVisits }),
+        ...(verdict.pvBudget === undefined ? {} : { pvBudget: verdict.pvBudget }),
       };
 }
 
@@ -729,6 +729,7 @@ function exportVerdict(verdict: Verdict, board: Position): object {
       point: pointName(board, verdict.best.point),
       scoreLead: Number(verdict.best.scoreLead.toFixed(3)),
       pv: verdict.best.pv.map((point) => pointName(board, point)),
+      ...(verdict.best.pvBudget === undefined ? {} : { pvBudget: verdict.best.pvBudget }),
     },
     played: exportMove(verdict.played, board),
     guessed: exportMove(verdict.guessed, board),

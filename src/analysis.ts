@@ -90,13 +90,21 @@ export interface MoveVerdict {
    */
   readonly pv: readonly number[];
   /**
-   * The budget behind the *line*, where a separate, deeper search bought it.
+   * The budget behind the *line*, and a receipt that its length was bought.
    *
-   * Absent on almost everything, and that absence is the common case rather
-   * than a gap: a line found by the same search as the numbers is trustworthy
-   * exactly as deep as that search went, which is what `SHOWN_PLIES` says.
-   * Present only where a second pass re-read this move at a much larger budget
-   * (`experiments/katago/deepen.ts`) and the line may honestly run longer.
+   * Present on two kinds of line, which is the whole point of the field. A
+   * recorded one, where a second offline pass re-read this move at a much
+   * larger budget (`experiments/katago/deepen.ts`) and the line may honestly
+   * run longer than `SHOWN_PLIES`. And a live one, where the search reported
+   * per-ply visits and `evaluate.ts` cut the line where they ran out — a length
+   * measured rather than assumed, whatever the budget was.
+   *
+   * Absent means nobody measured, and the line is trusted only as far as the
+   * constant. That is the older recorded rows and nothing else now.
+   *
+   * It is not `search.ts`'s `MoveAnalysis.pvVisits`, which is a count per ply
+   * and the raw material for the cut. This is one number, kept for provenance
+   * once the cutting is done: how hard the line was read.
    *
    * It is deliberately not `visits`, and does not replace it. `visits` is the
    * budget behind the *estimate* — behind `loss` — and a deeper search may
@@ -106,7 +114,7 @@ export interface MoveVerdict {
    * fields is what stops the deeper number leaking into a band, a rate or a
    * total.
    */
-  readonly pvVisits?: number;
+  readonly pvBudget?: number;
 }
 
 /**
@@ -122,6 +130,17 @@ export interface BestMove {
   readonly point: number;
   readonly scoreLead: number;
   readonly pv: readonly number[];
+  /**
+   * The budget behind the line, as on a `MoveVerdict`, and for the same reason:
+   * present when the length was measured, absent when nobody measured and the
+   * constant is all a reader has. A recorded row carries KataGo's full fifteen
+   * plies with nothing to say how much of it was read; a live one arrives cut
+   * where the per-ply visits ran out.
+   *
+   * No loss and no visit count join it here, because this move's loss is zero
+   * by construction and nobody asks what the best move was visited.
+   */
+  readonly pvBudget?: number;
 }
 
 /**
@@ -319,6 +338,62 @@ export function withVerdict(analysis: Analysis, verdict: Verdict): Analysis {
         ? null
         : { ...verdict.natural, loss: roundLoss(verdict.natural.loss) },
   });
+  return { ...analysis, verdicts };
+}
+
+/**
+ * Longer lines for a move that has already been scored.
+ *
+ * Deliberately not a `Verdict`: there is no loss, no visit count and no best
+ * move here, because a second, deeper search may lengthen a line and may never
+ * revise a figure (`docs/prd-ai-scoring.md` §5). What it can name is one move's
+ * two lines, by the slots they occupy in the verdict that exists.
+ */
+export interface DeepLines {
+  readonly moveNumber: number;
+  /** The budget that bought these lines; becomes each one's `pvBudget`. */
+  readonly visits: number;
+  /** As board indices, opening with the move the slot is about. */
+  readonly played?: readonly number[];
+  readonly guessed?: readonly number[];
+}
+
+/**
+ * A new analysis with these lines in place of the ones it had, and nothing else
+ * changed.
+ *
+ * This exists because `withVerdict` cannot do it safely. A deeper search hands
+ * back a whole result — its own loss, its own visits — and putting that through
+ * the one door into the store would silently move a band, a rate and both
+ * totals of a session the reader has already finished. The invariant needs an
+ * operation that *cannot* touch a number rather than a call site that
+ * remembers not to, and this is it: `pv` and `pvBudget` are the only fields it
+ * writes.
+ *
+ * It refuses rather than repairs, in three cases, all of them a line that does
+ * not belong to the verdict it was offered to: no verdict for the move (a deep
+ * line for something nobody scored says nothing), an empty slot, and a line
+ * whose first ply is not that slot's move. The last is the one worth guarding —
+ * a search run against a stale position comes back well-formed and about a
+ * different move, and drawn on the board it would be indistinguishable from
+ * truth.
+ */
+export function withDeepLine(analysis: Analysis, lines: DeepLines): Analysis {
+  const existing: Verdict | undefined = analysis.verdicts.get(lines.moveNumber);
+  if (existing === undefined) return analysis;
+
+  const deepen = (move: MoveVerdict | null, line: readonly number[] | undefined): MoveVerdict | null => {
+    if (move === null || line === undefined) return move;
+    if (line.length === 0 || line[0] !== move.point) return move;
+    return { ...move, pv: line, pvBudget: lines.visits };
+  };
+
+  const played: MoveVerdict | null = deepen(existing.played, lines.played);
+  const guessed: MoveVerdict | null = deepen(existing.guessed, lines.guessed);
+  if (played === existing.played && guessed === existing.guessed) return analysis;
+
+  const verdicts = new Map(analysis.verdicts);
+  verdicts.set(lines.moveNumber, { ...existing, played, guessed });
   return { ...analysis, verdicts };
 }
 

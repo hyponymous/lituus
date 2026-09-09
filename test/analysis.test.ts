@@ -18,6 +18,7 @@ import {
   sameEngine,
   verdictCount,
   verdictFor,
+  withDeepLine,
   withVerdict,
   type Analysis,
   type EngineConfig,
@@ -186,4 +187,91 @@ test('a different network or visit count does not compare', () => {
 
 test('a configuration describes itself for an export', () => {
   assert.equal(describeEngine(CONFIG), 'b15c192 @ 50 visits (replay)');
+});
+
+// ── Deeper lines ─────────────────────────────────────────────────────────────
+
+/** A scored move with a short line, of the kind a deeper pass would lengthen. */
+function scored(): Analysis {
+  const one: Verdict = {
+    ...verdict(7, { ...move(10, 1.5, 50), pv: [10, 20] }),
+    guessed: { ...move(30, 4.0, 50), pv: [30, 40] },
+  };
+  return withVerdict(emptyAnalysis(CONFIG), one);
+}
+
+test('a deeper line replaces the line and carries the budget that bought it', () => {
+  const after: Analysis = withDeepLine(scored(), {
+    moveNumber: 7,
+    visits: 4000,
+    played: [10, 20, 30, 40, 50, 60],
+  });
+
+  const played: MoveVerdict | null | undefined = verdictFor(after, 7)?.played;
+  assert.deepEqual(played?.pv, [10, 20, 30, 40, 50, 60]);
+  assert.equal(played?.pvBudget, 4000);
+});
+
+test('a deeper line cannot touch a number, which is the reason it exists', () => {
+  // The search that lengthened this line also produced a loss and a visit
+  // count of its own, at a budget eighty times the one the session was scored
+  // at. Letting either in would move a band, a rate and both totals of a
+  // session the reader has already finished (PRD §5).
+  const before: Analysis = scored();
+  const after: Analysis = withDeepLine(before, {
+    moveNumber: 7,
+    visits: 4000,
+    played: [10, 20, 30, 40],
+    guessed: [30, 40, 50, 60],
+  });
+
+  const was: Verdict | null = verdictFor(before, 7);
+  const now: Verdict | null = verdictFor(after, 7);
+  assert.equal(now?.played?.loss, was?.played?.loss);
+  assert.equal(now?.played?.visits, 50);
+  assert.equal(now?.played?.forced, was?.played?.forced);
+  assert.equal(now?.guessed?.loss, was?.guessed?.loss);
+  assert.equal(now?.guessed?.visits, 50);
+  assert.deepEqual(now?.best, was?.best, 'and the best move is not its business either');
+  assert.equal(now?.rootScoreLead, was?.rootScoreLead);
+});
+
+test('a line for a move nobody scored is not a way to add a verdict', () => {
+  const before: Analysis = scored();
+  const after: Analysis = withDeepLine(before, { moveNumber: 99, visits: 4000, played: [10, 20] });
+
+  assert.equal(after, before, 'nothing to deepen, so nothing changed');
+  assert.equal(verdictCount(after), 1);
+});
+
+test('a line whose first ply is not the move is refused, not drawn', () => {
+  // The failure this guards is a search against a stale position: it comes back
+  // well-formed and about a different move, and on the board it would be
+  // indistinguishable from truth.
+  const after: Analysis = withDeepLine(scored(), {
+    moveNumber: 7,
+    visits: 4000,
+    played: [11, 20, 30, 40],
+  });
+
+  assert.deepEqual(verdictFor(after, 7)?.played?.pv, [10, 20]);
+  assert.equal(verdictFor(after, 7)?.played?.pvBudget, undefined);
+});
+
+test('a slot the deeper pass left alone keeps the line it had', () => {
+  const after: Analysis = withDeepLine(scored(), {
+    moveNumber: 7,
+    visits: 4000,
+    played: [10, 20, 30, 40],
+  });
+
+  assert.deepEqual(verdictFor(after, 7)?.guessed?.pv, [30, 40]);
+  assert.equal(verdictFor(after, 7)?.guessed?.pvBudget, undefined);
+});
+
+test('deepening does not mutate the analysis it came from', () => {
+  const before: Analysis = scored();
+  withDeepLine(before, { moveNumber: 7, visits: 4000, played: [10, 20, 30] });
+
+  assert.deepEqual(verdictFor(before, 7)?.played?.pv, [10, 20]);
 });

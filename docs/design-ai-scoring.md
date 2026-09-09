@@ -676,7 +676,7 @@ are and offers the way back in the same words.
 **The deep lines exist, and the join is the data work — but the join is not
 the wiring.** `joinRecorded` takes `*-deep.jsonl` as a fourth input, and it
 wins on lines and on nothing else: no loss, no visit count for an estimate, no
-root. A line it supplies reaches the verdict carrying `pvVisits`, the budget
+root. A line it supplies reaches the verdict carrying `pvBudget`, the budget
 that bought *the line*, beside the `visits` behind the estimate. Two fields
 rather than one, because the pass that lengthens a line must never revise a
 figure, and keeping them apart is what stops the deeper number reaching a band,
@@ -684,17 +684,35 @@ a rate or a total. The receipt is what buys the extra plies: a line that has
 one is shown at the length it was recorded, and everything else is cut to what
 the run's budget paid for.
 
-What that does not do is put a deep line on a board. The only producer of
-`pvVisits` is the replay evaluator, and the app has no call site for it — the
-recorded path in the product is a pasted export whose verdicts came from the
-browser engine, and nothing under `engine/` sets the field because there is no
-second, deeper search in the browser to set it from. So the join serves the
-tests and the conformance harness, and the rest of this is a receiving end
-waiting on its producer: the same pass as `experiments/katago/deepen.ts`, run
-in the worker once the scoring queue has drained, on the two or three worst
-mistakes and on the lines that earned it. This section's mechanism is complete
-and dormant, which is worth saying plainly rather than leaving a reader to
-infer it from a field nobody sets.
+**A live line is cut where the reading stopped, not at a chosen number.**
+`search.ts` reports `pvVisits` — the visits behind every ply, which KataGo's
+analysis engine emits under `includePVVisits` and the recorded reference runs
+never asked for — and `evaluate.ts` keeps the plies whose visits reach
+`MIN_TRUSTED_VISITS`, the same floor that decides an *estimate* is worth
+quoting. A ply nobody looked at is not worth drawing for the reason a one-visit
+score is not worth printing. The verdict then carries `pvBudget` as a receipt
+that somebody measured, so the view trusts the length it was given.
+
+That closes the recorded-versus-live split with one rule instead of two: a line
+with a receipt is shown whole, and `SHOWN_PLIES` survives only for recorded rows
+written before any of this. It also makes the depth self-adjusting — a deeper
+search lengthens its own line with nobody choosing a number, which is what the
+in-browser deepening pass needs to be able to lean on. Measured on b15c192 at
+the product's 50 visits, over fifteen fixture positions: a median of 3 plies,
+never more than 4, and 1 on two positions where the search read no further. The
+constant was a good stand-in, and the measurement is the thing that can be right
+position by position.
+
+What none of this does yet is put a *deep* line on a board. There is still no
+second, deeper search in the browser, so the long lines remain the offline
+pass's alone: the same pass as `experiments/katago/deepen.ts`, run in the worker
+once the scoring queue has drained, on the two or three worst mistakes and on
+the lines that earned it. `withDeepLine` is the door it will come in by — a
+lines-only update to a verdict that already exists, which by construction cannot
+touch a loss, a visit count, a band or a total. `withVerdict` could not be that
+door: it replaces a whole verdict, so a deeper result handed to it would carry
+its own figures in with it and silently move the numbers of a session the reader
+has already finished.
 
 **The core is pure and belongs outside the view.** Position plus line to the
 end position, its numbered markers, and the footnotes. It walks ply by ply

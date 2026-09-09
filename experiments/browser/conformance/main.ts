@@ -48,6 +48,15 @@ export interface ConformanceRow {
   readonly pointLoss: number | null;
   readonly playedVisits: number | null;
   readonly playedForced: boolean | null;
+  /**
+   * How many plies of the played move's line survived the cut.
+   *
+   * `evaluate.ts` cuts a live line where the per-ply visits fall under
+   * `MIN_TRUSTED_VISITS`, so this is the honest depth the product's own budget
+   * buys — the number `SHOWN_PLIES` was a stand-in for, measured on the real
+   * network instead of assumed.
+   */
+  readonly playedPlies: number | null;
   readonly topPolicy: string;
   readonly topPolicyPrior: number;
   readonly topPolicyLoss: number;
@@ -182,6 +191,7 @@ async function run(request: ConformanceRequest): Promise<ConformanceResult> {
       pointLoss: verdict.played?.loss ?? null,
       playedVisits: verdict.played?.visits ?? null,
       playedForced: verdict.played?.forced ?? null,
+      playedPlies: verdict.played?.pv.length ?? null,
       topPolicy: verdict.natural ? pointName(move.before, verdict.natural.point) : '',
       topPolicyPrior: verdict.natural?.prior ?? 0,
       topPolicyLoss: verdict.natural?.loss ?? 0,

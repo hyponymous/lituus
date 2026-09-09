@@ -240,6 +240,31 @@ async function main(): Promise<void> {
       `max ${(rootDeltas[rootDeltas.length - 1] ?? NaN).toFixed(3)}`,
   );
   console.log(`best move agreed on ${bestAgreed}/${compared}`);
+
+  /*
+   * How deep this budget actually reads, measured rather than assumed.
+   *
+   * `evaluate.ts` cuts a line where the per-ply visits fall under
+   * MIN_TRUSTED_VISITS, so the spread below is what a reader is shown when they
+   * open the variation mode — the number `SHOWN_PLIES` stands in for on the
+   * recorded path, on this network at this budget.
+   */
+  const plies: number[] = result.rows
+    .map((row) => row.playedPlies)
+    .filter((count): count is number => count !== null);
+  if (plies.length > 0) {
+    const spread = new Map<number, number>();
+    for (const count of plies) spread.set(count, (spread.get(count) ?? 0) + 1);
+    const histogram: string = [...spread.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([count, times]) => `${count}:${times}`)
+      .join(' ');
+    const sorted: number[] = [...plies].sort((a, b) => a - b);
+    console.log(
+      `played line  plies median ${quantile(sorted, 0.5)}  ` +
+        `min ${sorted[0]}  max ${sorted[sorted.length - 1]}  (plies:positions ${histogram})`,
+    );
+  }
   console.log(
     `verdict band changed on ${bandChanged}/${compared} ` +
       `(fine <${BEAT_MARGIN}, costly >=${MISLEADING_LOSS}, blunder >=${BLUNDER_LOSS})`,

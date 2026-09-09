@@ -63,8 +63,8 @@ export interface RecordedRow {
    * of the two moves and not the other. Never a number's provenance — the
    * deepening pass revises no figure.
    */
-  readonly playedPvVisits?: number;
-  readonly guessPvVisits?: number;
+  readonly playedPvBudget?: number;
+  readonly guessPvBudget?: number;
 }
 
 /** The `analyze.ts` / backfill row shape, as those files are written. */
@@ -180,7 +180,7 @@ export function joinRecorded(
       playedVisits: repaired ? null : (row.playedVisits ?? null),
       // The deep line wins where there is one, and only over the line.
       playedPv: long?.playedPv ?? (repaired ? repair?.playedPv : row.playedPv),
-      playedPvVisits: long?.playedPv === undefined ? undefined : long.visits,
+      playedPvBudget: long?.playedPv === undefined ? undefined : long.visits,
       backfilled: repaired,
       best: row.best,
       bestScoreLead: row.bestScoreLead,
@@ -193,7 +193,7 @@ export function joinRecorded(
       guess: guess?.guess,
       guessLoss: guess?.guessLoss,
       guessPv: long?.guessPv ?? guess?.guessPv,
-      guessPvVisits: long?.guessPv === undefined ? undefined : long.visits,
+      guessPvBudget: long?.guessPv === undefined ? undefined : long.visits,
     };
   });
 }
@@ -244,7 +244,7 @@ function guessVerdict(
     visits,
     forced: true,
     pv: variation(board, row.guessPv),
-    ...(row.guessPvVisits === undefined ? {} : { pvVisits: row.guessPvVisits }),
+    ...(row.guessPvBudget === undefined ? {} : { pvBudget: row.guessPvBudget }),
   };
 }
 
@@ -261,7 +261,7 @@ function playedVerdict(board: Position, row: RecordedRow, visits: number): MoveV
     visits: row.backfilled === true ? visits : (row.playedVisits ?? 0),
     forced: row.backfilled === true,
     pv: variation(board, row.playedPv),
-    ...(row.playedPvVisits === undefined ? {} : { pvVisits: row.playedPvVisits }),
+    ...(row.playedPvBudget === undefined ? {} : { pvBudget: row.playedPvBudget }),
   };
 }
 

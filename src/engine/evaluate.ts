@@ -152,6 +152,28 @@ export function evaluatePrompt(
     return at === -1 ? pv : pv.slice(0, at);
   };
 
+  /**
+   * And a variation stops where the search stopped reading it.
+   *
+   * The search reports the visits behind every ply, so the length of a line
+   * can be measured instead of assumed: keep the plies a search actually read
+   * and drop the tail it merely walked. The floor is `MIN_TRUSTED_VISITS`, the
+   * same one that decides a *number* is worth quoting — a ply nobody looked at
+   * is not worth showing for the same reason a one-visit score is not.
+   *
+   * This is PRD §5's honest cutoff, and it is why a live line needs no fitted
+   * constant: at fifty visits it comes out short on its own, and a deeper
+   * search lengthens it without anybody choosing a number.
+   */
+  const read = (pv: readonly number[], pvVisits: readonly number[]): readonly number[] => {
+    let kept = 0;
+    while (kept < pv.length && (pvVisits[kept] ?? 0) >= MIN_TRUSTED_VISITS) kept += 1;
+    return pv.slice(0, kept);
+  };
+
+  /** The line as the reader should see it: cut at a pass, then at the search's edge. */
+  const shown = (move: MoveAnalysis): readonly number[] => read(line(move.pv), move.pvVisits);
+
   const rootLead: number = root.rootScoreLead;
   const found = (point: number): MoveAnalysis | undefined =>
     root.moves.find((move: MoveAnalysis) => move.point === point);
@@ -178,7 +200,8 @@ export function evaluatePrompt(
         loss: rootLead - direct.scoreLead,
         visits: direct.visits,
         forced: false,
-        pv: line(direct.pv),
+        pv: shown(direct),
+        pvBudget: visits,
       };
     }
     const forcedResult: SearchResult = search.run({ ...base, allowedRootMoves: [point] });
@@ -189,7 +212,8 @@ export function evaluatePrompt(
       loss: rootLead - forced.scoreLead,
       visits: forced.visits,
       forced: true,
-      pv: line(forced.pv),
+      pv: shown(forced),
+      pvBudget: visits,
     };
   };
 
@@ -197,7 +221,8 @@ export function evaluatePrompt(
   const best: BestMove = {
     point: bestMove.point,
     scoreLead: bestMove.scoreLead,
-    pv: line(bestMove.pv),
+    pv: shown(bestMove),
+    pvBudget: visits,
   };
 
   // The move the policy liked before any reading, and what reading made of it.

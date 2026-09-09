@@ -304,6 +304,37 @@ test('a root mask restricts the root and only the root', () => {
   assert.equal(result.moves[0].pv[1], favourite);
 });
 
+test('every ply of a line says how much of the search stands behind it', () => {
+  // `pvVisits`, which the analysis engine emits under `includePVVisits` and the
+  // recorded reference runs never asked for. It is what lets a caller cut a
+  // line where the reading stopped instead of at a chosen number.
+  const board: Board = createBoard(SIZE, SIZE);
+  const stub: Stub = stubNetwork((stones: Map<number, Stone>) => ({
+    // A different favourite at each depth, so the line runs rather than
+    // repeating one point and stopping at the first illegal ply.
+    policy: new Map([[stones.size * 5 + 2, 8]]),
+    passLogit: -10,
+  }));
+  const result: SearchResult = new Search(stub.network, board).run(
+    request(board, emptyState(board), BLACK, 60),
+  );
+  const best: MoveAnalysis = result.moves[0];
+
+  assert.equal(best.pvVisits.length, best.pv.length, 'one count per ply, aligned');
+  assert.equal(best.pvVisits[0], best.visits, 'and the first is the move itself');
+  assert.ok(best.pv.length > 1, 'the stub gives the search something to read');
+  for (let i = 1; i < best.pvVisits.length; i++) {
+    assert.ok(
+      best.pvVisits[i] <= best.pvVisits[i - 1],
+      `ply ${i} cannot have been visited more than the ply it hangs off`,
+    );
+  }
+  assert.ok(
+    (best.pvVisits.at(-1) ?? 0) < best.visits,
+    'a line runs past where the search read, which is the whole reason to count',
+  );
+});
+
 test('the same request twice gives the same answer', () => {
   const board: Board = createBoard(SIZE, SIZE);
   const build = (): Stub =>

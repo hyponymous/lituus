@@ -139,6 +139,21 @@ export interface MoveAnalysis {
   readonly winrate: number;
   /** How play is expected to continue, as board indices. */
   readonly pv: readonly number[];
+  /**
+   * Visits behind each ply of `pv`, aligned with it.
+   *
+   * Upstream: `AnalysisData::pvVisits`, which the analysis engine emits under
+   * `includePVVisits`. Each entry is the visit count of the node the ply moves
+   * *into*, so the first is this move's own `visits` and every later one is
+   * smaller: a line decays as it runs out, and this is where it ran out.
+   *
+   * KataGo's recorded output does not carry it — the configs behind
+   * `experiments/out/` never asked for it — which is why a recorded line has to
+   * be trusted at the length it was written and a live one does not
+   * (`docs/prd-ai-scoring.md` §5). Not to be confused with
+   * `MoveVerdict.pvBudget`, one number saying what a whole line cost.
+   */
+  readonly pvVisits: readonly number[];
 }
 
 export interface SearchResult {
@@ -1094,9 +1109,18 @@ export class Search {
    * — the highest play selection value, LCB and all — rather than simply
    * following visit counts, so the line the reader is shown is the line the
    * search would actually play.
+   *
+   * Each ply's visit count comes back beside it, as upstream's `visitsBuf`
+   * does: the visits of the node the ply moves into, read after the step. It
+   * is what tells a caller where the line stopped being read and started being
+   * guessed, and nothing else in the tree survives to say so.
    */
-  private principalVariation(node: Node, maxDepth: number): number[] {
+  private principalVariation(
+    node: Node,
+    maxDepth: number,
+  ): { pv: number[]; visits: number[] } {
     const pv: number[] = [];
+    const visits: number[] = [];
     let current: Node = node;
     for (let depth = 0; depth < maxDepth; depth++) {
       if (current.children.length === 0 || current.policy === null) break;
@@ -1112,8 +1136,9 @@ export class Search {
       if (bestIdx < 0) break;
       pv.push(current.childMoves[bestIdx]);
       current = current.children[bestIdx];
+      visits.push(current.stats.visits);
     }
-    return pv;
+    return { pv, visits };
   }
 
   /**
@@ -1175,13 +1200,19 @@ export class Search {
       const winLossValue: number = searched
         ? stats.winLossValueAvg
         : root.stats.winLossValueAvg;
+      const line: { pv: number[]; visits: number[] } = this.principalVariation(
+        child,
+        ANALYSIS_PV_LENGTH - 1,
+      );
       return {
         point: root.childMoves[i],
         visits: stats.visits,
         prior: policy[root.childMoves[i]],
         scoreLead: lead * flip,
         winrate: 0.5 + 0.5 * winLossValue * flip,
-        pv: [root.childMoves[i], ...this.principalVariation(child, ANALYSIS_PV_LENGTH - 1)],
+        pv: [root.childMoves[i], ...line.pv],
+        // The move's own visits open the count, as upstream's `childVisits` does.
+        pvVisits: [stats.visits, ...line.visits],
         selectionValue: values[i],
       };
     });

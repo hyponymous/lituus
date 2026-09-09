@@ -309,3 +309,29 @@ test('a variation stops at a pass instead of naming it as a point', () => {
     );
   }
 });
+
+test('a line is cut where the search stopped reading it, and says what it cost', () => {
+  // The honest cutoff (PRD §5): the search reports the visits behind every ply,
+  // so the length of a live line is measured rather than chosen. The verdict
+  // carries the budget as a receipt that somebody measured — which is what
+  // tells the view to trust the length instead of cutting to `SHOWN_PLIES`.
+  const network: Network = stubNetwork((stones: Map<number, Stone>) => ({
+    // A fresh favourite at each depth, so the search has a line to read.
+    policy: new Map([[(stones.size * 7 + 3) % AREA, 8]]),
+  }));
+
+  const shallow: Verdict = evaluate(network, 5, 'C6', 'C6', 20);
+  const deep: Verdict = evaluate(network, 5, 'C6', 'C6', 200);
+
+  assert.ok(shallow.played && deep.played);
+  assert.equal(shallow.played.pvBudget, 20, 'the receipt is the budget that read it');
+  assert.equal(deep.played.pvBudget, 200);
+  assert.ok(
+    deep.played.pv.length > shallow.played.pv.length,
+    'and a deeper search lengthens the line with nobody choosing a number',
+  );
+  assert.ok(
+    shallow.played.pv.length < 15,
+    'and twenty visits buy far less than the fifteen plies the search reports',
+  );
+});

@@ -112,7 +112,7 @@ test('a line a deeper search paid for is shown at the length it was recorded', (
   // Length belongs to the line, not to a constant (PRD §5): the pass that
   // bought this one truncated it with its own budget in mind, so the view
   // trusts it whole where it cuts everything else.
-  const deep: MoveVerdict = { ...move(at('D16'), 1.2, 50), pvVisits: 4000 };
+  const deep: MoveVerdict = { ...move(at('D16'), 1.2, 50), pvBudget: 4000 };
   const list: Branch[] = slots(verdict({ guessed: deep }));
 
   assert.equal(list[0].line.length, deep.pv.length);

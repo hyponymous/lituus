@@ -1536,15 +1536,16 @@ export function branches(
    */
   const walkable = (move: MoveVerdict | null | undefined): readonly number[] => {
     if (!move || move.visits < MIN_TRUSTED_VISITS) return [];
-    return cut(move.pv, move.pvVisits);
+    return cut(move.pv, move.pvBudget);
   };
 
   /*
-   * Length belongs to the line rather than to a constant (PRD §5). A line runs
-   * deeper only where a deeper search paid for it, and `pvVisits` is that
-   * receipt: with one, the line is trusted at the length it was recorded,
-   * since the pass that bought it truncated it with its own budget in mind.
-   * Without one it is cut to what the run's budget paid for.
+   * Length belongs to the line rather than to a constant (PRD §5), and
+   * `pvBudget` is the receipt that somebody measured it. With one, the line is
+   * shown whole: the live engine cut it where its own per-ply visits ran out,
+   * and an offline deepening pass truncated it with its own budget in mind.
+   * Without one — a recorded row from before either — there is nothing to go
+   * on but the constant.
    */
   const cut = (pv: readonly number[], bought?: number): readonly number[] => {
     const shown: readonly number[] = bought === undefined ? pv.slice(0, SHOWN_PLIES) : pv;
@@ -1576,7 +1577,7 @@ export function branches(
       key: 'engine',
       text: `engine ${pointName(summary.board, verdict.best.point)}`,
       point: bestPointOn(summary.board, verdict) ?? null,
-      line: cut(verdict.best.pv),
+      line: cut(verdict.best.pv, verdict.best.pvBudget),
     });
   } else if (summary.ai !== null) {
     slots.push({ key: 'engine', text: 'engine —', point: null, line: [] });

@@ -468,24 +468,24 @@ test("a deep line's budget survives the export, and a plain line adds no field",
   const deep: MoveVerdict = {
     ...move(at('D16'), 0.5),
     pv: [at('D16'), at('Q4'), at('C6'), at('D4')],
-    pvVisits: 4000,
+    pvBudget: 4000,
   };
   const { summary } = play(['D16'], [verdict({ moveNumber: 1, guessed: deep })]);
   const exported: string = toJSON(summary);
 
   // A line bought by a second, deeper pass is the only thing that carries one,
   // so the field has to survive the trip or the length rule loses its receipt.
-  assert.match(exported, /"pvVisits": 4000/);
+  assert.match(exported, /"pvBudget": 4000/);
   assert.equal(
-    (exported.match(/pvVisits/g) ?? []).length,
+    (exported.match(/pvBudget/g) ?? []).length,
     1,
     'and nothing else gains one: an omitted field is what "the run\'s own budget" means',
   );
 
   const session: Session = restoreSession(exported);
   const analysis: Analysis | null = restoreAnalysis(exported, session.game);
-  assert.equal(analysis?.verdicts.get(1)?.guessed?.pvVisits, 4000);
-  assert.equal(analysis?.verdicts.get(1)?.played?.pvVisits, undefined);
+  assert.equal(analysis?.verdicts.get(1)?.guessed?.pvBudget, 4000);
+  assert.equal(analysis?.verdicts.get(1)?.played?.pvBudget, undefined);
 });
 
 test('the round trip is exact for losses that sit on a rounding boundary', () => {
