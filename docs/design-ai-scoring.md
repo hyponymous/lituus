@@ -634,10 +634,16 @@ gives two regimes in one view, and they should be named rather than blurred.
 their budget in mind (six plies at 500 visits, twelve at 4000), and they are
 trusted at the length they were recorded. *Live* lines come back fifteen plies
 long from `search.ts` whatever the budget, and are cut by visit count once the
-search reports visits alongside the PV — and at three until it does. The
-underlying claim, that visits fall by roughly a constant factor per ply, is a
-model fitted to three of the harness's own choices and has not been measured
-directly; the conformance harness could measure it in an afternoon.
+search reports visits alongside the PV — and at three until it does. Reporting
+them is not a research problem: `principalVariation` already walks the tree
+node by node, and every node it passes carries `stats.visits`.
+
+The underlying claim, that visits fall by roughly a constant factor per ply, is
+a model fitted to three of the harness's own choices and has not been measured
+directly; the conformance harness could measure it in an afternoon. It binds
+only the recorded lines, which carry no per-ply counts of their own. A line
+searched in this browser can be cut by the counts themselves, and needs no
+model at all.
 
 **Any deeper search is a second layer that may lengthen lines and may never
 revise a number** (PRD §5). The invariant is worth a test of its own, because
@@ -667,11 +673,28 @@ this way, so the gesture is learned — and, for touch, the nav row relabeled
 while the mode is on. The caption reads as a breadcrumb, so it says where you
 are and offers the way back in the same words.
 
-**The deep lines already exist and have never reached the app.**
-`joinRecorded` takes analysis, guesses and backfill; `*-deep.jsonl` is read
-only by the SGF export (`experiments/katago/review.ts`). Adding it as a fourth
-input is the whole of the data work, and it puts real deep lines on a board
-with no engine involved.
+**The deep lines exist, and the join is the data work — but the join is not
+the wiring.** `joinRecorded` takes `*-deep.jsonl` as a fourth input, and it
+wins on lines and on nothing else: no loss, no visit count for an estimate, no
+root. A line it supplies reaches the verdict carrying `pvVisits`, the budget
+that bought *the line*, beside the `visits` behind the estimate. Two fields
+rather than one, because the pass that lengthens a line must never revise a
+figure, and keeping them apart is what stops the deeper number reaching a band,
+a rate or a total. The receipt is what buys the extra plies: a line that has
+one is shown at the length it was recorded, and everything else is cut to what
+the run's budget paid for.
+
+What that does not do is put a deep line on a board. The only producer of
+`pvVisits` is the replay evaluator, and the app has no call site for it — the
+recorded path in the product is a pasted export whose verdicts came from the
+browser engine, and nothing under `engine/` sets the field because there is no
+second, deeper search in the browser to set it from. So the join serves the
+tests and the conformance harness, and the rest of this is a receiving end
+waiting on its producer: the same pass as `experiments/katago/deepen.ts`, run
+in the worker once the scoring queue has drained, on the two or three worst
+mistakes and on the lines that earned it. This section's mechanism is complete
+and dormant, which is worth saying plainly rather than leaving a reader to
+infer it from a field nobody sets.
 
 **The core is pure and belongs outside the view.** Position plus line to the
 end position, its numbered markers, and the footnotes. It walks ply by ply
