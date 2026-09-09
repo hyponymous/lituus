@@ -115,6 +115,22 @@ export interface RecordedDeep {
   readonly turn: number;
   /** What that pass spent, far above the run's own budget. */
   readonly visits: number;
+  /**
+   * Which network read these lines, as `deepen.ts` names it.
+   *
+   * `visits` says how hard, and this says who — and the two are different
+   * questions, because a line is shown next to numbers that came from
+   * somewhere else. `dogfood.ts` runs the deepening pass for both the product
+   * configuration and the reference one, so a `*-deep.jsonl` can hold a
+   * 40-block network's reading of a game a 15-block network scored, and only
+   * the file's stem ever said so. A consumer joining lines to numbers from a
+   * different engine owes the reader a word about it (PRD §9: a score carries
+   * its engine) or should refuse them.
+   *
+   * Optional because files written before the field existed do not have it,
+   * and absent means unknown rather than "the same one".
+   */
+  readonly net?: string;
   readonly playedPv?: readonly string[];
   readonly guessPv?: readonly string[];
 }

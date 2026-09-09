@@ -25,7 +25,7 @@ import type { Readable, Writable } from 'node:stream';
 type Engine = ChildProcessByStdio<Writable, Readable, null>;
 import { createInterface } from 'node:readline';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 import { parse, type GameTree } from '../../src/sgf-parser.ts';
 import { readGame, type Game } from '../../src/game.ts';
 import { stoneAt, type Position } from '../../src/rules.ts';
@@ -185,9 +185,17 @@ async function main(): Promise<void> {
   katago.kill();
 
   const out = `${stem}-deep.jsonl`;
+  /*
+   * The net is recorded beside the budget, because a line is quoted next to
+   * numbers that came from somewhere else. `visits` says how hard this pass
+   * read; `net` says who read it, and a line from a stronger network than the
+   * one that scored the game is mixed provenance a consumer has to notice.
+   * `dogfood.ts` runs this for both configurations, and only the stem told
+   * them apart — which a file read on its own cannot see.
+   */
   const records: string[] = [...lines.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([turn, pvs]) => JSON.stringify({ turn, visits, ...pvs }));
+    .map(([turn, pvs]) => JSON.stringify({ turn, visits, net: basename(net), ...pvs }));
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, records.join('\n') + '\n');
   console.error(`[deepen] wrote ${records.length} deepened positions to ${out}`);
