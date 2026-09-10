@@ -22,6 +22,7 @@ import {
   DEEP_VISITS,
   deepenTargets,
   emptyAnalysis,
+  mayDeepen,
   verdictCount,
   verdictFor,
   withDeepLine,
@@ -337,6 +338,7 @@ let deepening = false;
 async function deepenWorstMistakes(): Promise<void> {
   const handle: EngineHandle | null = engine;
   if (deepening || handle === null || analysis === null) return;
+  if (!mayDeepen(analysis)) return;
   if ((queue?.pending() ?? 0) > 0) return;
   /*
    * Which record this pass is about, checked again after every await.

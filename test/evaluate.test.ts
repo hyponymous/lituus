@@ -356,7 +356,7 @@ test('a deepened line is read at the larger budget and brings back nothing else'
   const search = new Search(network, context.board);
 
   const shallow: Verdict = evaluate(network, 5, 'C6', 'C6', 50);
-  const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => false);
+  const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => 'continue');
 
   assert.ok(deep && shallow.played);
   assert.equal(deep.moveNumber, 5);
@@ -375,7 +375,7 @@ test('a deepening called off returns nothing rather than a half-read line', asyn
   const context: GameContext = gameContext(game());
   const search = new Search(network, context.board);
 
-  const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => true);
+  const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => 'abandon');
 
   assert.equal(deep, null);
 });

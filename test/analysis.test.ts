@@ -18,6 +18,7 @@ import {
   sameEngine,
   verdictCount,
   deepenTargets,
+  mayDeepen,
   verdictFor,
   withDeepLine,
   withVerdict,
@@ -342,4 +343,26 @@ test('a barely-searched mistake is not worth a long answer', () => {
   });
 
   assert.deepEqual(deepenTargets(analysis, none, 3), []);
+});
+
+test('a phone is not asked to do ten times the work for a nicety', () => {
+  // The conservative start, and the first line to move once the phone is
+  // trusted: it is the device that has produced wrong numbers with every check
+  // passing, and the one whose worker gets killed with no last words.
+  const phone: Analysis = withDevice(emptyAnalysis(CONFIG), 'apple / metal-3, mobile');
+  const laptop: Analysis = withDevice(emptyAnalysis(CONFIG), 'apple / metal-3, desktop');
+
+  assert.equal(mayDeepen(phone), false);
+  assert.equal(mayDeepen(laptop), true);
+  assert.equal(mayDeepen(emptyAnalysis(CONFIG)), true, 'an unknown device is not a phone');
+});
+
+test('an engine that has already failed is not asked for extras', () => {
+  const hurt: Analysis = withIncident(withDevice(emptyAnalysis(CONFIG), 'apple / x, desktop'), {
+    move: 7,
+    reason: 'The device was lost.',
+    fatal: false,
+  });
+
+  assert.equal(mayDeepen(hurt), false);
 });

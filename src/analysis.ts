@@ -397,6 +397,35 @@ export function withDeepLine(analysis: Analysis, lines: DeepLines): Analysis {
   return { ...analysis, verdicts };
 }
 
+/**
+ * Whether this run should be asked to read anything again.
+ *
+ * A deepening pass is ten times the forward passes of a prompt, asked for on
+ * the reader's behalf without their knowing, at the moment they already have
+ * everything they came for. So it is offered only where there is no reason to
+ * think it will hurt, and two reasons count.
+ *
+ * **A mobile device, at all, for now.** The phone is where an export came back
+ * with numbers that were wrong while every check passed, and where a worker
+ * gets killed with no last words (`docs/design-ai-scoring.md` §10b, and the
+ * memory readings kept for exactly this). Until that ceiling is understood, the
+ * device that already dies mid-session does not get asked to do ten times the
+ * work for a nicety. This is the conservative start, and the line to move
+ * first once the phone is trusted.
+ *
+ * **Anything already went wrong here.** An incident means this engine has
+ * failed at least once on this run — a refused prompt, a lost device — and the
+ * next thing to ask it for should be something the reader wants, not something
+ * nobody asked for.
+ */
+export function mayDeepen(analysis: Analysis): boolean {
+  if (analysis.incidents.length > 0 || analysis.failures > 0) return false;
+  const device: string | null = analysis.config.device;
+  // The shape `describeDevice` writes: "apple / metal-3, mobile". Absent means
+  // the engine has not said yet, and an unknown device is not a phone.
+  return device === null || !device.endsWith('mobile');
+}
+
 /** One move whose line is worth reading again, and which of its lines. */
 export interface DeepTarget {
   readonly moveNumber: number;

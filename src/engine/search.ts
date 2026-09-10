@@ -127,6 +127,16 @@ export interface SearchRequest {
   readonly allowedRootMoves?: readonly number[];
 }
 
+/**
+ * What to do after a slice of a long search.
+ *
+ * `continue` runs another slice, `report` stops and describes the tree as it
+ * stands, `abandon` throws it away. Named rather than a boolean because the
+ * last two are opposite answers to opposite questions — out of time, and no
+ * longer wanted — and a boolean would have made the cheaper one unavailable.
+ */
+export type SliceOutcome = 'continue' | 'report' | 'abandon';
+
 /** What the search made of one move from the root. */
 export interface MoveAnalysis {
   /** Board index, or `board.area` for a pass. */
@@ -297,7 +307,7 @@ export class Search {
   }
 
   /**
-   * The same search, run in slices, with a chance to be called off between them.
+   * The same search, run in slices, with a decision to make between them.
    *
    * The worker is single-threaded and a search is a tight synchronous loop, so
    * while one runs nothing else in the worker happens: the canary, the memory
@@ -307,19 +317,22 @@ export class Search {
    * tree, punctuated by a return to the event loop so the worker can hear that
    * a reader has moved on.
    *
-   * Resolving to null is a search called off, not a search that failed. There
-   * is no partial result on purpose: the caller asked for a line read to a
-   * depth, and a tree abandoned a third of the way there would report one read
-   * to some depth nobody chose.
+   * `between` gets to say what happens next, and the three answers are three
+   * different situations. `abandon` resolves to null: nobody wants this any
+   * more, so there is nothing to report to. `report` stops early and hands back
+   * what the tree holds — which is not a half-answer but a smaller search,
+   * honestly described, since `rootVisits` says how much of it was paid for and
+   * every line comes back cut by its own per-ply visits either way. That is the
+   * out-of-time answer: a slower device should get a shorter line, not nothing.
    *
-   * `slice` is the unit of deafness, and the only thing that makes cancellation
+   * `slice` is the unit of deafness, and the only thing that makes any of this
    * cost anything. One prompt's worth is the block the product already lives
    * with on every guess.
    */
   async runSliced(
     request: SearchRequest,
     slice: number,
-    calledOff: () => boolean,
+    between: () => SliceOutcome,
   ): Promise<SearchResult | null> {
     const root: Node = this.begin(request);
     while (root.stats.visits < request.maxVisits) {
@@ -327,7 +340,9 @@ export class Search {
       while (root.stats.visits < until) this.playout(root, true);
       if (root.stats.visits >= request.maxVisits) break;
       await pause();
-      if (calledOff()) return null;
+      const next: SliceOutcome = between();
+      if (next === 'abandon') return null;
+      if (next === 'report') break;
     }
     return this.report(root);
   }

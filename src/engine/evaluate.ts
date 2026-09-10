@@ -31,6 +31,7 @@ import {
   type Network,
   type SearchRequest,
   type SearchResult,
+  type SliceOutcome,
 } from './search.ts';
 import type { Position } from '../rules.ts';
 
@@ -310,11 +311,33 @@ export function evaluatePrompt(
  */
 export const DEEP_SLICE = 50;
 
+/**
+ * How long one line may take before the pass settles for what it has.
+ *
+ * The visit cap is a ceiling on *work* and this is the ceiling on *waiting*,
+ * and only the second one is felt: five hundred visits is four and a half
+ * seconds on the laptop that was measured and nobody knows what on a device
+ * five times slower. Rather than let that run, the search stops here and
+ * reports the smaller search it managed — a line read at two hundred visits is
+ * still deeper than the fifty the reader already has, and `pvBudget` says which
+ * it was.
+ *
+ * Ten seconds because the fast case must never reach it: a cap the common path
+ * trips is a cap that quietly changes what every reader sees.
+ */
+export const DEEP_MS = 10_000;
+
 /** One move re-read at a larger budget: its line, and deliberately nothing else. */
 export interface DeepLine {
   readonly moveNumber: number;
   readonly point: number;
-  /** The budget that read it, which becomes the line's `pvBudget`. */
+  /**
+   * The visits actually spent on it, which becomes the line's `pvBudget`.
+   *
+   * What was spent rather than what was asked for: a pass that ran out of time
+   * reports the smaller search it managed, and a receipt naming a budget the
+   * search never reached would be the one field on a deep line that lies.
+   */
   readonly visits: number;
   readonly pv: readonly number[];
 }
@@ -340,7 +363,7 @@ export async function deepenLine(
   moveNumber: number,
   point: number | null,
   visits: number,
-  calledOff: () => boolean,
+  between: () => SliceOutcome,
 ): Promise<DeepLine | null> {
   const { game, board } = context;
   const turn: number = turnOf(game, moveNumber);
@@ -351,13 +374,18 @@ export async function deepenLine(
   const result: SearchResult | null = await search.runSliced(
     { ...requestFor(context, move.before, move.color, turn, visits), allowedRootMoves: [at] },
     DEEP_SLICE,
-    calledOff,
+    between,
   );
   if (result === null) return null;
 
   const read: MoveAnalysis | undefined = result.moves[0];
   if (read === undefined) return null;
-  return { moveNumber, point: at, visits, pv: shownLine(read, passMove(board)) };
+  return {
+    moveNumber,
+    point: at,
+    visits: result.rootVisits,
+    pv: shownLine(read, passMove(board)),
+  };
 }
 
 /**

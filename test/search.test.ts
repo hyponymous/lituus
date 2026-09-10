@@ -353,12 +353,12 @@ test('a sliced search is the same search, and says so playout for playout', asyn
   const sliced: SearchResult | null = await new Search(build().network, board).runSliced(
     request(board, emptyState(board), BLACK, 40),
     7,
-    () => false,
+    () => 'continue',
   );
   const coarse: SearchResult | null = await new Search(build().network, board).runSliced(
     request(board, emptyState(board), BLACK, 40),
     1000,
-    () => false,
+    () => 'continue',
   );
 
   assert.deepEqual(sliced, whole);
@@ -374,7 +374,7 @@ test('a search called off stops paying for playouts and reports nothing', async 
     10,
     () => {
       slices += 1;
-      return slices >= 2;
+      return slices >= 2 ? 'abandon' : 'continue';
     },
   );
 
@@ -386,6 +386,30 @@ test('a search called off stops paying for playouts and reports nothing', async 
   // The root's own evaluation, plus two slices. The remaining 380 were never
   // paid for, which is the entire point of cancelling.
   assert.equal(stub.calls(), 21);
+});
+
+test('a search out of time reports the smaller search it managed', async () => {
+  // Not the same answer as being called off. Nobody has stopped wanting this
+  // line — the device is just slow — and a shorter line read at 30 visits is
+  // worth more to a reader than no line at all.
+  const board: Board = createBoard(SIZE, SIZE);
+  const stub: Stub = stubNetwork(() => ({}));
+  let slices = 0;
+  const result: SearchResult | null = await new Search(stub.network, board).runSliced(
+    request(board, emptyState(board), BLACK, 400),
+    10,
+    () => {
+      slices += 1;
+      return slices >= 3 ? 'report' : 'continue';
+    },
+  );
+
+  assert.ok(result);
+  // Three slices of ten, plus the root's own evaluation, which is the first
+  // visit rather than a free one.
+  assert.equal(result.rootVisits, 31, 'and says how much of it was paid for');
+  assert.ok(result.moves.length > 0);
+  assert.equal(stub.calls(), 31);
 });
 
 test('the same request twice gives the same answer', () => {

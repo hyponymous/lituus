@@ -28,6 +28,7 @@ import { parse } from '../sgf-parser.ts';
 import { Canary, WRONG_DEVICE } from './canary.ts';
 import { EXPECTED_HEADS, EXPECTED_SIZE, EXPECTED_TOLERANCE } from './canary-expected.ts';
 import {
+  DEEP_MS,
   deepenLine,
   evaluatePrompt,
   gameContext,
@@ -403,13 +404,20 @@ async function deepen(request: Extract<WorkerRequest, { type: 'deepen' }>): Prom
     post({ type: 'deepened', moveNumber: request.moveNumber, point, visits: request.visits, pv: null });
     return;
   }
+  /*
+   * Two ceilings, and they are not the same question. A prompt waiting means
+   * nobody wants this line any more, so the tree is thrown away; running out of
+   * time means the device is slow, and a shorter line read as far as ten
+   * seconds got is worth more to the reader than nothing at all.
+   */
+  const deadline: number = performance.now() + DEEP_MS;
   const line: DeepLine | null = await deepenLine(
     engine.search,
     engine.context,
     request.moveNumber,
     request.point,
     request.visits,
-    () => waiting > 0,
+    () => (waiting > 0 ? 'abandon' : performance.now() > deadline ? 'report' : 'continue'),
   );
   post({
     type: 'deepened',
