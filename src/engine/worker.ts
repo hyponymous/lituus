@@ -27,7 +27,13 @@ import { describeDevice } from '../device.ts';
 import { parse } from '../sgf-parser.ts';
 import { Canary, WRONG_DEVICE } from './canary.ts';
 import { EXPECTED_HEADS, EXPECTED_SIZE, EXPECTED_TOLERANCE } from './canary-expected.ts';
-import { evaluatePrompt, gameContext, type GameContext } from './evaluate.ts';
+import {
+  deepenLine,
+  evaluatePrompt,
+  gameContext,
+  type DeepLine,
+  type GameContext,
+} from './evaluate.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
 import { ModelV8 } from './model-v8.ts';
@@ -50,6 +56,19 @@ export type WorkerRequest =
       readonly played: number | null;
       /** Absent where nobody guessed, exactly as `Prompt` means it. */
       readonly guess?: number | null;
+    }
+  | {
+      /**
+       * Re-read one move's line at a larger budget.
+       *
+       * Lower priority than everything else by construction: it runs in slices
+       * and gives up the moment another request is waiting, because a point
+       * loss is the product and a longer line is a nicety (design §6.2).
+       */
+      readonly type: 'deepen';
+      readonly moveNumber: number;
+      readonly point: number | null;
+      readonly visits: number;
     };
 
 /** Worker to main thread. */
@@ -80,6 +99,19 @@ export type WorkerReply =
       /** Live bytes in GPU buffers, and every byte ever allocated for one. */
       readonly gpuBytes: number;
       readonly gpuAllocated: number;
+    }
+  | {
+      /**
+       * The answer to one `deepen`, always sent, so nothing is left waiting.
+       *
+       * `pv` is null where the pass was called off — a scoring prompt arrived,
+       * or the reader moved on — which is an ordinary outcome and not an error.
+       */
+      readonly type: 'deepened';
+      readonly moveNumber: number;
+      readonly point: number;
+      readonly visits: number;
+      readonly pv: readonly number[] | null;
     }
   | { readonly type: 'error'; readonly moveNumber: number; readonly reason: string };
 
@@ -354,23 +386,72 @@ function reportMemory(): void {
   });
 }
 
+/**
+ * How many requests that are not deepening are waiting to be run.
+ *
+ * The worker runs one chain, so a scoring prompt that arrives during a
+ * deepening pass cannot start until the pass returns — which is precisely why
+ * the pass has to watch this and give up. Counted on *arrival* rather than when
+ * the chain reaches it, since arrival is the moment the reader stopped being
+ * served.
+ */
+let waiting = 0;
+
+async function deepen(request: Extract<WorkerRequest, { type: 'deepen' }>): Promise<void> {
+  const point: number = request.point ?? -1;
+  if (!engine) {
+    post({ type: 'deepened', moveNumber: request.moveNumber, point, visits: request.visits, pv: null });
+    return;
+  }
+  const line: DeepLine | null = await deepenLine(
+    engine.search,
+    engine.context,
+    request.moveNumber,
+    request.point,
+    request.visits,
+    () => waiting > 0,
+  );
+  post({
+    type: 'deepened',
+    moveNumber: request.moveNumber,
+    point: line?.point ?? point,
+    visits: request.visits,
+    pv: line?.pv ?? null,
+  });
+}
+
 scope.onmessage = (event: MessageEvent<WorkerRequest>): void => {
   const request: WorkerRequest = event.data;
+  if (request.type !== 'deepen') waiting += 1;
   // One chain, so a prompt that arrives mid-download waits for the network
   // rather than racing it, and two searches never share the GPU. Errors are
   // reported and swallowed: the chain must survive one bad request.
   queue = queue.then(async (): Promise<void> => {
     try {
       if (request.type === 'init') await initialize(request);
+      else if (request.type === 'deepen') await deepen(request);
       else evaluate(request);
     } catch (error: unknown) {
       const reason: string = message(error);
       if (request.type === 'init') {
         broken = reason;
         post({ type: 'failed', reason });
+      } else if (request.type === 'deepen') {
+        // A deepening that throws costs the reader nothing they were promised,
+        // so it is reported as no line rather than as an engine error — which
+        // would count towards ERRORS_BEFORE_FAILED and stop a working engine.
+        post({
+          type: 'deepened',
+          moveNumber: request.moveNumber,
+          point: request.point ?? -1,
+          visits: request.visits,
+          pv: null,
+        });
       } else {
         post({ type: 'error', moveNumber: request.moveNumber, reason });
       }
+    } finally {
+      if (request.type !== 'deepen') waiting -= 1;
     }
   });
 };

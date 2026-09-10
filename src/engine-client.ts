@@ -61,6 +61,20 @@ export type EngineStatus =
 export interface EngineHandle {
   readonly evaluator: Evaluator;
   readonly status: () => EngineStatus;
+  /**
+   * Re-read one move's line at a larger budget, resolving to the line or to
+   * null.
+   *
+   * Null is the ordinary outcome, not a failure: the pass gives way to any
+   * scoring prompt, and an engine that is not up declines quietly. Nothing here
+   * ever rejects, because nothing about a longer line is worth interrupting a
+   * reader over.
+   */
+  readonly deepen: (
+    moveNumber: number,
+    point: number | null,
+    visits: number,
+  ) => Promise<readonly number[] | null>;
   /** Stop the worker and release the GPU. Safe to call twice. */
   readonly stop: () => void;
 }
@@ -160,6 +174,9 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
     { resolve: (verdict: Verdict) => void; reject: (error: unknown) => void }
   >();
 
+  /** Deepening passes awaiting a line, keyed by move number. */
+  const deepening = new Map<number, (pv: readonly number[] | null) => void>();
+
   /** Failed prompts since the last verdict; see `ERRORS_BEFORE_FAILED`. */
   let consecutiveErrors = 0;
 
@@ -179,6 +196,10 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
   const failEverything = (reason: string): void => {
     for (const { reject } of waiting.values()) reject(new EvaluationError(reason));
     waiting.clear();
+    // A dead engine will not be deepening anything either, and a promise that
+    // never settles would keep the scheduler waiting for a worker that is gone.
+    for (const settle of deepening.values()) settle(null);
+    deepening.clear();
   };
 
   worker.onmessage = (event: MessageEvent<WorkerReply>): void => {
@@ -209,6 +230,11 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
         consecutiveErrors = 0;
         waiting.get(reply.verdict.moveNumber)?.resolve(reply.verdict);
         waiting.delete(reply.verdict.moveNumber);
+        return;
+      }
+      case 'deepened': {
+        deepening.get(reply.moveNumber)?.(reply.pv);
+        deepening.delete(reply.moveNumber);
         return;
       }
       case 'error': {
@@ -289,6 +315,22 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
   return {
     evaluator,
     status: (): EngineStatus => status,
+    deepen: (
+      moveNumber: number,
+      point: number | null,
+      visits: number,
+    ): Promise<readonly number[] | null> => {
+      if (stopped || status.state !== 'ready') return Promise.resolve(null);
+      // One pass per move at a time. A second request for a move already in
+      // flight would orphan the first promise, and the reply carries only a
+      // move number to settle it with.
+      if (deepening.has(moveNumber)) return Promise.resolve(null);
+      return new Promise<readonly number[] | null>((resolve) => {
+        deepening.set(moveNumber, resolve);
+        const deepenRequest: WorkerRequest = { type: 'deepen', moveNumber, point, visits };
+        worker.postMessage(deepenRequest);
+      });
+    },
     stop: (): void => {
       if (stopped) return;
       stopped = true;

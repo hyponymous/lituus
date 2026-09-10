@@ -25,7 +25,14 @@ import type { Game, GameMove } from '../game.ts';
 import { BLACK, WHITE, createBoard, fromPosition, passMove } from './board.ts';
 import type { Board, BoardState, Stone } from './board.ts';
 import { rulesetOf, type RecentMove, type Ruleset } from './features-v7.ts';
-import { Search, type MoveAnalysis, type Network, type SearchResult } from './search.ts';
+import {
+  Search,
+  type MoveAnalysis,
+  type Network,
+  type SearchRequest,
+  type SearchResult,
+} from './search.ts';
+import type { Position } from '../rules.ts';
 
 /**
  * Komi when the record does not say.
@@ -98,6 +105,81 @@ function stateAt(board: Board, game: Game, turn: number): BoardState | undefined
 }
 
 /**
+ * A variation stops at the first pass.
+ *
+ * `MoveVerdict.pv` promises this and the replay evaluator has always kept it —
+ * KataGo writes "pass" into its analysis output, which does not name a point
+ * and so ends the line there. The search hands back a board index for a pass
+ * instead, which nothing downstream recognizes: `pointName` turned it into
+ * "A0", a name for no point at all, and reading that export back silently
+ * shortened every late-game line it appeared in.
+ *
+ * Truncating rather than dropping the pass is the same decision replay.ts
+ * records: a line that continues through one tells a reader nothing, and
+ * removing it in place would misrepresent whose move each later ply is.
+ */
+function untilPass(pv: readonly number[], pass: number): readonly number[] {
+  const at: number = pv.indexOf(pass);
+  return at === -1 ? pv : pv.slice(0, at);
+}
+
+/**
+ * And a variation stops where the search stopped reading it.
+ *
+ * The search reports the visits behind every ply, so the length of a line can
+ * be measured instead of assumed: keep the plies a search actually read and
+ * drop the tail it merely walked. The floor is `MIN_TRUSTED_VISITS`, the same
+ * one that decides a *number* is worth quoting — a ply nobody looked at is not
+ * worth showing for the same reason a one-visit score is not.
+ *
+ * This is PRD §5's honest cutoff, and it is why a line needs no fitted
+ * constant: at fifty visits it comes out short on its own, and a deeper search
+ * lengthens it without anybody choosing a number.
+ */
+function untilUnread(pv: readonly number[], pvVisits: readonly number[]): readonly number[] {
+  let kept = 0;
+  while (kept < pv.length && (pvVisits[kept] ?? 0) >= MIN_TRUSTED_VISITS) kept += 1;
+  return pv.slice(0, kept);
+}
+
+/** The line as a reader should see it: cut at a pass, then at the search's edge. */
+function shownLine(move: MoveAnalysis, pass: number): readonly number[] {
+  return untilUnread(untilPass(move.pv, pass), move.pvVisits);
+}
+
+/**
+ * Everything the network needs to read one prompted position, gathered from the
+ * record.
+ *
+ * Shared by the scoring search and the deepening pass, and that sharing is the
+ * point: a deeper search of the same position has to *be* the same question
+ * asked harder. A history or a komi assembled twice is a second place for the
+ * two to drift apart, and the drift would show up as a line that does not
+ * belong to the position it is drawn on.
+ */
+function requestFor(
+  context: GameContext,
+  position: Position,
+  color: number,
+  turn: number,
+  visits: number,
+): SearchRequest {
+  const { game, board } = context;
+  return {
+    board,
+    state: fromPosition(board, position),
+    toPlay: color === 1 ? BLACK : WHITE,
+    history: historyBefore(game, board, turn),
+    previous: stateAt(board, game, turn - 1),
+    previousPrevious: stateAt(board, game, turn - 2),
+    komi: context.komi,
+    movesPlayed: movesBefore(game, turn),
+    ruleset: context.ruleset,
+    maxVisits: visits,
+  };
+}
+
+/**
  * Search one prompted position, forcing the guess when the root search did not
  * look at it hard enough to be worth quoting.
  */
@@ -113,66 +195,15 @@ export function evaluatePrompt(
     throw new EvaluationError(`Move ${prompt.moveNumber} is not in this record.`);
   }
 
-  const toPlay: Stone = prompt.color === 1 ? BLACK : WHITE;
-  const base = {
-    board,
-    state: fromPosition(board, prompt.position),
-    toPlay,
-    history: historyBefore(game, board, turn),
-    previous: stateAt(board, game, turn - 1),
-    previousPrevious: stateAt(board, game, turn - 2),
-    komi: context.komi,
-    movesPlayed: movesBefore(game, turn),
-    ruleset: context.ruleset,
-    maxVisits: visits,
-  };
+  const base: SearchRequest = requestFor(context, prompt.position, prompt.color, turn, visits);
 
   const root: SearchResult = search.run(base);
   if (root.moves.length === 0) {
     throw new EvaluationError(`The search found no legal move at move ${prompt.moveNumber}.`);
   }
 
-  /*
-   * A variation stops at the first pass.
-   *
-   * `MoveVerdict.pv` promises this and the replay evaluator has always kept it
-   * — KataGo writes "pass" into its analysis output, which does not name a
-   * point and so ends the line there. The search hands back a board index for
-   * a pass instead, which nothing downstream recognizes: `pointName` turned it
-   * into "A0", a name for no point at all, and reading that export back
-   * silently shortened every late-game line it appeared in.
-   *
-   * Truncating rather than dropping the pass is the same decision replay.ts
-   * records: a line that continues through one tells a reader nothing, and
-   * removing it in place would misrepresent whose move each later ply is.
-   */
   const pass: number = passMove(board);
-  const line = (pv: readonly number[]): readonly number[] => {
-    const at: number = pv.indexOf(pass);
-    return at === -1 ? pv : pv.slice(0, at);
-  };
-
-  /**
-   * And a variation stops where the search stopped reading it.
-   *
-   * The search reports the visits behind every ply, so the length of a line
-   * can be measured instead of assumed: keep the plies a search actually read
-   * and drop the tail it merely walked. The floor is `MIN_TRUSTED_VISITS`, the
-   * same one that decides a *number* is worth quoting — a ply nobody looked at
-   * is not worth showing for the same reason a one-visit score is not.
-   *
-   * This is PRD §5's honest cutoff, and it is why a live line needs no fitted
-   * constant: at fifty visits it comes out short on its own, and a deeper
-   * search lengthens it without anybody choosing a number.
-   */
-  const read = (pv: readonly number[], pvVisits: readonly number[]): readonly number[] => {
-    let kept = 0;
-    while (kept < pv.length && (pvVisits[kept] ?? 0) >= MIN_TRUSTED_VISITS) kept += 1;
-    return pv.slice(0, kept);
-  };
-
-  /** The line as the reader should see it: cut at a pass, then at the search's edge. */
-  const shown = (move: MoveAnalysis): readonly number[] => read(line(move.pv), move.pvVisits);
+  const shown = (move: MoveAnalysis): readonly number[] => shownLine(move, pass);
 
   const rootLead: number = root.rootScoreLead;
   const found = (point: number): MoveAnalysis | undefined =>
@@ -266,6 +297,67 @@ export function evaluatePrompt(
     guessed,
     natural,
   };
+}
+
+
+/**
+ * How many playouts run between two chances to be called off.
+ *
+ * One prompt's worth. The worker is deaf for the length of a slice — the
+ * canary, the memory reading and the cancellation itself all wait behind it —
+ * and a prompt's block is the deafness the product already lives with on every
+ * guess, so it is the largest unit that adds no new kind of stall.
+ */
+export const DEEP_SLICE = 50;
+
+/** One move re-read at a larger budget: its line, and deliberately nothing else. */
+export interface DeepLine {
+  readonly moveNumber: number;
+  readonly point: number;
+  /** The budget that read it, which becomes the line's `pvBudget`. */
+  readonly visits: number;
+  readonly pv: readonly number[];
+}
+
+/**
+ * Re-read one move at a larger budget and return the line, or null if called off.
+ *
+ * A loss and a visit count come back from this search too, and both are thrown
+ * away here rather than downstream. That is PRD §5 held at the point where the
+ * temptation is: a second figure for a move that already has one, measured at a
+ * different budget and disagreeing by a point, is worse than the one figure the
+ * reader was given — so the only thing allowed out of this function is the
+ * shape of the type.
+ *
+ * The root is restricted to the one move, as the forced scoring search is:
+ * the whole budget then reads *this* move's continuation instead of spending
+ * most of it confirming that some other move is better, which is the question
+ * nobody asked.
+ */
+export async function deepenLine(
+  search: Search,
+  context: GameContext,
+  moveNumber: number,
+  point: number | null,
+  visits: number,
+  calledOff: () => boolean,
+): Promise<DeepLine | null> {
+  const { game, board } = context;
+  const turn: number = turnOf(game, moveNumber);
+  if (turn < 0) throw new EvaluationError(`Move ${moveNumber} is not in this record.`);
+  const move: GameMove = game.moves[turn];
+  const at: number = point ?? passMove(board);
+
+  const result: SearchResult | null = await search.runSliced(
+    { ...requestFor(context, move.before, move.color, turn, visits), allowedRootMoves: [at] },
+    DEEP_SLICE,
+    calledOff,
+  );
+  if (result === null) return null;
+
+  const read: MoveAnalysis | undefined = result.moves[0];
+  if (read === undefined) return null;
+  return { moveNumber, point: at, visits, pv: shownLine(read, passMove(board)) };
 }
 
 /**

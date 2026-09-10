@@ -335,6 +335,59 @@ test('every ply of a line says how much of the search stands behind it', () => {
   );
 });
 
+test('a sliced search is the same search, and says so playout for playout', async () => {
+  // The deepening pass runs in slices so the worker can hear a cancellation
+  // between them (design §6.2). Slicing must be a change to *when* the loop
+  // pauses and to nothing else — a tree that reads differently at a different
+  // slice size would make every deep line depend on how busy the worker was.
+  const board: Board = createBoard(SIZE, SIZE);
+  const build = (): Stub =>
+    stubNetwork((stones: Map<number, Stone>) => ({
+      policy: new Map([[stones.size * 3 + 1, 3]]),
+      lead: stones.size % 2 === 0 ? 4 : -6,
+    }));
+
+  const whole: SearchResult = new Search(build().network, board).run(
+    request(board, emptyState(board), BLACK, 40),
+  );
+  const sliced: SearchResult | null = await new Search(build().network, board).runSliced(
+    request(board, emptyState(board), BLACK, 40),
+    7,
+    () => false,
+  );
+  const coarse: SearchResult | null = await new Search(build().network, board).runSliced(
+    request(board, emptyState(board), BLACK, 40),
+    1000,
+    () => false,
+  );
+
+  assert.deepEqual(sliced, whole);
+  assert.deepEqual(coarse, whole, 'a slice larger than the budget is one slice');
+});
+
+test('a search called off stops paying for playouts and reports nothing', async () => {
+  const board: Board = createBoard(SIZE, SIZE);
+  const stub: Stub = stubNetwork(() => ({}));
+  let slices = 0;
+  const result: SearchResult | null = await new Search(stub.network, board).runSliced(
+    request(board, emptyState(board), BLACK, 400),
+    10,
+    () => {
+      slices += 1;
+      return slices >= 2;
+    },
+  );
+
+  // Null rather than a partial tree: the caller asked for a line read to a
+  // depth, and a tree abandoned part-way would report one read to a depth
+  // nobody chose.
+  assert.equal(result, null);
+  assert.equal(slices, 2, 'the check happens once per slice, not once per playout');
+  // The root's own evaluation, plus two slices. The remaining 380 were never
+  // paid for, which is the entire point of cancelling.
+  assert.equal(stub.calls(), 21);
+});
+
 test('the same request twice gives the same answer', () => {
   const board: Board = createBoard(SIZE, SIZE);
   const build = (): Stub =>

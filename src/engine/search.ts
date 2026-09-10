@@ -231,6 +231,18 @@ const softplus = (x: number): number => {
   return Math.log1p(Math.exp(x));
 };
 
+/**
+ * Hand the event loop back long enough for a queued message to be delivered.
+ *
+ * `setTimeout` rather than a resolved promise, and that is the whole point: a
+ * microtask runs before the loop turns, so awaiting one drains no message queue
+ * and a "cancellable" search built on it would be exactly as deaf as an
+ * uncancellable one. A task is what lets a worker hear anything.
+ */
+function pause(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 /** Scratch shared across one node's stats recomputation. */
 interface ChildStats {
   stats: Stats;
@@ -279,6 +291,53 @@ export class Search {
   }
 
   run(request: SearchRequest): SearchResult {
+    const root: Node = this.begin(request);
+    while (root.stats.visits < request.maxVisits) this.playout(root, true);
+    return this.report(root);
+  }
+
+  /**
+   * The same search, run in slices, with a chance to be called off between them.
+   *
+   * The worker is single-threaded and a search is a tight synchronous loop, so
+   * while one runs nothing else in the worker happens: the canary, the memory
+   * reading and any cancellation all queue behind it. That is tolerable for the
+   * fifty visits a prompt costs and not for the several hundred a deepening
+   * pass costs, which is why this exists — it is the same playouts on the same
+   * tree, punctuated by a return to the event loop so the worker can hear that
+   * a reader has moved on.
+   *
+   * Resolving to null is a search called off, not a search that failed. There
+   * is no partial result on purpose: the caller asked for a line read to a
+   * depth, and a tree abandoned a third of the way there would report one read
+   * to some depth nobody chose.
+   *
+   * `slice` is the unit of deafness, and the only thing that makes cancellation
+   * cost anything. One prompt's worth is the block the product already lives
+   * with on every guess.
+   */
+  async runSliced(
+    request: SearchRequest,
+    slice: number,
+    calledOff: () => boolean,
+  ): Promise<SearchResult | null> {
+    const root: Node = this.begin(request);
+    while (root.stats.visits < request.maxVisits) {
+      const until: number = Math.min(request.maxVisits, root.stats.visits + slice);
+      while (root.stats.visits < until) this.playout(root, true);
+      if (root.stats.visits >= request.maxVisits) break;
+      await pause();
+      if (calledOff()) return null;
+    }
+    return this.report(root);
+  }
+
+  /**
+   * Everything a search settles before its first playout: the position, the
+   * history the network reads, the root's own evaluation and the score centre
+   * every utility below it is measured against.
+   */
+  private begin(request: SearchRequest): Node {
     this.state = { stones: Uint8Array.from(request.state.stones), koPoint: request.state.koPoint };
     this.history = [...request.history];
     this.blackMoves = request.movesPlayed.black;
@@ -319,9 +378,7 @@ export class Search {
     // utility is stale by exactly that. Rewrite it.
     this.setLeafStats(root, rootEval);
 
-    while (root.stats.visits < request.maxVisits) this.playout(root, true);
-
-    return this.report(root);
+    return root;
   }
 
   // ---------------------------------------------------------------- utility

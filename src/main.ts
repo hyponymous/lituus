@@ -19,13 +19,17 @@ import {
 } from './session.ts';
 import { summarize, type Summary } from './summary.ts';
 import {
+  DEEP_VISITS,
+  deepenTargets,
   emptyAnalysis,
   verdictCount,
   verdictFor,
+  withDeepLine,
   withDevice,
   withIncident,
   withVerdict,
   type Analysis,
+  type DeepTarget,
   type Verdict,
 } from './analysis.ts';
 import { createQueue, type Prompt, type Queue } from './evaluator.ts';
@@ -180,6 +184,7 @@ function startEngineFor(game: Game): void {
     stopEngine();
     analysis = emptyAnalysis(engineConfig());
     analysisGame = game;
+    deepenedMoves = new Set();
   }
 
   const handle: EngineHandle = engine ?? startEngine(game, {
@@ -257,6 +262,10 @@ function showEngineProgress(changedAnalysis: boolean): void {
     if (changedAnalysis) {
       refreshSummaryAnalysis(summaryOf(screen.session));
     }
+    // Guarded on every count — a pass in flight, a queue with work in it,
+    // nothing past the floor — so calling it on each verdict is how it comes to
+    // run exactly once, when the last one lands.
+    void deepenWorstMistakes();
     return;
   }
   updateEngineLine(engineLine(), engineStatus.state === 'failed');
@@ -284,6 +293,92 @@ function summaryOf(session: Session): Summary {
 function scoreEveryGap(session: Session): void {
   for (const made of session.guesses) {
     enqueue(session, made.moveNumber, made.actual, made.guess);
+  }
+}
+
+/**
+ * How many mistakes get a second, deeper reading.
+ *
+ * Three, and deliberately not "the ones that would benefit". The point of a
+ * deep line is the review's one or two teachable wounds, not coverage: a
+ * session where forty moves lost a point does not want forty long lines, it
+ * wants the three that cost the game. Every one of them is a few seconds of
+ * the reader's GPU spent after they already have every figure they came for,
+ * so the number that is easy to raise later is the right one to start low.
+ */
+const DEEPEN_AT_MOST = 3;
+
+/**
+ * Moves the deepening pass has already been offered, so it asks once.
+ *
+ * Kept beside the store rather than in it: whether a line was *asked* about is
+ * not a fact about the analysis, and a pass that came back with nothing must
+ * not be retried on every verdict that lands afterwards.
+ */
+let deepenedMoves = new Set<number>();
+
+/** Whether a pass is in flight, so two never chase the same worker. */
+let deepening = false;
+
+/**
+ * Read the worst mistakes again, harder, once there is nothing else to do.
+ *
+ * After the scoring queue drains and never beside it: a point loss is the
+ * product and a longer line is a nicety, so this may never be the reason a
+ * figure is late. It gives way the moment a prompt arrives — the worker calls
+ * off the search itself, between slices — and it is abandoned silently, because
+ * nothing here was promised to anyone.
+ *
+ * A line that comes back no longer than the one on the board is dropped rather
+ * than applied. A deeper read that says less is not more informative, and
+ * swapping a reader's line for a shorter one at a moment they did not choose
+ * takes something away.
+ */
+async function deepenWorstMistakes(): Promise<void> {
+  const handle: EngineHandle | null = engine;
+  if (deepening || handle === null || analysis === null) return;
+  if ((queue?.pending() ?? 0) > 0) return;
+  /*
+   * Which record this pass is about, checked again after every await.
+   *
+   * A search takes seconds and a reader can load another game inside one. The
+   * store is replaced when they do, and a line landing afterwards would be
+   * written into it by move number alone — a line from one game drawn on
+   * another's board, which is the exact failure `withDeepLine` refuses a
+   * mismatched first ply over. Refusing here too means never relying on that
+   * catch, which only fires when the two games happen to disagree.
+   */
+  const forGame: Game | null = analysisGame;
+
+  const targets: readonly DeepTarget[] = deepenTargets(analysis, deepenedMoves, DEEPEN_AT_MOST);
+  if (targets.length === 0) return;
+
+  deepening = true;
+  try {
+    for (const target of targets) {
+      // The reader started answering again, or replayed. Either way the queue
+      // is the product and this is not.
+      if ((queue?.pending() ?? 0) > 0) return;
+      deepenedMoves.add(target.moveNumber);
+      const line: readonly number[] | null = await handle.deepen(
+        target.moveNumber, target.point, DEEP_VISITS,
+      );
+      if (analysisGame !== forGame) return;
+      if (line === null || line.length <= target.plies || analysis === null) continue;
+      analysis = withDeepLine(analysis, {
+        moveNumber: target.moveNumber,
+        visits: DEEP_VISITS,
+        ...(target.slot === 'played' ? { played: line } : { guessed: line }),
+      });
+      // The same door a verdict arriving late comes in by, and for the same
+      // reason: the review redraws with the longer line, and nothing else on
+      // the screen moves.
+      if (screen.name === 'session' && screen.session.phase === 'done') {
+        refreshSummaryAnalysis(summaryOf(screen.session));
+      }
+    }
+  } finally {
+    deepening = false;
   }
 }
 
@@ -540,6 +635,10 @@ function skipsFor(session: Session): SkipOption[] {
 function drawSession(session: Session): void {
   // A finished session goes straight to its summary; nothing further to play.
   if (session.phase === 'done') {
+    // A replayed record arrives here with every verdict already in the store,
+    // so no verdict will land to set this going. The summary being drawn is
+    // the other moment there is nothing left to do.
+    void deepenWorstMistakes();
     renderSummary(root, {
       summary: summaryOf(session),
       session,

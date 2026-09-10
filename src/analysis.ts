@@ -397,6 +397,70 @@ export function withDeepLine(analysis: Analysis, lines: DeepLines): Analysis {
   return { ...analysis, verdicts };
 }
 
+/** One move whose line is worth reading again, and which of its lines. */
+export interface DeepTarget {
+  readonly moveNumber: number;
+  readonly point: number | null;
+  readonly slot: 'played' | 'guessed';
+  /** What the line already runs to, which a deeper read has to beat to be applied. */
+  readonly plies: number;
+}
+
+/**
+ * The mistakes worth reading again, worst first.
+ *
+ * Three rules, and every one of them is a way of doing less — a deeper search
+ * runs on the reader's own device, after they already have every figure they
+ * came for.
+ *
+ * **A floor**, so a quiet game deepens nothing. `MISLEADING_LOSS` is the same
+ * threshold `annotate.ts` uses to decide a refutation is worth grafting onto a
+ * record: the same question asked in a different place, and worth citing rather
+ * than minting a second constant that would drift from it.
+ *
+ * **One line per position**, the worse of the two. Where a guess lost nine
+ * points and the played move lost one, what the reader wants is the refutation
+ * of their own move, not both — and one line per position is what keeps the
+ * cost of a pass something a caller can predict from `limit` alone.
+ *
+ * **Only what is quotable**, since a line under `MIN_TRUSTED_VISITS` has no
+ * figure beside it to explain and would be a long answer to a question the
+ * board never asked.
+ *
+ * `already` is the moves a caller has offered before. It is a parameter rather
+ * than state here because whether a line was *asked* about is not a fact about
+ * the analysis: a pass that came back with nothing must not be retried on every
+ * verdict that lands afterwards, and the store is the wrong place to remember
+ * that.
+ */
+export function deepenTargets(
+  analysis: Analysis,
+  already: ReadonlySet<number>,
+  limit: number,
+): DeepTarget[] {
+  const targets: Array<DeepTarget & { readonly loss: number }> = [];
+  for (const verdict of analysis.verdicts.values()) {
+    if (already.has(verdict.moveNumber)) continue;
+    let worst: (DeepTarget & { readonly loss: number }) | null = null;
+    for (const slot of ['guessed', 'played'] as const) {
+      const move: MoveVerdict | null = verdict[slot];
+      if (move === null || !isTrusted(move)) continue;
+      if (move.loss < MISLEADING_LOSS) continue;
+      if (worst !== null && move.loss <= worst.loss) continue;
+      worst = {
+        moveNumber: verdict.moveNumber,
+        point: move.point,
+        slot,
+        plies: move.pv.length,
+        loss: move.loss,
+      };
+    }
+    if (worst !== null) targets.push(worst);
+  }
+  targets.sort((a, b) => b.loss - a.loss);
+  return targets.slice(0, limit).map(({ loss: _loss, ...target }) => target);
+}
+
 export function verdictFor(analysis: Analysis, moveNumber: number): Verdict | null {
   return analysis.verdicts.get(moveNumber) ?? null;
 }
@@ -473,6 +537,30 @@ export const BLUNDER_LOSS = 8;
  * in the copy rather than in this number (`docs/prd-ai-scoring.md` §8b).
  */
 export const MISLEADING_LOSS = 3;
+
+/**
+ * How hard a second, deeper pass reads one line.
+ *
+ * Conservative on purpose, and the number to revisit first. Five hundred visits
+ * is ten prompts' worth of forward passes — about four and a half seconds on a
+ * laptop at the measured 0.89s per prompt — spent on a move the reader already
+ * has a figure for. The offline pass (`experiments/katago/deepen.ts`) uses 4000
+ * and takes as long as it likes; this one runs on the reader's device while
+ * they are still reading, so it buys the first big jump in depth rather than
+ * the last.
+ *
+ * What it buys is not assumed. A deepened line comes back cut by its own
+ * per-ply visits like any other, so a position that does not read deeper simply
+ * reports what it read, and raising this number cannot make a line claim more
+ * than the search found.
+ *
+ * It lives here rather than beside the search because both the scheduler and
+ * the engine need it, and the scheduler must not import the engine: a value
+ * pulled from `engine/` into `main.ts` would bundle the whole search, the
+ * features and the ladders into the main chunk, which is the download this
+ * product defers until a reader asks for scoring.
+ */
+export const DEEP_VISITS = 500;
 
 /** A move verdict's loss, or null when there is nothing worth quoting. */
 export function lossOf(verdict: MoveVerdict | null | undefined): number | null {

@@ -17,11 +17,13 @@ import {
   isTrusted,
   sameEngine,
   verdictCount,
+  deepenTargets,
   verdictFor,
   withDeepLine,
   withVerdict,
   type Analysis,
   type EngineConfig,
+  type DeepTarget,
   type MoveVerdict,
   type Verdict,
 } from '../src/analysis.ts';
@@ -274,4 +276,70 @@ test('deepening does not mutate the analysis it came from', () => {
   withDeepLine(before, { moveNumber: 7, visits: 4000, played: [10, 20, 30] });
 
   assert.deepEqual(verdictFor(before, 7)?.played?.pv, [10, 20]);
+});
+
+// ── Choosing what to read again ──────────────────────────────────────────────
+
+/** A session of mistakes: move number to (played loss, guessed loss). */
+function mistakes(losses: ReadonlyArray<readonly [number, number, number]>): Analysis {
+  let analysis: Analysis = emptyAnalysis(CONFIG);
+  for (const [moveNumber, playedLoss, guessedLoss] of losses) {
+    analysis = withVerdict(analysis, {
+      ...verdict(moveNumber, { ...move(10, playedLoss), pv: [10, 20] }),
+      guessed: { ...move(30, guessedLoss), pv: [30, 40, 50] },
+    });
+  }
+  return analysis;
+}
+
+const none = new Set<number>();
+
+test('a quiet game is read again nowhere', () => {
+  // The floor is MISLEADING_LOSS, the same one annotate.ts uses to decide a
+  // refutation is worth grafting. A session of one-point mistakes has no wound
+  // worth four seconds of the reader's GPU.
+  assert.deepEqual(deepenTargets(mistakes([[1, 1.0, 2.9], [2, 0.2, 1.4]]), none, 3), []);
+});
+
+test('the worst mistakes come first, and no more than asked for', () => {
+  const targets: DeepTarget[] = deepenTargets(
+    mistakes([[1, 4.0, 0.1], [2, 9.0, 0.1], [3, 6.0, 0.1], [4, 3.5, 0.1]]),
+    none,
+    2,
+  );
+
+  assert.deepEqual(targets.map((target) => target.moveNumber), [2, 3]);
+});
+
+test('a position offers one line, the worse of its two', () => {
+  // Where the guess lost nine and the played move lost one, the reader wants
+  // the refutation of their own move — not both, which would double the cost
+  // of a pass for a line nobody asked about.
+  const targets: DeepTarget[] = deepenTargets(mistakes([[1, 1.0, 9.0]]), none, 3);
+
+  assert.equal(targets.length, 1);
+  assert.equal(targets[0].slot, 'guessed');
+  assert.equal(targets[0].point, 30);
+  assert.equal(targets[0].plies, 3, 'and says what a deeper read has to beat');
+});
+
+test('a move already offered is not offered again', () => {
+  const analysis: Analysis = mistakes([[1, 9.0, 0.1], [2, 6.0, 0.1]]);
+
+  assert.deepEqual(
+    deepenTargets(analysis, new Set([1]), 3).map((target) => target.moveNumber),
+    [2],
+  );
+});
+
+test('a barely-searched mistake is not worth a long answer', () => {
+  // No figure beside it to explain, so a line for it would be a long answer to
+  // a question the board never asked.
+  let analysis: Analysis = emptyAnalysis(CONFIG);
+  analysis = withVerdict(analysis, {
+    ...verdict(1, { ...move(10, 12.0, 3), pv: [10, 20] }),
+    guessed: null,
+  });
+
+  assert.deepEqual(deepenTargets(analysis, none, 3), []);
 });

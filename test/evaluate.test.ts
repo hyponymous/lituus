@@ -20,10 +20,12 @@ import { MIN_TRUSTED_VISITS, type Verdict } from '../src/analysis.ts';
 import { EvaluationError, type Prompt } from '../src/evaluator.ts';
 import { BLACK, WHITE, type Stone } from '../src/engine/board.ts';
 import {
+  deepenLine,
   evaluatePrompt,
   gameContext,
   historyBefore,
   movesBefore,
+  type DeepLine,
   type GameContext,
 } from '../src/engine/evaluate.ts';
 import { SPATIAL_CHANNELS } from '../src/engine/features-v7.ts';
@@ -334,4 +336,46 @@ test('a line is cut where the search stopped reading it, and says what it cost',
     shallow.played.pv.length < 15,
     'and twenty visits buy far less than the fifteen plies the search reports',
   );
+});
+
+test('a deepened line is read at the larger budget and brings back nothing else', async () => {
+  // The pass re-reads one move harder and returns the line alone: a loss and a
+  // visit count come back from that search too, and PRD §5 says a deeper search
+  // may lengthen a line and may never revise a figure.
+  // Three moves the policy likes rather than one, so the search spreads and a
+  // line has to be paid for. A stub with one dominant move reads fifteen plies
+  // on any budget and would make this test vacuous.
+  const network: Network = stubNetwork((stones: Map<number, Stone>) => ({
+    policy: new Map([
+      [(stones.size * 7 + 3) % AREA, 8],
+      [(stones.size * 11 + 5) % AREA, 7.6],
+      [(stones.size * 13 + 8) % AREA, 7.2],
+    ]),
+  }));
+  const context: GameContext = gameContext(game());
+  const search = new Search(network, context.board);
+
+  const shallow: Verdict = evaluate(network, 5, 'C6', 'C6', 50);
+  const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => false);
+
+  assert.ok(deep && shallow.played);
+  assert.equal(deep.moveNumber, 5);
+  assert.equal(deep.point, at('C6'));
+  assert.equal(deep.visits, 500);
+  assert.equal(deep.pv[0], at('C6'), 'the line opens with the move it is about');
+  assert.ok(
+    deep.pv.length > shallow.played.pv.length,
+    `reading harder is what makes it longer (${shallow.played.pv.length} -> ${deep.pv.length})`,
+  );
+  assert.deepEqual(Object.keys(deep).sort(), ['moveNumber', 'point', 'pv', 'visits']);
+});
+
+test('a deepening called off returns nothing rather than a half-read line', async () => {
+  const network: Network = stubNetwork(() => ({ policy: new Map([[at('C6'), 8]]) }));
+  const context: GameContext = gameContext(game());
+  const search = new Search(network, context.board);
+
+  const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => true);
+
+  assert.equal(deep, null);
 });
