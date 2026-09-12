@@ -201,3 +201,49 @@ test('the queue names the move in flight, and nothing between searches', async (
   await settle();
   assert.equal(queue.current(), null);
 });
+
+test('the queue says when it has drained, because nobody else can tell', async () => {
+  // From inside `onVerdict` the queue cannot be seen to be empty: the verdict
+  // that empties it is handed over while the drain loop is still running, so
+  // `pending()` reads one. Waiting for zero there waits forever, which is
+  // exactly how the deepening pass came to never run.
+  const drained: number[] = [];
+  let insidePending = -1;
+  const { evaluator } = recording();
+  const queue: Queue = createQueue(evaluator, {
+    onVerdict: (verdict: Verdict): void => {
+      insidePending = queue.pending();
+      drained.push(-verdict.moveNumber);
+    },
+    onDrained: (): void => {
+      drained.push(queue.pending());
+    },
+  });
+
+  queue.submit(prompt(1));
+  queue.submit(prompt(2));
+  await settle();
+
+  assert.equal(insidePending, 1, 'the last verdict still counts itself as in flight');
+  assert.deepEqual(drained, [-1, -2, 0], 'and the drain is announced once, after both');
+});
+
+test('a stopped queue does not announce a drain it never finished', async () => {
+  let drains = 0;
+  const { evaluator } = recording(
+    (p: Prompt) =>
+      new Promise<Verdict>((resolve) => setTimeout(() => resolve(verdictFor(p.moveNumber)), 1)),
+  );
+  const queue: Queue = createQueue(evaluator, {
+    onVerdict: (): void => {},
+    onDrained: (): void => {
+      drains += 1;
+    },
+  });
+
+  queue.submit(prompt(1));
+  queue.stop();
+  await settle();
+
+  assert.equal(drains, 0);
+});

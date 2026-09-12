@@ -231,6 +231,10 @@ function startEngineFor(game: Game): void {
       }
       showEngineProgress(false);
     },
+    // The moment there is nothing the reader is waiting for. Everything the
+    // deepening pass does is arranged to give way to a prompt, so this is the
+    // only time it may start.
+    onDrained: (): void => void deepenWorstMistakes(),
   });
 }
 

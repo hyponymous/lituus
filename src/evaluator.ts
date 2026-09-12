@@ -67,6 +67,21 @@ export interface QueueHandlers {
    * the same degradation a failed download produces.
    */
   readonly onError?: (prompt: Prompt, error: unknown) => void;
+  /**
+   * There is nothing left to evaluate.
+   *
+   * Said by the queue rather than worked out by a caller, because from inside
+   * `onVerdict` it cannot be worked out at all: the verdict that empties the
+   * queue is handed over while the drain loop is still running, so `pending()`
+   * reads one, and a caller waiting for zero waits forever. That was a real
+   * bug — the deepening pass never ran once — and the fix is for the one place
+   * that knows the loop has ended to say so.
+   *
+   * Fires after every drain that ends with an empty queue, so it may fire many
+   * times in a session: a reader who answers, pauses, and answers again drains
+   * twice. It does not fire for a queue that was stopped.
+   */
+  readonly onDrained?: () => void;
 }
 
 export interface Queue {
@@ -127,6 +142,7 @@ export function createQueue(evaluator: Evaluator, handlers: QueueHandlers): Queu
       }
     }
     running = false;
+    if (!stopped) handlers.onDrained?.();
   }
 
   return {
