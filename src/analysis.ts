@@ -351,7 +351,12 @@ export function withVerdict(analysis: Analysis, verdict: Verdict): Analysis {
  */
 export interface DeepLines {
   readonly moveNumber: number;
-  /** The budget that bought these lines; becomes each one's `pvBudget`. */
+  /**
+   * The visits actually spent reading these lines; becomes each one's
+   * `pvBudget`. Spent, not requested: a pass that ran out of time reports a
+   * smaller search, and a receipt naming a budget the search never reached
+   * would be the one field on a deep line that lies.
+   */
   readonly visits: number;
   /** As board indices, opening with the move the slot is about. */
   readonly played?: readonly number[];
@@ -430,6 +435,11 @@ export function mayDeepen(analysis: Analysis): boolean {
 export interface DeepTarget {
   readonly moveNumber: number;
   readonly point: number | null;
+  /**
+   * Which slot's move the line is read for. The result may still land in both:
+   * a hit puts one point in both slots, and `withDeepLine`'s first-ply rule
+   * routes a line to every slot it belongs to.
+   */
   readonly slot: 'played' | 'guessed';
   /** What the line already runs to, which a deeper read has to beat to be applied. */
   readonly plies: number;

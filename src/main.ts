@@ -40,6 +40,7 @@ import {
   startEngine,
   unreliableReason,
   unscorableReason,
+  type Deepened,
   type EngineHandle,
   type EngineStatus,
 } from './engine-client.ts';
@@ -366,15 +367,35 @@ async function deepenWorstMistakes(): Promise<void> {
       // is the product and this is not.
       if ((queue?.pending() ?? 0) > 0) return;
       deepenedMoves.add(target.moveNumber);
-      const line: readonly number[] | null = await handle.deepen(
+      const read: Deepened | null = await handle.deepen(
         target.moveNumber, target.point, DEEP_VISITS,
       );
       if (analysisGame !== forGame) return;
-      if (line === null || line.length <= target.plies || analysis === null) continue;
+      if (read === null) {
+        /*
+         * Nothing was read — the pass gave way, or the engine is down — so the
+         * move keeps its claim on a future drain. "Asked once" is for a pass
+         * that answered; without this a reader who submits one prompt at the
+         * wrong moment would permanently cost their worst mistake its line.
+         */
+        deepenedMoves.delete(target.moveNumber);
+        continue;
+      }
+      if (read.pv.length <= target.plies || analysis === null) continue;
       analysis = withDeepLine(analysis, {
         moveNumber: target.moveNumber,
-        visits: DEEP_VISITS,
-        ...(target.slot === 'played' ? { played: line } : { guessed: line }),
+        // What the pass spent, not what it was asked for: a timed-out pass
+        // reports a smaller search, and the receipt has to name that one.
+        visits: read.visits,
+        /*
+         * Offered to both slots on purpose, though only one was targeted:
+         * `withDeepLine` applies a line only where its first ply is the slot's
+         * own move, so the mismatched slot refuses it — and on a hit, where
+         * both slots name one point, both get the one line instead of the
+         * board showing two lengths for the same move.
+         */
+        played: read.pv,
+        guessed: read.pv,
       });
       // The same door a verdict arriving late comes in by, and for the same
       // reason: the review redraws with the longer line, and nothing else on

@@ -105,12 +105,17 @@ export type WorkerReply =
       /**
        * The answer to one `deepen`, always sent, so nothing is left waiting.
        *
-       * `pv` is null where the pass was called off — a scoring prompt arrived,
-       * or the reader moved on — which is an ordinary outcome and not an error.
+       * `pv` is null where nothing was read — the pass was called off by an
+       * arriving prompt, or the engine is not up — which is an ordinary
+       * outcome and not an error. `visits` is what was actually *spent*, not
+       * what the request asked for: a pass that ran out of time reports the
+       * smaller search it managed, and this number is the only honest
+       * `pvBudget` that line can carry. Dropping it here and re-stamping the
+       * requested budget upstream was a real bug — the receipt lied by
+       * exactly the amount the device was slow.
        */
       readonly type: 'deepened';
       readonly moveNumber: number;
-      readonly point: number;
       readonly visits: number;
       readonly pv: readonly number[] | null;
     }
@@ -399,9 +404,8 @@ function reportMemory(): void {
 let waiting = 0;
 
 async function deepen(request: Extract<WorkerRequest, { type: 'deepen' }>): Promise<void> {
-  const point: number = request.point ?? -1;
   if (!engine) {
-    post({ type: 'deepened', moveNumber: request.moveNumber, point, visits: request.visits, pv: null });
+    post({ type: 'deepened', moveNumber: request.moveNumber, visits: 0, pv: null });
     return;
   }
   /*
@@ -422,8 +426,7 @@ async function deepen(request: Extract<WorkerRequest, { type: 'deepen' }>): Prom
   post({
     type: 'deepened',
     moveNumber: request.moveNumber,
-    point: line?.point ?? point,
-    visits: request.visits,
+    visits: line?.visits ?? 0,
     pv: line?.pv ?? null,
   });
 }
@@ -448,13 +451,7 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>): void => {
         // A deepening that throws costs the reader nothing they were promised,
         // so it is reported as no line rather than as an engine error — which
         // would count towards ERRORS_BEFORE_FAILED and stop a working engine.
-        post({
-          type: 'deepened',
-          moveNumber: request.moveNumber,
-          point: request.point ?? -1,
-          visits: request.visits,
-          pv: null,
-        });
+        post({ type: 'deepened', moveNumber: request.moveNumber, visits: 0, pv: null });
       } else {
         post({ type: 'error', moveNumber: request.moveNumber, reason });
       }

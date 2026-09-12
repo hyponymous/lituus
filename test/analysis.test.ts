@@ -366,3 +366,28 @@ test('an engine that has already failed is not asked for extras', () => {
 
   assert.equal(mayDeepen(hurt), false);
 });
+
+test('one line offered to both slots lands exactly where it belongs', () => {
+  // The scheduler offers a deep line to both slots and lets the first-ply rule
+  // route it. On an ordinary miss the mismatched slot refuses it; on a hit,
+  // where both slots name one point, both take it — otherwise the board would
+  // show two lengths for the same move.
+  const miss: Analysis = withDeepLine(scored(), {
+    moveNumber: 7,
+    visits: 500,
+    played: [30, 40, 50, 60],
+    guessed: [30, 40, 50, 60],
+  });
+  assert.deepEqual(verdictFor(miss, 7)?.guessed?.pv, [30, 40, 50, 60]);
+  assert.deepEqual(verdictFor(miss, 7)?.played?.pv, [10, 20], 'the played slot refused it');
+
+  const same: MoveVerdict = { ...move(10, 4.0, 50), pv: [10, 20] };
+  const hitVerdict: Verdict = { ...verdict(7, same), guessed: same };
+  const hit: Analysis = withDeepLine(
+    withVerdict(emptyAnalysis(CONFIG), hitVerdict),
+    { moveNumber: 7, visits: 500, played: [10, 20, 30, 40], guessed: [10, 20, 30, 40] },
+  );
+  assert.deepEqual(verdictFor(hit, 7)?.played?.pv, [10, 20, 30, 40]);
+  assert.deepEqual(verdictFor(hit, 7)?.guessed?.pv, [10, 20, 30, 40]);
+  assert.equal(verdictFor(hit, 7)?.guessed?.pvBudget, 500);
+});

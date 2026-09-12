@@ -62,21 +62,30 @@ export interface EngineHandle {
   readonly evaluator: Evaluator;
   readonly status: () => EngineStatus;
   /**
-   * Re-read one move's line at a larger budget, resolving to the line or to
-   * null.
+   * Re-read one move's line at a larger budget, resolving to what was read or
+   * to null.
    *
-   * Null is the ordinary outcome, not a failure: the pass gives way to any
-   * scoring prompt, and an engine that is not up declines quietly. Nothing here
-   * ever rejects, because nothing about a longer line is worth interrupting a
-   * reader over.
+   * Null means *nothing was read* — the pass gave way to a scoring prompt, or
+   * the engine is not up — and a caller may honestly ask again later. It is
+   * never a partial answer: anything that was read arrives as the line plus
+   * the visits actually spent on it, which is the only `pvBudget` that line
+   * can truthfully carry (a timed-out pass spends less than it was asked to).
+   * Nothing here ever rejects, because nothing about a longer line is worth
+   * interrupting a reader over.
    */
   readonly deepen: (
     moveNumber: number,
     point: number | null,
     visits: number,
-  ) => Promise<readonly number[] | null>;
+  ) => Promise<Deepened | null>;
   /** Stop the worker and release the GPU. Safe to call twice. */
   readonly stop: () => void;
+}
+
+/** One line read at a larger budget: the plies, and the visits actually spent. */
+export interface Deepened {
+  readonly pv: readonly number[];
+  readonly visits: number;
 }
 
 /** A reading of what the worker holds, as `worker.ts` reports it. */
@@ -175,7 +184,7 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
   >();
 
   /** Deepening passes awaiting a line, keyed by move number. */
-  const deepening = new Map<number, (pv: readonly number[] | null) => void>();
+  const deepening = new Map<number, (read: Deepened | null) => void>();
 
   /** Failed prompts since the last verdict; see `ERRORS_BEFORE_FAILED`. */
   let consecutiveErrors = 0;
@@ -233,7 +242,9 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
         return;
       }
       case 'deepened': {
-        deepening.get(reply.moveNumber)?.(reply.pv);
+        const read: Deepened | null =
+          reply.pv === null ? null : { pv: reply.pv, visits: reply.visits };
+        deepening.get(reply.moveNumber)?.(read);
         deepening.delete(reply.moveNumber);
         return;
       }
@@ -319,13 +330,13 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
       moveNumber: number,
       point: number | null,
       visits: number,
-    ): Promise<readonly number[] | null> => {
+    ): Promise<Deepened | null> => {
       if (stopped || status.state !== 'ready') return Promise.resolve(null);
       // One pass per move at a time. A second request for a move already in
       // flight would orphan the first promise, and the reply carries only a
       // move number to settle it with.
       if (deepening.has(moveNumber)) return Promise.resolve(null);
-      return new Promise<readonly number[] | null>((resolve) => {
+      return new Promise<Deepened | null>((resolve) => {
         deepening.set(moveNumber, resolve);
         const deepenRequest: WorkerRequest = { type: 'deepen', moveNumber, point, visits };
         worker.postMessage(deepenRequest);
