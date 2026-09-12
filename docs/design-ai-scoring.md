@@ -632,11 +632,9 @@ the line's own visit counts against the same floor a point loss uses. That
 gives two regimes in one view, and they should be named rather than blurred.
 *Recorded* lines carry no per-ply visits; the harness truncated them with
 their budget in mind (six plies at 500 visits, twelve at 4000), and they are
-trusted at the length they were recorded. *Live* lines come back fifteen plies
-long from `search.ts` whatever the budget, and are cut by visit count once the
-search reports visits alongside the PV — and at three until it does. Reporting
-them is not a research problem: `principalVariation` already walks the tree
-node by node, and every node it passes carries `stats.visits`.
+trusted at the length they were recorded. *Live* lines come back from
+`search.ts` with the visits behind every ply, and are cut by those counts —
+the paragraphs below record how that shipped.
 
 The underlying claim, that visits fall by roughly a constant factor per ply, is
 a model fitted to three of the harness's own choices and has not been measured
@@ -697,22 +695,45 @@ That closes the recorded-versus-live split with one rule instead of two: a line
 with a receipt is shown whole, and `SHOWN_PLIES` survives only for recorded rows
 written before any of this. It also makes the depth self-adjusting — a deeper
 search lengthens its own line with nobody choosing a number, which is what the
-in-browser deepening pass needs to be able to lean on. Measured on b15c192 at
-the product's 50 visits, over fifteen fixture positions: a median of 3 plies,
-never more than 4, and 1 on two positions where the search read no further. The
-constant was a good stand-in, and the measurement is the thing that can be right
-position by position.
+in-browser deepening pass leans on. Measured on b15c192 at the product's 50
+visits, first over fifteen fixture positions (a median of 3 plies, never more
+than 4) and then across three real sessions (536 lines): mostly two or three,
+one ply where the search read no further, and up to twelve down a forced
+sequence a capture race made every playout walk. The constant was a good
+stand-in for the middle and wrong at both ends, which is the case for
+measuring.
 
-What none of this does yet is put a *deep* line on a board. There is still no
-second, deeper search in the browser, so the long lines remain the offline
-pass's alone: the same pass as `experiments/katago/deepen.ts`, run in the worker
-once the scoring queue has drained, on the two or three worst mistakes and on
-the lines that earned it. `withDeepLine` is the door it will come in by — a
-lines-only update to a verdict that already exists, which by construction cannot
-touch a loss, a visit count, a band or a total. `withVerdict` could not be that
-door: it replaces a whole verdict, so a deeper result handed to it would carry
-its own figures in with it and silently move the numbers of a session the reader
-has already finished.
+**The deepening pass is the browser's own `deepen.ts`, and everything about it
+is arranged to give way.** Once the scoring queue drains — announced by the
+queue itself, because from inside a verdict callback the queue can never be
+seen empty — the worker re-reads the worst mistakes at `DEEP_VISITS` (500),
+with the root forced to the one move so the budget reads *that* continuation.
+Selection is three ways of doing less: a floor at `MISLEADING_LOSS`, the same
+constant `annotate.ts` grafts refutations by, so a quiet game deepens nothing;
+one line per position, the worse of the two; at most three per drain. The
+search runs in prompt-sized slices with a real task break between them, and
+between slices it decides among three outcomes rather than two, because being
+interrupted and being slow are different questions: a prompt arriving abandons
+the tree (nothing was read, and the move keeps its claim on a later drain),
+while the ten-second cap stops and *reports* the smaller search it managed — a
+slower device gets a shorter line, not nothing. Either way the receipt is the
+visits actually spent, never the visits asked for.
+
+`withDeepLine` is the door it comes in by — a lines-only update to a verdict
+that already exists, which by construction cannot touch a loss, a visit count,
+a band or a total. `withVerdict` could not be that door: it replaces a whole
+verdict, so a deeper result handed to it would carry its own figures in with
+it and silently move the numbers of a session the reader has already finished.
+The door also refuses a line whose first ply is not the slot's own move, which
+is both a guard (a search against a stale position comes back well-formed and
+about something else) and the routing: the pass offers each line to both
+slots, the mismatched one refuses it, and on a hit — one point in both slots —
+both take it, so the board never shows two lengths for one move. A line that
+lands under a reader with the mode open on that branch simply grows, because
+the review redraws only the move being shown and the mode survives any branch
+that still has a line. Phones are excluded entirely for now, as is any run
+that has already recorded an incident: ten times a prompt's forward passes,
+asked for on the reader's behalf, is not what to spend a suspect device on.
 
 **The core is pure and belongs outside the view.** Position plus line to the
 end position, its numbered markers, and the footnotes. It walks ply by ply
