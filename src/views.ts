@@ -9,7 +9,7 @@
  */
 
 import { pointName, renderGoban, type GobanOptions, type Marker } from './goban.ts';
-import { describe, type Game, type GameMeta, type GameMove } from './game.ts';
+import { players, type Game, type GameMeta, type GameMove } from './game.ts';
 import {
   canGuess,
   countPrompts,
@@ -89,6 +89,15 @@ function replace(root: HTMLElement, ...children: readonly Child[]): void {
 
 function colorName(color: Color): string {
   return color === BLACK ? 'Black' : 'White';
+}
+
+/**
+ * The players, each marked with their stone. Plain "A vs B" leaves the reader
+ * to know that SGF convention puts Black first; the stones say it outright.
+ */
+function playersHeading(game: Game): HTMLElement {
+  const [black, white] = players(game);
+  return el('h2', {}, [`⚫ ${black} vs ⚪ ${white}`]);
 }
 
 // ── Landing ──────────────────────────────────────────────────────────────────
@@ -306,7 +315,7 @@ export function renderSetup(root: HTMLElement, props: SetupProps): void {
 
   replace(
     root,
-    el('h2', {}, [describe(game)]),
+    playersHeading(game),
     el('p', { class: 'muted' }, [`${game.cols}×${game.rows} board, ${game.moves.length} moves`]),
     ...(rows.length > 0 ? [table] : []),
     ...notes,
@@ -601,7 +610,7 @@ export function renderSession(root: HTMLElement, props: SessionProps): void {
 
   replace(
     root,
-    el('h2', {}, [describe(session.game)]),
+    playersHeading(session.game),
     board,
     progressBar(session),
     el('p', { class: 'readout' }, [sessionStatus(session)]),

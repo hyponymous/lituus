@@ -12,6 +12,7 @@ import { parse } from '../src/sgf-parser.ts';
 import {
   GameError,
   describe,
+  players,
   pointIndex,
   promptableMoves,
   readGame,
@@ -213,6 +214,10 @@ test('describe names both players, tolerating missing ones', () => {
     'Ke Jie 9p vs Ichiriki Ryo',
   );
   assert.equal(describe(load('(;SZ[19];B[dd])')), '? vs ?');
+});
+
+test('players puts Black first, whatever order the properties come in', () => {
+  assert.deepEqual(players(load('(;SZ[19]PW[Bo]WR[4d]PB[Ada];B[dd])')), ['Ada', 'Bo 4d']);
 });
 
 // ── Refusals ─────────────────────────────────────────────────────────────────

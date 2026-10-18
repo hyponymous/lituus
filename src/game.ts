@@ -253,10 +253,16 @@ export function promptableMoves(game: Game, color: Color): GameMove[] {
   return game.moves.filter((move) => move.color === color);
 }
 
-/** A short one-line description, for the setup view's header. */
-export function describe(game: Game): string {
+/** Each side as name and rank, Black first, with `?` for a missing name. */
+export function players(game: Game): [black: string, white: string] {
   const { meta } = game;
   const side = (name?: string, rank?: string): string =>
     [name ?? '?', rank].filter(Boolean).join(' ');
-  return `${side(meta.blackName, meta.blackRank)} vs ${side(meta.whiteName, meta.whiteRank)}`;
+  return [side(meta.blackName, meta.blackRank), side(meta.whiteName, meta.whiteRank)];
+}
+
+/** A short one-line description, for exports and the summary. */
+export function describe(game: Game): string {
+  const [black, white] = players(game);
+  return `${black} vs ${white}`;
 }
