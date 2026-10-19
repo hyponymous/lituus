@@ -97,7 +97,14 @@ function colorName(color: Color): string {
  */
 function playersHeading(game: Game): HTMLElement {
   const [black, white] = players(game);
-  return el('h2', {}, [`⚫ ${black} vs ⚪ ${white}`]);
+  // Drawn rather than emoji: an emoji ⚫ has no edge, and vanishes in dark mode.
+  const stone = (color: Color): HTMLElement =>
+    el('span', {
+      class: `stone stone-${colorName(color).toLowerCase()}`,
+      role: 'img',
+      'aria-label': colorName(color),
+    });
+  return el('h2', {}, [stone(BLACK), `${black} vs `, stone(WHITE), white]);
 }
 
 // ── Landing ──────────────────────────────────────────────────────────────────

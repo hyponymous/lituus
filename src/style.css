@@ -134,6 +134,27 @@ h2 {
   margin: 0 0 0.75rem;
 }
 
+/* A stone inline with text, in the board's stone colors (goban.ts). The edge
+   is the theme's muted color, so whichever stone matches the page still has
+   an outline: the white one in light mode, the black one in dark. */
+.stone {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.3em;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+  vertical-align: -0.05em;
+}
+
+.stone-black {
+  background: #1a1a1a;
+}
+
+.stone-white {
+  background: #f5f5f0;
+}
+
 p {
   margin: 0 0 0.75rem;
 }
