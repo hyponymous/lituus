@@ -13,6 +13,7 @@ import {
   emptyAnalysis,
   withDevice,
   withIncident,
+  withRestart,
   INCIDENT_LIMIT,
   isTrusted,
   sameEngine,
@@ -150,6 +151,19 @@ test('the incident list is capped but the count is not', () => {
   // The first ones, not the last: the failure that started it is the one that
   // explains the rest.
   assert.equal(analysis.incidents[0].move, 1);
+});
+
+test('a restart is remembered in order but is not a failure', () => {
+  // Nothing was lost: whatever was in flight was asked again. Counting it
+  // would have the summary report a prediction that could not be scored.
+  let analysis: Analysis = withRestart(emptyAnalysis(CONFIG), { move: 7, reason: 'killed' });
+  analysis = withIncident(analysis, { move: 9, reason: 'awkward', fatal: false });
+
+  assert.equal(analysis.failures, 1);
+  assert.deepEqual(analysis.incidents, [
+    { move: 7, reason: 'killed', fatal: false, restarted: true },
+    { move: 9, reason: 'awkward', fatal: false },
+  ]);
 });
 
 test('recording an incident does not mutate the analysis it came from', () => {

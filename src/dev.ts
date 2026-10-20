@@ -34,6 +34,7 @@ import { BLACK, WHITE, type Color, type Position } from './rules.ts';
 import {
   emptyAnalysis,
   withIncident,
+  withRestart,
   sameEngine,
   verdictFor,
   withDevice,
@@ -237,13 +238,13 @@ export function restoreAnalysis(text: string, game: Game): Analysis | null {
    */
   for (const [at, entry] of asArray(config.incidents ?? [], '"engine".incidents').entries()) {
     const row: Record<string, unknown> = asRecord(entry, `"engine".incidents[${at}]`);
-    analysis = withIncident(analysis, {
-      move: row.move === null || row.move === undefined
-        ? null
-        : asNumber(row.move, `"engine".incidents[${at}].move`),
-      reason: asString(row.reason, `"engine".incidents[${at}].reason`),
-      fatal: row.fatal === true,
-    });
+    const move: number | null = row.move === null || row.move === undefined
+      ? null
+      : asNumber(row.move, `"engine".incidents[${at}].move`);
+    const reason: string = asString(row.reason, `"engine".incidents[${at}].reason`);
+    analysis = row.restarted === true
+      ? withRestart(analysis, { move, reason })
+      : withIncident(analysis, { move, reason, fatal: row.fatal === true });
   }
   /*
    * The count is carried, not counted. `INCIDENT_LIMIT` truncates the list, so
@@ -503,6 +504,8 @@ function beginScoring(
       }
       case 'warming':
         return 'Scoring: starting the engine.';
+      case 'restarting':
+        return 'Scoring: the engine stopped; it restarts with the next prediction.';
       case 'ready': {
         const waiting: number = queue?.pending() ?? 0;
         const done: number = session.guesses.length - waiting;
@@ -523,6 +526,9 @@ function beginScoring(
     // place a restored analysis can grow a second device — and must say so.
     onDevice: (device: string): void => {
       analysis = withDevice(analysis, device);
+    },
+    onRestart: (restart: { readonly move: number | null; readonly reason: string }): void => {
+      analysis = withRestart(analysis, restart);
     },
     onStatus: (next: EngineStatus): void => {
       status = next;

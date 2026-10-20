@@ -764,9 +764,14 @@ export function failureNote(ai: AiResult): string | null {
     );
   }
   if (ai.failures === 0) return null;
+  // A restart is not the failure being counted, so it is not the one quoted.
+  // Absent when the cap was filled by restarts before any failure arrived.
+  const first: EngineIncident | undefined = ai.incidents.find(
+    (incident: EngineIncident) => !incident.restarted,
+  );
   return (
-    `${ai.failures} prediction${ai.failures === 1 ? '' : 's'} could not be scored: ` +
-    ai.incidents[0].reason
+    `${ai.failures} prediction${ai.failures === 1 ? '' : 's'} could not be scored` +
+    (first ? `: ${first.reason}` : '.')
   );
 }
 
@@ -828,6 +833,8 @@ export function toJSON(summary: Summary): string {
                 move: incident.move,
                 reason: incident.reason,
                 fatal: incident.fatal,
+                // Only when set, so an export with no restart reads as before.
+                ...(incident.restarted ? { restarted: true } : {}),
               })),
             },
       ai:

@@ -28,6 +28,7 @@ import {
   withDeepLine,
   withDevice,
   withIncident,
+  withRestart,
   withVerdict,
   type Analysis,
   type DeepTarget,
@@ -193,6 +194,11 @@ function startEngineFor(game: Game): void {
     // What it turned out to be running on, kept with the verdicts it produces.
     onDevice: (device: string): void => {
       if (analysis !== null) analysis = withDevice(analysis, device);
+    },
+    // A death survived. Kept so the export still shows it, memory readings and
+    // all, without the summary calling it a failure: nothing was lost.
+    onRestart: (restart: { readonly move: number | null; readonly reason: string }): void => {
+      if (analysis !== null) analysis = withRestart(analysis, restart);
     },
     onStatus: (status: EngineStatus): void => {
       // The one place a failure with no prompt in flight becomes a record: a
@@ -480,6 +486,8 @@ function engineLine(): string | null {
     }
     case 'warming':
       return 'Scoring: starting the engine.';
+    case 'restarting':
+      return 'Scoring: the engine stopped; it restarts with the next prediction.';
     case 'ready': {
       const done: number = analysis ? verdictCount(analysis) : 0;
       const waiting: number = queue?.pending() ?? 0;

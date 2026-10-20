@@ -231,6 +231,13 @@ export interface EngineIncident {
    * that kind explains every later move being missing.
    */
   readonly fatal: boolean;
+  /**
+   * Whether the engine was restarted here and carried on. Never fatal, and not
+   * a failure either: nothing was lost but time, and whatever was in flight was
+   * asked again. Kept so that an export still shows the death, with its memory
+   * readings, which is the evidence the mobile ceiling is being studied by.
+   */
+  readonly restarted?: boolean;
 }
 
 /**
@@ -284,6 +291,26 @@ export function withDevice(analysis: Analysis, device: string): Analysis {
   const next: string =
     known === null || known.split('; ').includes(device) ? (known ?? device) : `${known}; ${device}`;
   return { ...analysis, config: { ...analysis.config, device: next } };
+}
+
+/**
+ * A new analysis that remembers the engine was restarted.
+ *
+ * Kept in the same bounded list as the failures, so the export reads in the
+ * order things happened, but not counted with them: `failures` is the asking
+ * that failed, and a restart's prompt is asked again rather than lost.
+ */
+export function withRestart(
+  analysis: Analysis,
+  restart: { readonly move: number | null; readonly reason: string },
+): Analysis {
+  return {
+    ...analysis,
+    incidents:
+      analysis.incidents.length < INCIDENT_LIMIT
+        ? [...analysis.incidents, { ...restart, fatal: false, restarted: true }]
+        : analysis.incidents,
+  };
 }
 
 /** A new analysis that also remembers this failure. */

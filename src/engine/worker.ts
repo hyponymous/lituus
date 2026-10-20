@@ -37,7 +37,7 @@ import {
 } from './evaluate.ts';
 import { parseKataGoModelV8 } from './load-model-v8.ts';
 import type { ParsedKataGoModelV8 } from './model-types.ts';
-import { ModelV8 } from './model-v8.ts';
+import { DEAD_READBACK, ModelV8 } from './model-v8.ts';
 import { forgetNetwork, loadNetworkBytes, type Progress } from './net-cache.ts';
 import { checkWeights, type WeightsCheck } from './weights-check.ts';
 import { Search } from './search.ts';
@@ -83,7 +83,16 @@ export type WorkerReply =
       /** The GPU and platform, for the record a score carries. */
       readonly device: string;
     }
-  | { readonly type: 'failed'; readonly reason: string }
+  | {
+      /**
+       * The engine is gone. `retryable` says whether a fresh worker could be
+       * expected to do better: a lost device can come back, while a device
+       * that computes the network wrongly will compute it wrongly again.
+       */
+      readonly type: 'failed';
+      readonly reason: string;
+      readonly retryable: boolean;
+    }
   | { readonly type: 'verdict'; readonly verdict: Verdict }
   /**
    * What the backend is holding, after every prompt.
@@ -119,7 +128,17 @@ export type WorkerReply =
       readonly visits: number;
       readonly pv: readonly number[] | null;
     }
-  | { readonly type: 'error'; readonly moveNumber: number; readonly reason: string };
+  | {
+      /**
+       * One prompt could not be answered. `retryable` marks the errors that
+       * mean the device died under this prompt rather than that the prompt
+       * was awkward, so the client can restart instead of counting three.
+       */
+      readonly type: 'error';
+      readonly moveNumber: number;
+      readonly reason: string;
+      readonly retryable: boolean;
+    };
 
 /*
  * Under the DOM lib `self` types as a `Window`, whose `postMessage` wants a
@@ -203,7 +222,7 @@ function watchForDeviceLoss(tf: typeof TF): void {
     broken = info.message
       ? `The GPU stopped: ${info.message}`
       : 'The GPU stopped, so scoring is unavailable.';
-    post({ type: 'failed', reason: broken });
+    post({ type: 'failed', reason: broken, retryable: true });
   });
 }
 
@@ -320,6 +339,7 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
       type: 'error',
       moveNumber: request.moveNumber,
       reason: broken ?? 'The engine is not ready.',
+      retryable: false,
     });
     return;
   }
@@ -331,16 +351,30 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
       type: 'error',
       moveNumber: request.moveNumber,
       reason: `Move ${request.moveNumber} is not in this record.`,
+      retryable: false,
     });
     return;
   }
   // Before the search, not after: a drifted device has already produced this
   // prompt's answer wrongly, and answering it anyway is how the last one got
-  // exported. The throw is caught by the message loop and reported as an error,
-  // which `ERRORS_BEFORE_FAILED` turns into a stopped engine.
+  // exported.
+  //
+  // It stops the engine here rather than throwing a per-move error. Thrown, it
+  // failed one prompt and no more: the counter was already reset, so the next
+  // seven prompts were answered by the same drifted device before anything
+  // checked again. And it is final rather than retryable, because a fresh
+  // worker on the same GPU is the same device that just stopped agreeing with
+  // itself.
   if (sinceCanary >= CANARY_EVERY) {
     sinceCanary = 0;
-    engine.canary.verify();
+    try {
+      engine.canary.verify();
+    } catch (error: unknown) {
+      engine = null;
+      broken = message(error);
+      post({ type: 'failed', reason: broken, retryable: false });
+      return;
+    }
   }
   sinceCanary++;
 
@@ -446,14 +480,25 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>): void => {
       const reason: string = message(error);
       if (request.type === 'init') {
         broken = reason;
-        post({ type: 'failed', reason });
+        // Everything that fails at load fails the same way next time: no
+        // WebGPU, a device refused against the reference, weights that will
+        // not arrive intact. A device lost during load reports itself through
+        // `watchForDeviceLoss`, which is the retryable path.
+        post({ type: 'failed', reason, retryable: false });
       } else if (request.type === 'deepen') {
         // A deepening that throws costs the reader nothing they were promised,
         // so it is reported as no line rather than as an engine error — which
         // would count towards ERRORS_BEFORE_FAILED and stop a working engine.
         post({ type: 'deepened', moveNumber: request.moveNumber, visits: 0, pv: null });
       } else {
-        post({ type: 'error', moveNumber: request.moveNumber, reason });
+        // A dead readback is the device dying under this prompt, which a fresh
+        // worker can recover from. Anything else is about the prompt.
+        post({
+          type: 'error',
+          moveNumber: request.moveNumber,
+          reason,
+          retryable: reason === DEAD_READBACK,
+        });
       }
     } finally {
       if (request.type !== 'deepen') waiting -= 1;
