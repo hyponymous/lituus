@@ -18,7 +18,8 @@
  *   apart: the policy's, and the smallest head's. Two sizes rather than one
  *   because what the driver wants is the *intercept*. Only the per-call part
  *   of a read can be won back by making fewer calls; the bytes have to cross
- *   either way.
+ *   either way. Measured again through the asynchronous `data()`, which maps a
+ *   staging buffer and makes no canvas, so the two read paths sit side by side.
  * - **promptMs** — one `evaluatePrompt` at the shipping visit count, which is
  *   the only figure here a user would recognize: it is what a prompt takes.
  *
@@ -75,6 +76,12 @@ export interface Timing {
   readonly maxMs: number;
 }
 
+export interface ReadTiming {
+  readonly label: string;
+  readonly floats: number;
+  readonly timing: Timing;
+}
+
 export interface ReadbackResult {
   readonly adapter: string;
   readonly backend: string | null;
@@ -84,11 +91,9 @@ export interface ReadbackResult {
   /** One `model.evaluate()`, as the code stands. */
   readonly evaluate: Timing;
   /** One `dataSync()`, by tensor size. `floats` is what separates the two. */
-  readonly reads: ReadonlyArray<{
-    readonly label: string;
-    readonly floats: number;
-    readonly timing: Timing;
-  }>;
+  readonly reads: readonly ReadTiming[];
+  /** The same through `await data()`. Absent from results saved before it was. */
+  readonly asyncReads?: readonly ReadTiming[];
   /**
    * How far the canary's fixed evaluation moved across the run, and what one
    * check costs. Zero is the expected drift on a healthy device.
@@ -175,20 +180,21 @@ function summarize(samples: readonly number[]): Timing {
 const READ_SOURCE_SIZE = 4096;
 
 /**
- * Time one `dataSync()` of a GPU-resident tensor of `size` floats, `count`
- * times.
+ * Time one read of a GPU-resident tensor of `size` floats, `count` times,
+ * through `dataSync()` or `await data()`.
  *
- * A fresh tensor per iteration, and that is the other trick: `readSync` caches
- * what it read on the CPU (`convertAndCacheOnCPU`), so a second read of the
+ * A fresh tensor per iteration, and that is the other trick: both reads cache
+ * what they read on the CPU (`convertAndCacheOnCPU`), so a second read of the
  * same tensor is free and would also measure nothing.
  */
-function timeReads(size: number, count: number): Timing {
+async function timeReads(size: number, count: number, asynchronous: boolean): Promise<Timing> {
   const source: tf.Tensor2D = tf.ones([1, READ_SOURCE_SIZE]);
   const samples: number[] = [];
   for (let i = 0; i < count; i++) {
     const fresh: tf.Tensor2D = tf.slice(source, [0, i % 2], [1, size]);
     const started: number = performance.now();
-    fresh.dataSync();
+    if (asynchronous) await fresh.data();
+    else fresh.dataSync();
     samples.push(performance.now() - started);
     fresh.dispose();
   }
@@ -270,15 +276,26 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
   // The shapes `evaluate` actually reads: the policy, and the smallest head.
   // Same call, two sizes, 361x apart in bytes — the comparison is the point.
   const area: number = board.cols * board.rows;
-  const reads = [
-    {
-      label: `${area} floats, ${area * 4}B (policy)`,
-      floats: area,
-      timing: timeReads(area, request.reads),
-    },
-    { label: '4 floats, 16B (score)', floats: 4, timing: timeReads(4, request.reads) },
-  ];
-  for (const read of reads) log(`read ${read.label}: ${read.timing.meanMs.toFixed(2)}ms mean`);
+  const timeBoth = async (asynchronous: boolean): Promise<ReadTiming[]> => {
+    const suffix: string = asynchronous ? ', async' : '';
+    return [
+      {
+        label: `${area} floats, ${area * 4}B (policy${suffix})`,
+        floats: area,
+        timing: await timeReads(area, request.reads, asynchronous),
+      },
+      {
+        label: `4 floats, 16B (score${suffix})`,
+        floats: 4,
+        timing: await timeReads(4, request.reads, asynchronous),
+      },
+    ];
+  };
+  const reads: ReadTiming[] = await timeBoth(false);
+  const asyncReads: ReadTiming[] = await timeBoth(true);
+  for (const read of [...reads, ...asyncReads]) {
+    log(`read ${read.label}: ${read.timing.meanMs.toFixed(2)}ms mean`);
+  }
 
   let promptMs: number | null = null;
   if (request.visits > 0 && move.index !== null) {
@@ -321,6 +338,7 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
     warmupMs,
     evaluate,
     reads,
+    asyncReads,
     promptMs,
     promptVisits: request.visits,
   };

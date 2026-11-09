@@ -25,7 +25,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, type Browser, type Page } from 'playwright';
 import { NETWORK } from '../../src/engine/network.ts';
-import type { ReadbackRequest, ReadbackResult, Timing } from './readback/main.ts';
+import type { ReadbackRequest, ReadbackResult, ReadTiming, Timing } from './readback/main.ts';
 
 const HERE: string = fileURLToPath(new URL('.', import.meta.url));
 const REPO: string = resolve(HERE, '../..');
@@ -92,9 +92,32 @@ function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> 
 }
 
 const line = (what: string, timing: Timing): string =>
-  `${what.padEnd(34)} ${timing.meanMs.toFixed(2).padStart(7)}  ` +
+  `${what.padEnd(42)} ${timing.meanMs.toFixed(2).padStart(7)}  ` +
   `${timing.medianMs.toFixed(2).padStart(7)}  ` +
   `${timing.minMs.toFixed(2).padStart(7)}  ${timing.maxMs.toFixed(2).padStart(7)}`;
+
+/**
+ * The split between what a read costs to *make* and what it costs to carry,
+ * from the two sizes measured. A straight line through two points is a crude
+ * model and the right one here: the question is only whether the intercept is
+ * large, because the intercept is what is paid per call and therefore all
+ * that collapsing four calls into one can win back. The payload term is the
+ * same bytes either way.
+ */
+function printFit(path: string, reads: readonly ReadTiming[], perPass: number): void {
+  if (reads.length !== 2) return;
+  const [big, small] = reads;
+  const perFloat: number =
+    (big.timing.medianMs - small.timing.medianMs) / (big.floats - small.floats);
+  const fixed: number = small.timing.medianMs - perFloat * small.floats;
+  console.log(
+    `\n${path} fitted: ${fixed.toFixed(2)}ms per call + ${(perFloat * 1000).toFixed(3)}us per float`,
+  );
+  console.log(
+    `each ${path} read avoided is worth about ${fixed.toFixed(2)}ms, ` +
+      `${((100 * fixed) / perPass).toFixed(1)}% of a forward pass`,
+  );
+}
 
 async function main(): Promise<void> {
   const options: Options = parseArgs(process.argv.slice(2));
@@ -145,40 +168,22 @@ async function main(): Promise<void> {
   }
   console.log(`load ${(result.loadMs / 1000).toFixed(1)}s, first pass ${result.warmupMs.toFixed(0)}ms\n`);
 
-  console.log(`${''.padEnd(34)}    mean   median      min      max`);
+  console.log(`${''.padEnd(42)}    mean   median      min      max`);
   console.log(line('forward pass', result.evaluate));
-  for (const read of result.reads) console.log(line(`read ${read.label}`, read.timing));
+  const allReads: readonly ReadTiming[] = [...result.reads, ...(result.asyncReads ?? [])];
+  for (const read of allReads) console.log(line(`read ${read.label}`, read.timing));
 
   // One read as a share of one pass. Deliberately per *read* rather than per
   // pass: how many reads a pass makes is what the code decides and what a
   // change to it moves, so this line stays true on both sides of one.
   const perPass: number = result.evaluate.meanMs;
   console.log();
-  for (const read of result.reads) {
+  for (const read of allReads) {
     const share: number = (100 * read.timing.meanMs) / perPass;
     console.log(`one read ${read.label} is ${share.toFixed(1)}% of a forward pass`);
   }
-  /*
-   * The split between what a read costs to *make* and what it costs to carry,
-   * from the two sizes measured. A straight line through two points is a crude
-   * model and the right one here: the question is only whether the intercept is
-   * large, because the intercept is what is paid per call and therefore all
-   * that collapsing four calls into one can win back. The payload term is the
-   * same bytes either way.
-   */
-  if (result.reads.length === 2) {
-    const [big, small] = result.reads;
-    const perFloat: number =
-      (big.timing.medianMs - small.timing.medianMs) / (big.floats - small.floats);
-    const fixed: number = small.timing.medianMs - perFloat * small.floats;
-    console.log(
-      `\nfitted: ${fixed.toFixed(2)}ms per call + ${(perFloat * 1000).toFixed(3)}us per float`,
-    );
-    console.log(
-      `each read avoided is worth about ${fixed.toFixed(2)}ms, ` +
-        `${((100 * fixed) / perPass).toFixed(1)}% of a forward pass`,
-    );
-  }
+  printFit('dataSync', result.reads, perPass);
+  if (result.asyncReads) printFit('data', result.asyncReads, perPass);
   console.log(
     `\ncanary drift ${result.canaryDrift.toExponential(2)} ` +
       `after the run, one check ${result.canaryMs.toFixed(1)}ms`,
