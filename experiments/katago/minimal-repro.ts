@@ -135,8 +135,8 @@ async function main(): Promise<void> {
   const spatial = new Float32Array(built.spatial);
   const global = new Float32Array(built.global);
 
-  const evaluate = (s: Float32Array, g: Float32Array): Error_ => {
-    const evaluation: Evaluation = model.evaluate(s, g, SIZE);
+  const evaluate = async (s: Float32Array, g: Float32Array): Promise<Error_> => {
+    const evaluation: Evaluation = await model.evaluate(s, g, SIZE);
     const judgement: Judgement = postprocess(
       evaluation.value,
       evaluation.scoreValue,
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
     return compare(judgement, evaluation, raw, state, board.area, toPlay);
   };
 
-  const base: Error_ = evaluate(spatial, global);
+  const base: Error_ = await evaluate(spatial, global);
   console.log(`${model.name}`);
   console.log(
     `baseline  policy ${base.policy.toFixed(6)}  winrate ${base.winrate.toFixed(6)}  ` +
@@ -197,7 +197,7 @@ async function main(): Promise<void> {
       },
       scratch,
     );
-    const evaluation: Evaluation = model.evaluate(scanInputs.spatial, scanInputs.global, SIZE);
+    const evaluation: Evaluation = await model.evaluate(scanInputs.spatial, scanInputs.global, SIZE);
     const judgement: Judgement = postprocess(evaluation.value, evaluation.scoreValue, model.postProcess);
     const error: Error_ = compare(judgement, evaluation, scanRaw, scan, board.area, scanToPlay);
     const theirLead: number = scanToPlay === BLACK ? -scanRaw.whiteLead : scanRaw.whiteLead;

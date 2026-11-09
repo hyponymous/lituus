@@ -184,12 +184,12 @@ function requestFor(
  * Search one prompted position, forcing the guess when the root search did not
  * look at it hard enough to be worth quoting.
  */
-export function evaluatePrompt(
+export async function evaluatePrompt(
   search: Search,
   context: GameContext,
   prompt: Prompt,
   visits: number,
-): Verdict {
+): Promise<Verdict> {
   const { game, board } = context;
   const turn: number = turnOf(game, prompt.moveNumber);
   if (turn < 0) {
@@ -198,7 +198,7 @@ export function evaluatePrompt(
 
   const base: SearchRequest = requestFor(context, prompt.position, prompt.color, turn, visits);
 
-  const root: SearchResult = search.run(base);
+  const root: SearchResult = await search.run(base);
   if (root.moves.length === 0) {
     throw new EvaluationError(`The search found no legal move at move ${prompt.moveNumber}.`);
   }
@@ -224,7 +224,7 @@ export function evaluatePrompt(
    * minus the restricted search's — because a search allowed only one move
    * calls that move best and reports no loss for it, however bad it is.
    */
-  const verdictFor = (point: number): MoveVerdict | null => {
+  const verdictFor = async (point: number): Promise<MoveVerdict | null> => {
     const direct: MoveAnalysis | undefined = found(point);
     if (direct !== undefined && direct.visits >= MIN_TRUSTED_VISITS) {
       return {
@@ -236,7 +236,7 @@ export function evaluatePrompt(
         pvBudget: visits,
       };
     }
-    const forcedResult: SearchResult = search.run({ ...base, allowedRootMoves: [point] });
+    const forcedResult: SearchResult = await search.run({ ...base, allowedRootMoves: [point] });
     const forced: MoveAnalysis | undefined = forcedResult.moves[0];
     if (forced === undefined) return null;
     return {
@@ -273,7 +273,7 @@ export function evaluatePrompt(
   // A pass arrives as null and is searched like any other move: the policy has
   // one, numbered past the last intersection, and `search.ts` treats it as
   // always legal in the main phase.
-  const played: MoveVerdict | null = verdictFor(prompt.played ?? pass);
+  const played: MoveVerdict | null = await verdictFor(prompt.played ?? pass);
   /*
    * A hit is the same move twice; do not pay for it twice. Two passes are the
    * same move on the same terms.
@@ -287,7 +287,7 @@ export function evaluatePrompt(
       ? null
       : prompt.guess === prompt.played
         ? played
-        : verdictFor(prompt.guess ?? pass);
+        : await verdictFor(prompt.guess ?? pass);
 
   return {
     moveNumber: prompt.moveNumber,
@@ -304,10 +304,10 @@ export function evaluatePrompt(
 /**
  * How many playouts run between two chances to be called off.
  *
- * One prompt's worth. The worker is deaf for the length of a slice — the
- * canary, the memory reading and the cancellation itself all wait behind it —
- * and a prompt's block is the deafness the product already lives with on every
- * guess, so it is the largest unit that adds no new kind of stall.
+ * One prompt's worth. A cancellation that arrives mid-slice is acted on only
+ * at the slice's end, and the canary and the memory reading wait behind the
+ * whole pass. A prompt's block is the stall the product already lives with on
+ * every guess, so it is the largest unit that adds no new kind of stall.
  */
 export const DEEP_SLICE = 50;
 
@@ -402,9 +402,17 @@ export function createEngineEvaluator(
 ): Evaluator {
   const context: GameContext = gameContext(game);
   const search = new Search(network, context.board);
+  // One search at a time on the shared `Search`: prompts asked together are
+  // answered in turn, as they were when a search could not be interrupted.
+  let previous: Promise<unknown> = Promise.resolve();
   return {
     config,
-    evaluate: (prompt: Prompt): Promise<Verdict> =>
-      Promise.resolve(evaluatePrompt(search, context, prompt, config.visits)),
+    evaluate: (prompt: Prompt): Promise<Verdict> => {
+      const next: Promise<Verdict> = previous
+        .catch((): void => {})
+        .then((): Promise<Verdict> => evaluatePrompt(search, context, prompt, config.visits));
+      previous = next;
+      return next;
+    },
   };
 }

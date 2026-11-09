@@ -254,18 +254,18 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
    * away: it is the pause a user sees when scoring starts.
    */
   const startedWarmup: number = performance.now();
-  model.evaluate(inputs.spatial, inputs.global, board.cols);
+  await model.evaluate(inputs.spatial, inputs.global, board.cols);
   const warmupMs: number = performance.now() - startedWarmup;
   log(`first pass ${warmupMs.toFixed(0)}ms`);
 
   // Built here rather than at the end, so its baseline is taken from a device
   // that has only just started — which is where the worker takes it too.
-  const canary = new Canary(model, board.cols);
+  const canary: Canary = await Canary.create(model, board.cols);
 
   const evalSamples: number[] = [];
   for (let i = 0; i < request.evals; i++) {
     const started: number = performance.now();
-    const evaluation: Evaluation = model.evaluate(inputs.spatial, inputs.global, board.cols);
+    const evaluation: Evaluation = await model.evaluate(inputs.spatial, inputs.global, board.cols);
     evalSamples.push(performance.now() - started);
     // Read one value so the optimizer cannot be accused of eliding the call.
     if (!Number.isFinite(evaluation.policyPass)) throw new Error('non-finite policy');
@@ -308,7 +308,7 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
       guess: move.index,
     };
     const started: number = performance.now();
-    evaluatePrompt(search, context, prompt, request.visits);
+    await evaluatePrompt(search, context, prompt, request.visits);
     promptMs = performance.now() - started;
     log(`prompt at ${request.visits} visits: ${(promptMs / 1000).toFixed(2)}s`);
   }
@@ -321,7 +321,7 @@ async function run(request: ReadbackRequest): Promise<ReadbackResult> {
    * computation — so anything else printed here is a finding.
    */
   const startedCanary: number = performance.now();
-  const canaryDrift: number = canary.drift();
+  const canaryDrift: number = await canary.drift();
   const canaryHeads: readonly number[] = Array.from(canary.heads);
   const canaryMs: number = performance.now() - startedCanary;
   log(`canary drift ${canaryDrift.toExponential(2)} in ${canaryMs.toFixed(1)}ms`);

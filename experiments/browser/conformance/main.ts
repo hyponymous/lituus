@@ -177,7 +177,7 @@ async function run(request: ConformanceRequest): Promise<ConformanceResult> {
     };
 
     const started: number = performance.now();
-    const verdict: Verdict = evaluatePrompt(search, context, prompt, request.visits);
+    const verdict: Verdict = await evaluatePrompt(search, context, prompt, request.visits);
     const ms: number = performance.now() - started;
 
     rows.push({

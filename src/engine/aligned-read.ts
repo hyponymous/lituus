@@ -31,10 +31,10 @@
  * one cycle and no partial row. It costs a concatenation of at most 255 zeros
  * and is faster than the read it replaces, since a cycle is the expensive part.
  *
- * The alternative is the asynchronous `data()`, which maps the buffer properly
- * and is not affected. It is the better answer and it is not available here: a
- * search is synchronous, fifty forward passes deep, and awaiting each of them
- * is a rewrite of the search (`TODO`, and `docs/design-ai-scoring.md` §5.1).
+ * The alternative was the asynchronous `data()`, which maps the buffer properly
+ * and is not affected, and it is what the model now reads through (`readAsync`
+ * below). The padded read stays until a phone has shown `data()` exact at the
+ * lengths the model reads; `readback-check.ts` is what asks.
  */
 
 import type * as TF from '@tensorflow/tfjs-core';
@@ -64,6 +64,11 @@ export interface ReadBackend<T extends ReadTensor> {
   concat(parts: T[]): T;
   /** The device's own synchronous read, warts and all. */
   read(tensor: T): Float32Array;
+  /**
+   * The asynchronous read. On WebGPU it maps a pooled staging buffer and never
+   * touches the canvas, so it has no partial row to lose and needs no padding.
+   */
+  readAsync(tensor: T): Promise<Float32Array>;
 }
 
 /**
@@ -79,9 +84,12 @@ export function readBackend(tf: typeof TF): ReadBackend<TF.Tensor> {
     fill: (shape: number[], value: number): TF.Tensor => tf.fill(shape, value),
     zeros: (shape: number[]): TF.Tensor => tf.zeros(shape),
     concat: (parts: TF.Tensor[]): TF.Tensor => tf.concat(parts),
-    // `dataSync` is typed as the union of every dtype's array; every tensor
-    // read here is float32, and the assertion is the one place that is said.
+    // `dataSync` and `data` are typed as the union of every dtype's array;
+    // every tensor read here is float32, and these assertions are the one
+    // place that is said.
     read: (tensor: TF.Tensor): Float32Array => tensor.dataSync() as Float32Array,
+    readAsync: async (tensor: TF.Tensor): Promise<Float32Array> =>
+      (await tensor.data()) as Float32Array,
   };
 }
 

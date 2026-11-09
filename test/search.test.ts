@@ -75,7 +75,7 @@ interface Opinion {
 
 interface Stub {
   readonly network: {
-    evaluate(spatial: Float32Array, global: Float32Array, cols: number): Evaluation;
+    evaluate(spatial: Float32Array, global: Float32Array, cols: number): Promise<Evaluation>;
     readonly postProcess: typeof POST_PROCESS;
   };
   /** How many forward passes have been asked for. */
@@ -107,7 +107,7 @@ function stubNetwork(opine: (stones: Map<number, Stone>, white: boolean) => Opin
     calls: () => calls,
     network: {
       postProcess: POST_PROCESS,
-      evaluate: (spatial: Float32Array, global: Float32Array): Evaluation => {
+      evaluate: async (spatial: Float32Array, global: Float32Array): Promise<Evaluation> => {
         calls += 1;
         const white: boolean = whiteToMove(global);
         const opinion: Opinion = opine(occupied(spatial, white), white);
@@ -149,10 +149,10 @@ function request(
   };
 }
 
-test('the root gets exactly the visits it was asked for, one forward pass each', () => {
+test('the root gets exactly the visits it was asked for, one forward pass each', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const stub: Stub = stubNetwork(() => ({}));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, emptyState(board), BLACK, 20),
   );
   assert.equal(result.rootVisits, 20);
@@ -160,7 +160,7 @@ test('the root gets exactly the visits it was asked for, one forward pass each',
   assert.equal(stub.calls(), 20);
 });
 
-test('visits follow the policy when the network sees no difference in value', () => {
+test('visits follow the policy when the network sees no difference in value', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const centre: number = 3 * SIZE + 3;
   const corner = 0;
@@ -171,7 +171,7 @@ test('visits follow the policy when the network sees no difference in value', ()
     ]),
     passLogit: -10,
   }));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, emptyState(board), BLACK, 40),
   );
 
@@ -187,7 +187,7 @@ test('visits follow the policy when the network sees no difference in value', ()
   assert.equal(result.moves[0].point, centre);
 });
 
-test('the search finds the move the network rewards, and quotes its lead', () => {
+test('the search finds the move the network rewards, and quotes its lead', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const prize: number = 2 * SIZE + 4;
   // One consistent claim about the world: a *Black* stone on the prize point is
@@ -206,7 +206,7 @@ test('the search finds the move the network rewards, and quotes its lead', () =>
     policy: new Map([[prize, 2], ...decoys.map((d): [number, number] => [d, 3])]),
     passLogit: -10,
   }));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, emptyState(board), BLACK, 60),
   );
 
@@ -223,7 +223,7 @@ test('the search finds the move the network rewards, and quotes its lead', () =>
   assert.ok(result.rootScoreLead > 0 && result.rootScoreLead < 20);
 });
 
-test('a lead is quoted for whoever moved at the root, whichever colour that is', () => {
+test('a lead is quoted for whoever moved at the root, whichever colour that is', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   // White is ten points ahead, said in the frame of whoever is asked.
   const stub: Stub = stubNetwork((_stones: Map<number, Stone>, white: boolean) => ({
@@ -231,16 +231,16 @@ test('a lead is quoted for whoever moved at the root, whichever colour that is',
   }));
   const search = new Search(stub.network, board);
 
-  const black: SearchResult = search.run(request(board, emptyState(board), BLACK, 8));
+  const black: SearchResult = await search.run(request(board, emptyState(board), BLACK, 8));
   assert.ok(black.rootScoreLead < 0, `Black was told it was ahead: ${black.rootScoreLead}`);
   assert.ok(Math.abs(black.rootScoreLead + 10) < 1e-6);
 
-  const white: SearchResult = search.run(request(board, emptyState(board), WHITE, 8));
+  const white: SearchResult = await search.run(request(board, emptyState(board), WHITE, 8));
   assert.ok(white.rootScoreLead > 0, `White was told it was behind: ${white.rootScoreLead}`);
   assert.ok(Math.abs(white.rootScoreLead - 10) < 1e-6);
 });
 
-test('an occupied point, a suicide and a ko retake are never visited', () => {
+test('an occupied point, a suicide and a ko retake are never visited', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const state: BoardState = emptyState(board);
   const at = (col: number, row: number): number => row * SIZE + col;
@@ -270,7 +270,7 @@ test('an occupied point, a suicide and a ko retake are never visited', () => {
       [at(1, 0), 20],
     ]),
   }));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, state, WHITE, 30),
   );
 
@@ -283,7 +283,7 @@ test('an occupied point, a suicide and a ko retake are never visited', () => {
   assert.equal(playMove(board, state, suicide, WHITE, []), null);
 });
 
-test('a root mask restricts the root and only the root', () => {
+test('a root mask restricts the root and only the root', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const allowed: number = 4 * SIZE + 1;
   const favourite: number = 3 * SIZE + 3;
@@ -291,7 +291,7 @@ test('a root mask restricts the root and only the root', () => {
     policy: new Map([[favourite, 8]]),
     passLogit: -10,
   }));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, emptyState(board), BLACK, 25, { allowedRootMoves: [allowed] }),
   );
 
@@ -304,7 +304,7 @@ test('a root mask restricts the root and only the root', () => {
   assert.equal(result.moves[0].pv[1], favourite);
 });
 
-test('every ply of a line says how much of the search stands behind it', () => {
+test('every ply of a line says how much of the search stands behind it', async () => {
   // `pvVisits`, which the analysis engine emits under `includePVVisits` and the
   // recorded reference runs never asked for. It is what lets a caller cut a
   // line where the reading stopped instead of at a chosen number.
@@ -315,7 +315,7 @@ test('every ply of a line says how much of the search stands behind it', () => {
     policy: new Map([[stones.size * 5 + 2, 8]]),
     passLogit: -10,
   }));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, emptyState(board), BLACK, 60),
   );
   const best: MoveAnalysis = result.moves[0];
@@ -347,7 +347,7 @@ test('a sliced search is the same search, and says so playout for playout', asyn
       lead: stones.size % 2 === 0 ? 4 : -6,
     }));
 
-  const whole: SearchResult = new Search(build().network, board).run(
+  const whole: SearchResult = await new Search(build().network, board).run(
     request(board, emptyState(board), BLACK, 40),
   );
   const sliced: SearchResult | null = await new Search(build().network, board).runSliced(
@@ -412,44 +412,78 @@ test('a search out of time reports the smaller search it managed', async () => {
   assert.equal(stub.calls(), 31);
 });
 
-test('the same request twice gives the same answer', () => {
+test('the same request twice gives the same answer', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const build = (): Stub =>
     stubNetwork((stones: Map<number, Stone>) => ({
       policy: new Map([[stones.size * 3 + 1, 3]]),
       lead: stones.size % 2 === 0 ? 4 : -6,
     }));
-  const first: SearchResult = new Search(build().network, board).run(
+  const first: SearchResult = await new Search(build().network, board).run(
     request(board, emptyState(board), BLACK, 40),
   );
-  const second: SearchResult = new Search(build().network, board).run(
+  const second: SearchResult = await new Search(build().network, board).run(
     request(board, emptyState(board), BLACK, 40),
   );
   assert.deepEqual(first, second);
 });
 
-test('one Search instance can be reused, and does not remember the last position', () => {
+test('one Search instance can be reused, and does not remember the last position', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const stub: Stub = stubNetwork((stones: Map<number, Stone>) => ({ lead: stones.size }));
   const search = new Search(stub.network, board);
-  const alone: SearchResult = search.run(request(board, emptyState(board), BLACK, 15));
+  const alone: SearchResult = await search.run(request(board, emptyState(board), BLACK, 15));
 
   const busy: BoardState = emptyState(board);
   busy.stones[0] = BLACK;
   busy.stones[1] = WHITE;
-  search.run(request(board, busy, BLACK, 15));
+  await search.run(request(board, busy, BLACK, 15));
 
-  const again: SearchResult = search.run(request(board, emptyState(board), BLACK, 15));
+  const again: SearchResult = await search.run(request(board, emptyState(board), BLACK, 15));
   assert.deepEqual(again, alone);
 });
 
-test('passing is available and is searched when it is the only legal move', () => {
+test('a second search on one Search is refused while the first is running', async () => {
+  // Every forward pass is awaited, so a second search could start between two
+  // playouts of the first and descend on the board it is standing on. That is
+  // a caller's bug, and it has to say so rather than corrupt both answers.
+  const board: Board = createBoard(SIZE, SIZE);
+  const stub: Stub = stubNetwork(() => ({}));
+  const search = new Search(stub.network, board);
+
+  const first: Promise<SearchResult> = search.run(request(board, emptyState(board), BLACK, 10));
+  await assert.rejects(
+    search.run(request(board, emptyState(board), BLACK, 10)),
+    /already running/,
+  );
+  assert.equal((await first).rootVisits, 10);
+});
+
+test('a search that fails does not leave its Search refusing the next one', async () => {
+  // A dead readback throws out of the middle of a playout; the worker keeps
+  // the same Search for the next prompt.
+  const board: Board = createBoard(SIZE, SIZE);
+  const stub: Stub = stubNetwork(() => ({}));
+  let fail = true;
+  const network: Stub['network'] = {
+    postProcess: stub.network.postProcess,
+    evaluate: (spatial: Float32Array, global: Float32Array, cols: number): Promise<Evaluation> =>
+      fail ? Promise.reject(new Error('dead')) : stub.network.evaluate(spatial, global, cols),
+  };
+  const search = new Search(network, board);
+
+  await assert.rejects(search.run(request(board, emptyState(board), BLACK, 10)), /dead/);
+  fail = false;
+  assert.equal((await search.run(request(board, emptyState(board), BLACK, 10))).rootVisits, 10);
+});
+
+test('passing is available and is searched when it is the only legal move', async () => {
   const board: Board = createBoard(SIZE, SIZE);
   const state: BoardState = emptyState(board);
   // Fill the board so that nothing but a pass is legal for White.
   for (let point = 0; point < AREA; point++) state.stones[point] = BLACK;
   const stub: Stub = stubNetwork(() => ({}));
-  const result: SearchResult = new Search(stub.network, board).run(
+  const result: SearchResult = await new Search(stub.network, board).run(
     request(board, state, WHITE, 6),
   );
   assert.equal(result.moves.length, 1);

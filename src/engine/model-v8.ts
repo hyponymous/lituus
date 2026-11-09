@@ -25,7 +25,7 @@
 
 import type * as TF from '@tensorflow/tfjs-core';
 import type { ActivationKind, ParsedBatchNorm, ParsedConv2d, ParsedMatMul } from './bin-model-parser.ts';
-import { readAligned, readBackend, type ReadBackend } from './aligned-read.ts';
+import { readBackend, type ReadBackend } from './aligned-read.ts';
 import { discoverHeadLayout, type HeadLayout } from './head-layout.ts';
 import type { ParsedKataGoModelV8, ParsedTrunkBlock } from './model-types.ts';
 
@@ -384,12 +384,16 @@ export class ModelV8 {
    */
   private tracer: ((label: string, x: TF.Tensor) => void) | null = null;
 
-  /** Packed layouts already measured, keyed by the segment lengths. */
-  private readonly layouts = new Map<string, HeadLayout | null>();
+  /**
+   * Packed layouts already measured, keyed by the segment lengths. The promise
+   * rather than its answer, so two evaluations that both arrive first on a new
+   * board size share one measurement instead of racing to make two.
+   */
+  private readonly layouts = new Map<string, Promise<HeadLayout | null>>();
 
   /**
-   * How this model reads a buffer back: padded to whole canvas rows, because
-   * one device loses the second pass of a read that needs two (`aligned-read.ts`).
+   * How this model reads a buffer back: through the asynchronous read, which
+   * maps a staging buffer and never takes the canvas path (`aligned-read.ts`).
    */
   private readonly reader: ReadBackend<TF.Tensor>;
 
@@ -404,7 +408,11 @@ export class ModelV8 {
    * tensors of a 192-channel trunk is how a phone runs out of memory while
    * being asked why it is behaving oddly.
    */
-  traceForward(spatial: Float32Array, global: Float32Array, size: number): TraceStage[] {
+  async traceForward(
+    spatial: Float32Array,
+    global: Float32Array,
+    size: number,
+  ): Promise<TraceStage[]> {
     const tf = this.tf;
     const stages: TraceStage[] = [];
     this.tracer = (label: string, x: TF.Tensor): void => {
@@ -420,7 +428,7 @@ export class ModelV8 {
       stages.push({ label, ...values });
     };
     try {
-      this.evaluate(spatial, global, size);
+      await this.evaluate(spatial, global, size);
     } finally {
       this.tracer = null;
     }
@@ -438,7 +446,7 @@ export class ModelV8 {
    * keeping the two apart is what let the graph be checked against KataGo's own
    * numbers without a search in the way.
    */
-  evaluate(spatial: Float32Array, global: Float32Array, size: number): Evaluation {
+  async evaluate(spatial: Float32Array, global: Float32Array, size: number): Promise<Evaluation> {
     const tf = this.tf;
     const area: number = size * size;
     // The heads' own widths, from the weights that produce them, so a network
@@ -514,12 +522,16 @@ export class ModelV8 {
     });
 
     try {
-      const layout: HeadLayout | null = this.layoutFor([area, 1, valueCount, scoreCount]);
+      const layout: HeadLayout | null = await this.layoutFor([area, 1, valueCount, scoreCount]);
       const result: Evaluation =
-        layout === null ? this.readSeparately(segments) : this.readPacked(segments, layout);
+        layout === null
+          ? await this.readSeparately(segments)
+          : await this.readPacked(segments, layout);
       // Checked here rather than in the search: this is the one place a GPU
       // buffer becomes a number, and a fake network in a test cannot fail this
-      // way.
+      // way. The zeros were seen through `dataSync`; whether a lost device
+      // fails `data()` the same way or by rejecting is not known, so the check
+      // stays for both.
       if (isDegenerate(result)) throw new Error(DEAD_READBACK);
       return result;
     } finally {
@@ -530,24 +542,31 @@ export class ModelV8 {
   /**
    * The four heads in one read, at the offsets this device puts them.
    *
-   * Packing exists because the readback is what costs. `dataSync` on the WebGPU
-   * backend is a canvas round trip per call (see `isDegenerate` above), and the
-   * per-call part is a fixed cost paid whatever the payload — 2.1ms against
-   * 3.4ms for the 361-float policy, on an M-series Mac, measured by
-   * `experiments/browser/run-readback.ts`. Reading four times paid three of
-   * those for nothing.
+   * Packing exists because the readback is what costs. It was measured through
+   * `dataSync`, a canvas round trip per call (see `isDegenerate` above), whose
+   * per-call part was a fixed 2.1ms against 3.4ms for the 361-float policy on
+   * an M-series Mac (`experiments/browser/run-readback.ts`). The asynchronous
+   * read this now makes is cheaper per call, about 0.4ms there, but a call is
+   * still a fence and a map, so one read still beats four.
    *
    * The offsets come from `head-layout.ts` rather than from the lengths,
    * because on one device they were not the same thing.
    */
-  private readPacked(segments: readonly TF.Tensor1D[], layout: HeadLayout): Evaluation {
+  private async readPacked(
+    segments: readonly TF.Tensor1D[],
+    layout: HeadLayout,
+  ): Promise<Evaluation> {
     // `concat` wants a mutable array; the copy is four references.
     const packed: TF.Tensor1D = this.tf.concat([...segments]) as TF.Tensor1D;
     // Views onto one buffer, not four copies: the read hands back an array of
     // its own, so disposing the tensor does not disturb them, and nothing
     // downstream keeps them past the next call.
-    const heads: Float32Array = readAligned(this.reader, packed);
-    packed.dispose();
+    let heads: Float32Array;
+    try {
+      heads = await this.reader.readAsync(packed);
+    } finally {
+      packed.dispose();
+    }
 
     const [policyAt, passAt, valueAt, scoreAt] = layout.offsets;
     return {
@@ -559,9 +578,9 @@ export class ModelV8 {
   }
 
   /** One read per head, for a device whose packed layout cannot be located. */
-  private readSeparately(segments: readonly TF.Tensor1D[]): Evaluation {
-    const [policy, pass, value, score] = segments.map((segment: TF.Tensor1D) =>
-      readAligned(this.reader, segment),
+  private async readSeparately(segments: readonly TF.Tensor1D[]): Promise<Evaluation> {
+    const [policy, pass, value, score] = await Promise.all(
+      segments.map((segment: TF.Tensor1D) => this.reader.readAsync(segment)),
     );
     return { policy, policyPass: pass[0], value, scoreValue: score };
   }
@@ -573,11 +592,16 @@ export class ModelV8 {
    * the lengths, and a session asks about one board thousands of times. Kept on
    * the model because that is what owns the backend it was measured on.
    */
-  private layoutFor(sizes: readonly number[]): HeadLayout | null {
+  private layoutFor(sizes: readonly number[]): Promise<HeadLayout | null> {
     const key: string = sizes.join(',');
-    const known: HeadLayout | null | undefined = this.layouts.get(key);
+    const known: Promise<HeadLayout | null> | undefined = this.layouts.get(key);
     if (known !== undefined) return known;
-    const found: HeadLayout | null = discoverHeadLayout(this.reader, sizes);
+    const found: Promise<HeadLayout | null> = discoverHeadLayout(this.reader, sizes);
+    // A failed measurement is not an answer: forget it, so the next evaluation
+    // asks again rather than inheriting the rejection. The caller still sees it.
+    found.catch((): void => {
+      this.layouts.delete(key);
+    });
     this.layouts.set(key, found);
     return found;
   }

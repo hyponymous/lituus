@@ -2,9 +2,9 @@
  * The analysis worker: the only place TensorFlow.js is ever imported.
  *
  * Two reasons it is a worker rather than a module on the main thread, and
- * neither is throughput. First, a search is **synchronous** — fifty forward
- * passes with a tree walk between them, and on the main thread that is two
- * seconds during which the page cannot repaint or accept a click. PRD §3
+ * neither is throughput. First, a search is **long** — fifty forward passes
+ * with a tree walk between them, about a second of GPU and CPU work per prompt
+ * that would compete with the page for its frames on the main thread. PRD §3
  * promises analysis never blocks the reveal, and §5.1 says that promise is
  * structural rather than a scheduling policy; running the search where the
  * reveal is drawn would make it a scheduling policy again.
@@ -293,7 +293,7 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
   // Constructed before the engine is published, because taking the baseline is
   // also the first forward pass: if the device cannot do one at all, this is
   // where that is found, and the session never sees a ready engine.
-  const canary = new Canary(model, EXPECTED_SIZE);
+  const canary: Canary = await Canary.create(model, EXPECTED_SIZE);
   sinceCanary = 0;
 
   /*
@@ -333,7 +333,7 @@ async function initialize(request: Extract<WorkerRequest, { type: 'init' }>): Pr
   });
 }
 
-function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
+async function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): Promise<void> {
   if (!engine) {
     post({
       type: 'error',
@@ -343,7 +343,11 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
     });
     return;
   }
-  const move: GameMove | undefined = engine.context.game.moves.find(
+  // Held for the whole prompt: the device can be lost at any await below, and
+  // `watchForDeviceLoss` clearing `engine` must not turn this prompt's next
+  // line into a null dereference reported as the prompt's own error.
+  const current: Engine = engine;
+  const move: GameMove | undefined = current.context.game.moves.find(
     (candidate: GameMove) => candidate.number === request.moveNumber,
   );
   if (!move) {
@@ -368,7 +372,7 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
   if (sinceCanary >= CANARY_EVERY) {
     sinceCanary = 0;
     try {
-      engine.canary.verify();
+      await current.canary.verify();
     } catch (error: unknown) {
       engine = null;
       broken = message(error);
@@ -387,8 +391,8 @@ function evaluate(request: Extract<WorkerRequest, { type: 'evaluate' }>): void {
     // `undefined` that a structured clone would drop anyway.
     ...(request.guess === undefined ? {} : { guess: request.guess }),
   };
-  const verdict: Verdict = evaluatePrompt(
-    engine.search, engine.context, prompt, engine.visits,
+  const verdict: Verdict = await evaluatePrompt(
+    current.search, current.context, prompt, current.visits,
   );
   post({ type: 'verdict', verdict });
   prompts++;
@@ -475,7 +479,7 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>): void => {
     try {
       if (request.type === 'init') await initialize(request);
       else if (request.type === 'deepen') await deepen(request);
-      else evaluate(request);
+      else await evaluate(request);
     } catch (error: unknown) {
       const reason: string = message(error);
       if (request.type === 'init') {

@@ -10,15 +10,17 @@
  *
  * The cause turned out to be the read rather than the layout: a buffer that
  * does not fill whole rows of tfjs's readback canvas is fetched in two cycles,
- * and on that device the second one is lost — see `aligned-read.ts`, which is
- * how every read here is now made. The markers below are what named it, and
- * they stay: they are the one check that looks at the packed buffer itself and
- * says whether the heads are all in it, contiguous, and where the arithmetic
- * expects. A device that fails it is read one head at a time instead of being
- * quietly unpacked wrong.
+ * and on that device the second one is lost — see `aligned-read.ts`. The model
+ * now reads through the asynchronous `data()`, which takes no canvas path. The
+ * markers below are what named the fault, and they stay: they are the one
+ * check that looks at the packed buffer itself and says whether the heads are
+ * all in it, contiguous, and where the arithmetic expects. A device that fails
+ * it is read one head at a time instead of being quietly unpacked wrong. So the
+ * markers are read through the same `data()` the model then uses, since the
+ * read is what was at fault last time.
  */
 
-import { readAligned, type ReadBackend, type ReadTensor } from './aligned-read.ts';
+import type { ReadBackend, ReadTensor } from './aligned-read.ts';
 
 export interface HeadLayout {
   /** Where each segment begins, in the packed buffer. */
@@ -30,27 +32,37 @@ export interface HeadLayout {
 }
 
 /**
- * Pack markers, read them back, and report where each segment went.
+ * Pack markers, read them back through `await data()`, and report where each
+ * segment went.
  *
  * Returns null when the segments cannot be located — not found, not contiguous,
  * or not the right length. No set of offsets would fix that, so the caller
  * reads the heads separately instead.
  *
- * Synchronous, because a search is: this runs once per board size, at the point
- * a model first evaluates, and the answer is kept.
+ * This runs once per board size, at the point a model first evaluates, and the
+ * answer is kept.
  */
-export function discoverHeadLayout<T extends ReadTensor>(
+export async function discoverHeadLayout<T extends ReadTensor>(
   backend: ReadBackend<T>,
   sizes: readonly number[],
-): HeadLayout | null {
+): Promise<HeadLayout | null> {
   // The marker is the segment's index plus one, so zero — the value a lost read
   // is most likely to leave behind — cannot be mistaken for data.
   const markers: T[] = sizes.map((size: number, which: number) =>
     backend.fill([size], which + 1),
   );
   const packed: T = backend.concat(markers);
-  const values: Float32Array = readAligned(backend, packed);
+  try {
+    return locateSegments(await backend.readAsync(packed), sizes);
+  } finally {
+    for (const marker of markers) marker.dispose();
+    packed.dispose();
+  }
+}
 
+
+/** Where the markers came back, or null if any segment is not all there. */
+function locateSegments(values: Float32Array, sizes: readonly number[]): HeadLayout | null {
   const at = (i: number): number => {
     for (let scan = 0; scan < values.length; scan++) if (values[scan] === i) return scan;
     return -1;
@@ -61,23 +73,16 @@ export function discoverHeadLayout<T extends ReadTensor>(
   };
 
   const offsets: number[] = [];
-  let usable = true;
   for (const [which, size] of sizes.entries()) {
     const marker: number = which + 1;
     const start: number = at(marker);
     // Contiguous and complete, or the segment is not really there: a layout
     // that interleaves cannot be unpacked by an offset, however it is found.
-    if (start < 0 || start + size > values.length) usable = false;
-    else {
-      for (let i = start; i < start + size; i++) if (values[i] !== marker) usable = false;
-      if (last(marker) !== start + size - 1) usable = false;
-    }
+    if (start < 0 || start + size > values.length) return null;
+    for (let i = start; i < start + size; i++) if (values[i] !== marker) return null;
+    if (last(marker) !== start + size - 1) return null;
     offsets.push(start);
   }
-
-  for (const marker of markers) marker.dispose();
-  packed.dispose();
-  if (!usable) return null;
 
   let tight = true;
   let expected = 0;

@@ -271,7 +271,7 @@ async function main(): Promise<void> {
       },
       scratch,
     );
-    const evaluation: Evaluation = model.evaluate(inputs.spatial, inputs.global, game.cols);
+    const evaluation: Evaluation = await model.evaluate(inputs.spatial, inputs.global, game.cols);
     const judgement: Judgement = postprocess(
       evaluation.value,
       evaluation.scoreValue,

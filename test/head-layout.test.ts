@@ -12,7 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { alignedCount, type ReadBackend, type ReadTensor } from '../src/engine/aligned-read.ts';
+import type { ReadBackend, ReadTensor } from '../src/engine/aligned-read.ts';
 import { discoverHeadLayout } from '../src/engine/head-layout.ts';
 
 const SIZES = [361, 1, 3, 4] as const;
@@ -51,6 +51,7 @@ function backend(
       return segment(buffer, 0);
     },
     read: (tensor: Segment): Float32Array => tensor.buffer,
+    readAsync: async (tensor: Segment): Promise<Float32Array> => tensor.buffer,
   };
 }
 
@@ -75,8 +76,8 @@ const padded = (sizes: readonly number[]) => {
   return { at, length: next };
 };
 
-test('a tightly packed device is read at the arithmetic offsets', () => {
-  const layout = discoverHeadLayout(backend(tightly), SIZES);
+test('a tightly packed device is read at the arithmetic offsets', async () => {
+  const layout = await discoverHeadLayout(backend(tightly), SIZES);
 
   assert.ok(layout);
   assert.deepEqual(layout.offsets, [0, 361, 362, 365]);
@@ -84,40 +85,38 @@ test('a tightly packed device is read at the arithmetic offsets', () => {
   assert.equal(layout.tight, true);
 });
 
-test('a padded device is read where its heads actually are', () => {
+test('a padded device is read where its heads actually are', async () => {
   // The whole point: this is not an error to refuse, it is a layout to use.
-  const layout = discoverHeadLayout(backend(padded), SIZES);
+  const layout = await discoverHeadLayout(backend(padded), SIZES);
 
   assert.ok(layout);
   assert.deepEqual(layout.offsets, [0, 364, 368, 372]);
   assert.equal(layout.tight, false);
 });
 
-test('the read is padded to whole canvas rows before it is looked at', () => {
-  // What the discovery is now built on: the buffer handed to the device is a
-  // whole number of rows long, so the device never has to fetch it in two
-  // cycles. The lengths asked for are the evidence.
+test('the read is not padded', async () => {
+  // `data()` maps the buffer instead of drawing it, so there is no partial
+  // row to lose and nothing to pad: the one concat is the packing itself.
   const asked: number[] = [];
   const watching: ReadBackend<Segment> = backend((sizes: readonly number[]) => {
     asked.push(sizes.reduce((a: number, b: number) => a + b, 0));
     return tightly(sizes);
   });
 
-  assert.ok(discoverHeadLayout(watching, SIZES));
-  assert.deepEqual(asked, [369, alignedCount(369)]);
-  assert.equal(alignedCount(369), 512);
+  assert.ok(await discoverHeadLayout(watching, SIZES));
+  assert.deepEqual(asked, [369]);
 });
 
-test('a layout that loses a segment is refused rather than guessed at', () => {
+test('a layout that loses a segment is refused rather than guessed at', async () => {
   // Nothing an offset can do for a buffer that does not contain the data.
   const missing = (sizes: readonly number[]) => {
     const laid = tightly(sizes);
     return { at: laid.at.map((at, which) => (which === 2 ? 0 : at)), length: laid.length };
   };
-  assert.equal(discoverHeadLayout(backend(missing), SIZES), null);
+  assert.equal(await discoverHeadLayout(backend(missing), SIZES), null);
 });
 
-test('a layout that interleaves a segment is refused', () => {
+test('a layout that interleaves a segment is refused', async () => {
   // Contiguity is what an offset and a length assume; without it the segment is
   // findable and still unreadable.
   const buffer = new Float32Array(369);
@@ -133,15 +132,16 @@ test('a layout that interleaves a segment is refused', () => {
     zeros: (shape: number[]): Segment => segment(new Float32Array(shape[0]), 0),
     concat: (): Segment => segment(buffer, 0),
     read: (tensor: Segment): Float32Array => tensor.buffer,
+    readAsync: async (tensor: Segment): Promise<Float32Array> => tensor.buffer,
   };
 
-  assert.equal(discoverHeadLayout(interleaved, SIZES), null);
+  assert.equal(await discoverHeadLayout(interleaved, SIZES), null);
 });
 
-test('the same lengths on a 9x9 board find their own offsets', () => {
+test('the same lengths on a 9x9 board find their own offsets', async () => {
   // A model serves every board size, and 81 is not 361: the layout is measured
   // per set of lengths rather than once.
-  const layout = discoverHeadLayout(backend(padded), [81, 1, 3, 4]);
+  const layout = await discoverHeadLayout(backend(padded), [81, 1, 3, 4]);
 
   assert.ok(layout);
   assert.deepEqual(layout.offsets, [0, 84, 88, 92]);

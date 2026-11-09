@@ -81,7 +81,7 @@ interface Opinion {
 function stubNetwork(opine: (stones: Map<number, Stone>, white: boolean) => Opinion): Network {
   return {
     postProcess: POST_PROCESS,
-    evaluate: (spatial: Float32Array, global: Float32Array): Evaluation => {
+    evaluate: async (spatial: Float32Array, global: Float32Array): Promise<Evaluation> => {
       const white: boolean = global[5] > 0;
       const mover: Stone = white ? WHITE : BLACK;
       const other: Stone = white ? BLACK : WHITE;
@@ -110,9 +110,9 @@ function stubNetwork(opine: (stones: Map<number, Stone>, white: boolean) => Opin
 }
 
 /** `guess` omitted is a prompt nobody answered, as `Prompt` means it. */
-function evaluate(
+async function evaluate(
   network: Network, moveNumber: number, played: string, guess?: string, visits = 40,
-): Verdict {
+): Promise<Verdict> {
   const context: GameContext = gameContext(game());
   const session: Session = startSession(game(), 1);
   const move = game().moves.find((m) => m.number === moveNumber);
@@ -130,14 +130,14 @@ function evaluate(
   return evaluatePrompt(new Search(network, context.board), context, prompt, visits);
 }
 
-test('a pass is not a stone, so it does not chill the komi', () => {
+test('a pass is not a stone, so it does not chill the komi', async () => {
   // The record is B, W, B, pass, B, W: five stones before turn 5, three Black
   // and two White, and the White pass counted for neither.
   assert.deepEqual(movesBefore(game(), 5), { black: 3, white: 1 });
   assert.deepEqual(movesBefore(game(), 6), { black: 3, white: 2 });
 });
 
-test('history keeps the pass, because the network is told about it', () => {
+test('history keeps the pass, because the network is told about it', async () => {
   const context: GameContext = gameContext(game());
   const history = historyBefore(game(), context.board, 5);
   assert.equal(history.length, 5);
@@ -150,7 +150,7 @@ test('history keeps the pass, because the network is told about it', () => {
   assert.equal(history[4].player, BLACK);
 });
 
-test('a move that gives points away carries a positive loss', () => {
+test('a move that gives points away carries a positive loss', async () => {
   const bad: number = at('A1');
   const network: Network = stubNetwork((stones: Map<number, Stone>, white: boolean) => ({
     // A Black stone on a1 is worth ten points to White, whoever put it there.
@@ -158,7 +158,7 @@ test('a move that gives points away carries a positive loss', () => {
     policy: new Map([[bad, 3], [at('C6'), 3], [at('F6'), 3]]),
   }));
 
-  const verdict: Verdict = evaluate(network, 5, 'A1', 'A1');
+  const verdict: Verdict = await evaluate(network, 5, 'A1', 'A1');
   assert.ok(verdict.played);
   assert.ok(
     verdict.played.loss > 5,
@@ -169,13 +169,13 @@ test('a move that gives points away carries a positive loss', () => {
   assert.ok(Math.abs(verdict.rootScoreLead - verdict.best.scoreLead) < verdict.played.loss);
 });
 
-test('a hit costs one search, not two', () => {
+test('a hit costs one search, not two', async () => {
   let calls = 0;
   const network: Network = stubNetwork(() => {
     calls += 1;
     return { policy: new Map([[at('C6'), 4]]) };
   });
-  const verdict: Verdict = evaluate(network, 5, 'C6', 'C6', 30);
+  const verdict: Verdict = await evaluate(network, 5, 'C6', 'C6', 30);
   // Thirty for the root search and nothing more: the played move is the top
   // policy move, so it is searched well past the floor, and the guess is the
   // same move again.
@@ -185,14 +185,14 @@ test('a hit costs one search, not two', () => {
   assert.ok((verdict.played?.visits ?? 0) >= MIN_TRUSTED_VISITS);
 });
 
-test('a move the root search ignores is forced, and says so', () => {
+test('a move the root search ignores is forced, and says so', async () => {
   const ignored: number = at('A2');
   const network: Network = stubNetwork(() => ({
     // Three moves the policy likes; the played move is not among them, so at
     // thirty visits the root never gets near it.
     policy: new Map([[at('C6'), 6], [at('F6'), 6], [at('D3'), 6], [ignored, -6]]),
   }));
-  const verdict: Verdict = evaluate(network, 5, 'A2', 'A2', 30);
+  const verdict: Verdict = await evaluate(network, 5, 'A2', 'A2', 30);
   assert.ok(verdict.played);
   assert.equal(verdict.played.forced, true);
   assert.equal(verdict.played.point, ignored);
@@ -202,7 +202,7 @@ test('a move the root search ignores is forced, and says so', () => {
   assert.equal(verdict.played.pv[0], ignored);
 });
 
-test('a prompt nobody guessed costs one search and reports no guess', () => {
+test('a prompt nobody guessed costs one search and reports no guess', async () => {
   const ignored: number = at('A2');
   let calls = 0;
   const network: Network = stubNetwork(() => {
@@ -212,7 +212,7 @@ test('a prompt nobody guessed costs one search and reports no guess', () => {
   // The played move is the one the root barely looks at, so a guess at that
   // same point would have bought a second, forced search. Without a guess the
   // played move still gets it, and nothing else does.
-  const verdict: Verdict = evaluate(network, 5, 'A2', undefined, 30);
+  const verdict: Verdict = await evaluate(network, 5, 'A2', undefined, 30);
 
   assert.equal(verdict.guessed, null);
   assert.ok(verdict.played);
@@ -222,11 +222,11 @@ test('a prompt nobody guessed costs one search and reports no guess', () => {
   assert.equal(calls, 60);
 });
 
-test('a miss is two verdicts about two different moves', () => {
+test('a miss is two verdicts about two different moves', async () => {
   const network: Network = stubNetwork(() => ({
     policy: new Map([[at('C6'), 5], [at('F6'), 5]]),
   }));
-  const verdict: Verdict = evaluate(network, 5, 'C6', 'A2', 30);
+  const verdict: Verdict = await evaluate(network, 5, 'C6', 'A2', 30);
   assert.ok(verdict.played && verdict.guessed);
   assert.notEqual(verdict.played, verdict.guessed);
   assert.equal(verdict.played.point, at('C6'));
@@ -234,14 +234,14 @@ test('a miss is two verdicts about two different moves', () => {
   assert.equal(verdict.guessed.forced, true);
 });
 
-test('the natural move is the policy\'s favourite, whatever the search decides', () => {
+test('the natural move is the policy\'s favourite, whatever the search decides', async () => {
   const favourite: number = at('B8');
   const better: number = at('H6');
   const network: Network = stubNetwork((stones: Map<number, Stone>, white: boolean) => ({
     lead: stones.get(better) === BLACK ? (white ? -12 : 12) : 0,
     policy: new Map([[favourite, 6], [better, 5]]),
   }));
-  const verdict: Verdict = evaluate(network, 5, 'B8', 'B8', 50);
+  const verdict: Verdict = await evaluate(network, 5, 'B8', 'B8', 50);
   assert.ok(verdict.natural);
   assert.equal(verdict.natural.point, favourite);
   assert.equal(verdict.best.point, better);
@@ -250,7 +250,7 @@ test('the natural move is the policy\'s favourite, whatever the search decides',
   assert.ok(verdict.natural.loss > 5, `natural loss was ${verdict.natural.loss}`);
 });
 
-test('a prompted pass is searched, not skipped over', () => {
+test('a prompted pass is searched, not skipped over', async () => {
   /*
    * Move 4 is White's pass, and it is a prompt like any other. A pass arrives
    * as null and is searched as the move the policy numbers just past the last
@@ -258,7 +258,7 @@ test('a prompted pass is searched, not skipped over', () => {
    * phase, so there is a real verdict to be had about it.
    */
   const network: Network = stubNetwork(() => ({ pass: 6 }));
-  const verdict: Verdict = evaluate(network, 4, 'pass', 'pass');
+  const verdict: Verdict = await evaluate(network, 4, 'pass', 'pass');
 
   assert.equal(verdict.played?.point, AREA, 'the played pass carries a verdict');
   assert.equal(
@@ -268,10 +268,10 @@ test('a prompted pass is searched, not skipped over', () => {
   );
 });
 
-test('a guessed pass is scored against the point the game played', () => {
+test('a guessed pass is scored against the point the game played', async () => {
   const network: Network = stubNetwork(() => ({ pass: 6 }));
   // Move 5 is Black C3; guessing a pass there is a miss with a cost.
-  const verdict: Verdict = evaluate(network, 5, 'C3', 'pass');
+  const verdict: Verdict = await evaluate(network, 5, 'C3', 'pass');
 
   assert.equal(verdict.guessed?.point, AREA, 'the guessed pass is the pass index');
   assert.equal(verdict.played?.point, at('C3'));
@@ -279,15 +279,15 @@ test('a guessed pass is scored against the point the game played', () => {
   assert.deepEqual(verdict.guessed?.pv, [], 'a line that opens with a pass carries nothing');
 });
 
-test('a search that finds nothing to say raises rather than inventing a verdict', () => {
+test('a search that finds nothing to say raises rather than inventing a verdict', async () => {
   const network: Network = stubNetwork(() => ({}));
-  assert.throws(
-    () => evaluate(network, 999, 'C6', 'C6'),
+  await assert.rejects(
+    evaluate(network, 999, 'C6', 'C6'),
     /not in this record/,
   );
 });
 
-test('a variation stops at a pass instead of naming it as a point', () => {
+test('a variation stops at a pass instead of naming it as a point', async () => {
   /*
    * A pass is numbered just past the last intersection, so it is not a point
    * and has no name. Left in a variation it was exported as "A0", which reads
@@ -296,7 +296,7 @@ test('a variation stops at a pass instead of naming it as a point', () => {
    * noticed.
    */
   const network: Network = stubNetwork(() => ({ pass: 6 }));
-  const verdict: Verdict = evaluate(network, 5, 'C3', 'G7');
+  const verdict: Verdict = await evaluate(network, 5, 'C3', 'G7');
 
   assert.equal(verdict.best.point, AREA, 'the stub makes passing the best move');
   assert.deepEqual(verdict.best.pv, [], 'a line that opens with a pass carries nothing');
@@ -312,7 +312,7 @@ test('a variation stops at a pass instead of naming it as a point', () => {
   }
 });
 
-test('a line is cut where the search stopped reading it, and says what it cost', () => {
+test('a line is cut where the search stopped reading it, and says what it cost', async () => {
   // The honest cutoff (PRD §5): the search reports the visits behind every ply,
   // so the length of a live line is measured rather than chosen. The verdict
   // carries the budget as a receipt that somebody measured — which is what
@@ -322,8 +322,8 @@ test('a line is cut where the search stopped reading it, and says what it cost',
     policy: new Map([[(stones.size * 7 + 3) % AREA, 8]]),
   }));
 
-  const shallow: Verdict = evaluate(network, 5, 'C6', 'C6', 20);
-  const deep: Verdict = evaluate(network, 5, 'C6', 'C6', 200);
+  const shallow: Verdict = await evaluate(network, 5, 'C6', 'C6', 20);
+  const deep: Verdict = await evaluate(network, 5, 'C6', 'C6', 200);
 
   assert.ok(shallow.played && deep.played);
   assert.equal(shallow.played.pvBudget, 20, 'the receipt is the budget that read it');
@@ -355,7 +355,7 @@ test('a deepened line is read at the larger budget and brings back nothing else'
   const context: GameContext = gameContext(game());
   const search = new Search(network, context.board);
 
-  const shallow: Verdict = evaluate(network, 5, 'C6', 'C6', 50);
+  const shallow: Verdict = await evaluate(network, 5, 'C6', 'C6', 50);
   const deep: DeepLine | null = await deepenLine(search, context, 5, at('C6'), 500, () => 'continue');
 
   assert.ok(deep && shallow.played);

@@ -96,7 +96,7 @@ import {
  * search is unit-tested without a GPU or a 37MB download.
  */
 export interface Network {
-  evaluate(spatial: Float32Array, global: Float32Array, cols: number): Evaluation;
+  evaluate(spatial: Float32Array, global: Float32Array, cols: number): Promise<Evaluation>;
   readonly postProcess: ParsedKataGoModelV8['postProcessParams'];
 }
 
@@ -287,6 +287,8 @@ export class Search {
   private ruleset: Ruleset = 'territory';
   private recentScoreCenter = 0;
   private allowedRootMoves: Set<number> | null = null;
+  /** Whether a search is under way, which `exclusively` refuses to overlap. */
+  private running = false;
 
   constructor(network: Network, board: Board) {
     this.network = network;
@@ -300,22 +302,45 @@ export class Search {
     this.ladders = createLadderInputs(board);
   }
 
-  run(request: SearchRequest): SearchResult {
-    const root: Node = this.begin(request);
-    while (root.stats.visits < request.maxVisits) this.playout(root, true);
-    return this.report(root);
+  run(request: SearchRequest): Promise<SearchResult> {
+    return this.exclusively(async (): Promise<SearchResult> => {
+      const root: Node = await this.begin(request);
+      while (root.stats.visits < request.maxVisits) await this.playout(root, true);
+      return this.report(root);
+    });
+  }
+
+  /**
+   * Run one search, refusing to start while another is under way.
+   *
+   * Every forward pass is awaited, so the event loop turns between playouts,
+   * and a second search started in that gap would descend on the board, the
+   * path and the history the first is standing on. One playout at a time is
+   * what keeps a search deterministic, and what this guards: an overlap is a
+   * caller's bug, and it fails loudly instead of quietly corrupting both.
+   */
+  private async exclusively<T>(search: () => Promise<T>): Promise<T> {
+    if (this.running) throw new Error('A search is already running on this Search.');
+    this.running = true;
+    try {
+      return await search();
+    } finally {
+      this.running = false;
+    }
   }
 
   /**
    * The same search, run in slices, with a decision to make between them.
    *
-   * The worker is single-threaded and a search is a tight synchronous loop, so
-   * while one runs nothing else in the worker happens: the canary, the memory
-   * reading and any cancellation all queue behind it. That is tolerable for the
-   * fifty visits a prompt costs and not for the several hundred a deepening
-   * pass costs, which is why this exists — it is the same playouts on the same
-   * tree, punctuated by a return to the event loop so the worker can hear that
-   * a reader has moved on.
+   * The worker runs one request at a time, so while a search runs the canary,
+   * the memory reading and any cancellation all queue behind it. The await on
+   * each forward pass lets a message *arrive* mid-search, but nothing acts on
+   * it until the search returns. That is tolerable for the fifty visits a
+   * prompt costs and not for the several hundred a deepening pass costs, which
+   * is why this exists — it is the same playouts on the same tree, with a
+   * decision between slices about whether a reader has moved on. The `pause`
+   * stays: against a network that resolves at once, as a test's stub does, it
+   * is the only point where a queued message can be delivered.
    *
    * `between` gets to say what happens next, and the three answers are three
    * different situations. `abandon` resolves to null: nobody wants this any
@@ -325,26 +350,28 @@ export class Search {
    * every line comes back cut by its own per-ply visits either way. That is the
    * out-of-time answer: a slower device should get a shorter line, not nothing.
    *
-   * `slice` is the unit of deafness, and the only thing that makes any of this
-   * cost anything. One prompt's worth is the block the product already lives
-   * with on every guess.
+   * `slice` is how long a cancellation can go unheeded, and the only thing
+   * that makes any of this cost anything. One prompt's worth is the block the
+   * product already lives with on every guess.
    */
   async runSliced(
     request: SearchRequest,
     slice: number,
     between: () => SliceOutcome,
   ): Promise<SearchResult | null> {
-    const root: Node = this.begin(request);
-    while (root.stats.visits < request.maxVisits) {
-      const until: number = Math.min(request.maxVisits, root.stats.visits + slice);
-      while (root.stats.visits < until) this.playout(root, true);
-      if (root.stats.visits >= request.maxVisits) break;
-      await pause();
-      const next: SliceOutcome = between();
-      if (next === 'abandon') return null;
-      if (next === 'report') break;
-    }
-    return this.report(root);
+    return this.exclusively(async (): Promise<SearchResult | null> => {
+      const root: Node = await this.begin(request);
+      while (root.stats.visits < request.maxVisits) {
+        const until: number = Math.min(request.maxVisits, root.stats.visits + slice);
+        while (root.stats.visits < until) await this.playout(root, true);
+        if (root.stats.visits >= request.maxVisits) break;
+        await pause();
+        const next: SliceOutcome = between();
+        if (next === 'abandon') return null;
+        if (next === 'report') break;
+      }
+      return this.report(root);
+    });
   }
 
   /**
@@ -352,7 +379,7 @@ export class Search {
    * history the network reads, the root's own evaluation and the score centre
    * every utility below it is measured against.
    */
-  private begin(request: SearchRequest): Node {
+  private async begin(request: SearchRequest): Promise<Node> {
     this.state = { stones: Uint8Array.from(request.state.stones), koPoint: request.state.koPoint };
     this.history = [...request.history];
     this.blackMoves = request.movesPlayed.black;
@@ -381,7 +408,7 @@ export class Search {
      * search is measured relative to this number, so it has to be settled
      * before the first playout rather than drifting with the tree.
      */
-    const rootEval: LeafValues = this.evaluateInto(root);
+    const rootEval: LeafValues = await this.evaluateInto(root);
     const expectedScore: number = rootEval.scoreMean;
     let center: number = expectedScore * (1 - DYNAMIC_SCORE_CENTER_ZERO_WEIGHT);
     const cap: number = this.sqrtBoardArea * DYNAMIC_SCORE_CENTER_SCALE;
@@ -439,7 +466,7 @@ export class Search {
    * the tree are compared across plies, so they cannot be left in a frame that
    * alternates.
    */
-  private evaluateInto(node: Node): LeafValues {
+  private async evaluateInto(node: Node): Promise<LeafValues> {
     const toPlay: Stone = node.toPlay;
     const back: number = this.path.length;
     ladderInputs(
@@ -466,7 +493,10 @@ export class Search {
       this.featureScratch,
     );
 
-    const evaluation: Evaluation = this.network.evaluate(
+    // The one await in a playout. Nothing else in the search yields, so the
+    // tree is touched by one playout at a time and in the same order as when
+    // this call was synchronous: the determinism tests hold it to that.
+    const evaluation: Evaluation = await this.network.evaluate(
       inputs.spatial, inputs.global, this.board.cols,
     );
     const params = this.network.postProcess;
@@ -591,9 +621,9 @@ export class Search {
    * bounded by the tree's own depth, which at fifty visits is a handful of
    * plies.
    */
-  private playout(node: Node, isRoot: boolean): void {
+  private async playout(node: Node, isRoot: boolean): Promise<void> {
     if (node.nn === null) {
-      this.setLeafStats(node, this.evaluateInto(node));
+      this.setLeafStats(node, await this.evaluateInto(node));
       return;
     }
 
@@ -638,7 +668,7 @@ export class Search {
       else this.whiteMoves += 1;
     }
 
-    this.playout(child, false);
+    await this.playout(child, false);
 
     if (move !== this.pass) {
       if (node.toPlay === BLACK) this.blackMoves -= 1;

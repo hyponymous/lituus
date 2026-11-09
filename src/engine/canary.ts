@@ -30,7 +30,7 @@ import type { Evaluation } from './model-v8.ts';
  * whatever a broken device would.
  */
 export interface CanaryModel {
-  evaluate(spatial: Float32Array, global: Float32Array, size: number): Evaluation;
+  evaluate(spatial: Float32Array, global: Float32Array, size: number): Promise<Evaluation>;
 }
 
 /**
@@ -113,23 +113,38 @@ export class Canary {
   private readonly baseline: Float32Array;
 
   /**
-   * Evaluating once here is also the shader warmup: the first forward pass
-   * compiles every kernel the search will use, and doing it at load means the
-   * first prompt of a session is not the one that pays for it.
+   * Take the baseline and return a canary holding it.
+   *
+   * A factory rather than the constructor, because taking the baseline is a
+   * forward pass and a constructor cannot await one. Evaluating once here is
+   * also the shader warmup: the first forward pass compiles every kernel the
+   * search will use, and doing it at load means the first prompt of a session
+   * is not the one that pays for it.
    */
-  constructor(model: CanaryModel, size: number) {
+  static async create(model: CanaryModel, size: number): Promise<Canary> {
+    const { spatial, global } = canaryInputs(size * size);
+    const baseline: Float32Array = canaryHeads(await model.evaluate(spatial, global, size));
+    return new Canary(model, size, spatial, global, baseline);
+  }
+
+  private constructor(
+    model: CanaryModel,
+    size: number,
+    spatial: Float32Array,
+    global: Float32Array,
+    baseline: Float32Array,
+  ) {
     this.model = model;
     this.size = size;
-    const inputs = canaryInputs(size * size);
-    this.spatial = inputs.spatial;
-    this.global = inputs.global;
-    this.baseline = canaryHeads(model.evaluate(this.spatial, this.global, size));
+    this.spatial = spatial;
+    this.global = global;
+    this.baseline = baseline;
   }
 
   /** How far the fixed evaluation has moved, relative to its own magnitude. */
-  drift(): number {
+  async drift(): Promise<number> {
     const now: Float32Array = canaryHeads(
-      this.model.evaluate(this.spatial, this.global, this.size),
+      await this.model.evaluate(this.spatial, this.global, this.size),
     );
     return furthestApart(this.baseline, now).worst;
   }
@@ -155,8 +170,8 @@ export class Canary {
   }
 
   /** Throws when the device is no longer computing what it did at load. */
-  verify(): void {
-    const drift: number = this.drift();
+  async verify(): Promise<void> {
+    const drift: number = await this.drift();
     if (drift > CANARY_TOLERANCE) {
       throw new Error(`${CANARY_DRIFTED} (drift ${drift.toExponential(2)})`);
     }

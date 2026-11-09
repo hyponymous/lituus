@@ -79,7 +79,7 @@ for (const c of cases) {
       white: c.history.filter((m) => m.player === WHITE).length,
     },
   }, scratch);
-  const ev = model.evaluate(inputs.spatial, inputs.global, 19);
+  const ev = await model.evaluate(inputs.spatial, inputs.global, 19);
 
   const logits = [...ev.policy, ev.policyPass];
   const hi = Math.max(...logits.filter((_, i) => i === 361 || state.stones[i] === 0));

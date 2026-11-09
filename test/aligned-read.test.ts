@@ -67,6 +67,9 @@ function losesTheSecondCycle(): ReadBackend<Buffered> {
       for (let i = 0; i < tail; i++) got[tensor.size - tail + i] = tensor.buffer[i];
       return got;
     },
+    // The asynchronous read maps the buffer rather than drawing it, so it has
+    // no last cycle to lose.
+    readAsync: async (tensor: Buffered): Promise<Float32Array> => tensor.buffer.slice(),
   };
 }
 

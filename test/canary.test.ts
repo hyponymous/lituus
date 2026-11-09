@@ -34,7 +34,7 @@ function stub(): { model: CanaryModel; shift: (by: number) => void; calls: () =>
   let offset = 0;
   let calls = 0;
   const model: CanaryModel = {
-    evaluate: (spatial: Float32Array, global: Float32Array, size: number): Evaluation => {
+    evaluate: async (spatial: Float32Array, global: Float32Array, size: number): Promise<Evaluation> => {
       calls++;
       let sum = 0;
       for (const value of spatial) sum += value;
@@ -52,53 +52,53 @@ function stub(): { model: CanaryModel; shift: (by: number) => void; calls: () =>
   return { model, shift: (by: number): void => { offset = by; }, calls: (): number => calls };
 }
 
-test('a device still giving the same answer passes', () => {
+test('a device still giving the same answer passes', async () => {
   const { model } = stub();
-  const canary = new Canary(model, SIZE);
-  canary.verify();
-  assert.equal(canary.drift(), 0);
+  const canary = await Canary.create(model, SIZE);
+  await canary.verify();
+  assert.equal(await canary.drift(), 0);
 });
 
-test('the baseline is taken by evaluating once, at construction', () => {
+test('the baseline is taken by evaluating once, at construction', async () => {
   // Which is also the shader warmup, so the first prompt of a session does not
   // pay for it.
   const { model, calls } = stub();
-  new Canary(model, SIZE);
+  await Canary.create(model, SIZE);
   assert.equal(calls(), 1);
 });
 
-test('an answer that has moved past the tolerance is refused', () => {
+test('an answer that has moved past the tolerance is refused', async () => {
   const { model, shift } = stub();
-  const canary = new Canary(model, SIZE);
+  const canary = await Canary.create(model, SIZE);
 
   shift(10);
-  assert.throws(() => canary.verify(), new RegExp(CANARY_DRIFTED));
+  await assert.rejects(canary.verify(), new RegExp(CANARY_DRIFTED));
 });
 
-test('the refusal quotes how far it drifted', () => {
+test('the refusal quotes how far it drifted', async () => {
   // The number is the evidence. A reason with no figure in it is unfalsifiable
   // by whoever reads the export a month later.
   const { model, shift } = stub();
-  const canary = new Canary(model, SIZE);
+  const canary = await Canary.create(model, SIZE);
 
   shift(10);
-  assert.throws(() => canary.verify(), /drift \d/);
+  await assert.rejects(canary.verify(), /drift \d/);
 });
 
-test('floating-point noise below the tolerance is not a failure', () => {
+test('floating-point noise below the tolerance is not a failure', async () => {
   const { model, shift } = stub();
-  const canary = new Canary(model, SIZE);
+  const canary = await Canary.create(model, SIZE);
 
   shift(CANARY_TOLERANCE / 100);
-  canary.verify();
+  await canary.verify();
 });
 
-test('the same fixed input is used every time', () => {
+test('the same fixed input is used every time', async () => {
   // The whole check rests on it: a canary that varied its own input would be
   // comparing two different questions and calling the difference corruption.
   const seen: string[] = [];
   const model: CanaryModel = {
-    evaluate: (spatial: Float32Array, global: Float32Array, size: number): Evaluation => {
+    evaluate: async (spatial: Float32Array, global: Float32Array, size: number): Promise<Evaluation> => {
       seen.push(`${spatial.join()}|${global.join()}|${size}`);
       return {
         policy: new Float32Array(size * size),
@@ -108,20 +108,20 @@ test('the same fixed input is used every time', () => {
       };
     },
   };
-  const canary = new Canary(model, SIZE);
-  canary.drift();
-  canary.drift();
+  const canary = await Canary.create(model, SIZE);
+  await canary.drift();
+  await canary.drift();
 
   assert.equal(seen.length, 3);
   assert.equal(new Set(seen).size, 1);
 });
 
-test('a corrupt policy is caught even when the value head is intact', () => {
+test('a corrupt policy is caught even when the value head is intact', async () => {
   // The heads are read out of one buffer, and a partial corruption is the kind
   // that survives every other check.
   let broken = false;
   const model: CanaryModel = {
-    evaluate: (_spatial: Float32Array, _global: Float32Array, size: number): Evaluation => {
+    evaluate: async (_spatial: Float32Array, _global: Float32Array, size: number): Promise<Evaluation> => {
       const policy = new Float32Array(size * size);
       policy.fill(broken ? 4 : 1);
       return {
@@ -132,10 +132,10 @@ test('a corrupt policy is caught even when the value head is intact', () => {
       };
     },
   };
-  const canary = new Canary(model, SIZE);
+  const canary = await Canary.create(model, SIZE);
 
   broken = true;
-  assert.throws(() => canary.verify(), /stopped giving consistent results/);
+  await assert.rejects(canary.verify(), /stopped giving consistent results/);
 });
 
 // ── Against a device known to be right ───────────────────────────────────────
@@ -159,43 +159,43 @@ function fromHeads(heads: readonly number[]): Evaluation {
 
 const expectedEvaluation = (): Evaluation => fromHeads(EXPECTED_HEADS);
 
-test('a device that lands on the baked answer is accepted', () => {
-  const model: CanaryModel = { evaluate: () => expectedEvaluation() };
-  const canary = new Canary(model, EXPECTED_SIZE);
+test('a device that lands on the baked answer is accepted', async () => {
+  const model: CanaryModel = { evaluate: async () => expectedEvaluation() };
+  const canary = await Canary.create(model, EXPECTED_SIZE);
 
   assert.ok(canary.against(EXPECTED_HEADS) <= EXPECTED_TOLERANCE);
 });
 
-test('a device that agrees with itself and not with the reference is caught', () => {
+test('a device that agrees with itself and not with the reference is caught', async () => {
   // The case the drift check cannot see, and the one that actually happened:
   // two phone sessions, three days apart, bit-identical to each other and tens
   // of points from the laptop on the same build.
   const model: CanaryModel = {
-    evaluate: () => {
+    evaluate: async () => {
       const wrong = expectedEvaluation();
       wrong.value[0] += 1;
       return wrong;
     },
   };
-  const canary = new Canary(model, EXPECTED_SIZE);
+  const canary = await Canary.create(model, EXPECTED_SIZE);
 
-  assert.equal(canary.drift(), 0, 'consistent with itself');
+  assert.equal(await canary.drift(), 0, 'consistent with itself');
   assert.ok(canary.against(EXPECTED_HEADS) > EXPECTED_TOLERANCE, 'and still refused');
 });
 
-test('the baked answer covers every head, not just the first', () => {
+test('the baked answer covers every head, not just the first', async () => {
   // The heads are read out of one buffer at computed offsets, so a device — or
   // a change to the packing — that damages only the tail must still be caught.
   for (let head = 0; head < EXPECTED_HEADS.length; head++) {
     const model: CanaryModel = {
-      evaluate: (): Evaluation => {
+      evaluate: async (): Promise<Evaluation> => {
         const wrong = expectedEvaluation();
         const shifted: Float32Array = canaryHeads(wrong);
         shifted[head] += 10 * (1 + Math.abs(shifted[head]));
         return fromHeads(Array.from(shifted));
       },
     };
-    const canary = new Canary(model, EXPECTED_SIZE);
+    const canary = await Canary.create(model, EXPECTED_SIZE);
     assert.ok(
       canary.against(EXPECTED_HEADS) > EXPECTED_TOLERANCE,
       `head ${head} was not compared`,
@@ -203,7 +203,7 @@ test('the baked answer covers every head, not just the first', () => {
   }
 });
 
-test('the fixed input is built for the board the answer was baked at', () => {
+test('the fixed input is built for the board the answer was baked at', async () => {
   const inputs = canaryInputs(EXPECTED_SIZE * EXPECTED_SIZE);
   assert.equal(inputs.spatial.length, EXPECTED_SIZE * EXPECTED_SIZE * 22);
   assert.equal(inputs.global.length, 19);

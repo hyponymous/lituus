@@ -189,7 +189,7 @@ async function main(): Promise<void> {
     );
 
     const started: number = performance.now();
-    const evaluation: Evaluation = model.evaluate(inputs.spatial, inputs.global, game.cols);
+    const evaluation: Evaluation = await model.evaluate(inputs.spatial, inputs.global, game.cols);
     const ms: number = performance.now() - started;
     const judgement: Judgement = postprocess(
       evaluation.value,

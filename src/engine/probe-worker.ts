@@ -201,7 +201,7 @@ async function probe(request: ProbeRequest): Promise<void> {
   // loaded — deliberately, so a phone that fails here does not download 37MB
   // first. `ModelV8` measures the real lengths from the weights it parsed.
   const sizes: readonly number[] = [EXPECTED_SIZE * EXPECTED_SIZE, 1, 3, 4];
-  const layout: HeadLayout | null = discoverHeadLayout(readBackend(tf), sizes);
+  const layout: HeadLayout | null = await discoverHeadLayout(readBackend(tf), sizes);
   const tight: readonly number[] = sizes.map((_size, which) =>
     sizes.slice(0, which).reduce((a: number, b: number) => a + b, 0),
   );
@@ -282,9 +282,9 @@ async function probe(request: ProbeRequest): Promise<void> {
       `fingerprint ${fingerprint.hex}`,
   });
 
-  const canary = new Canary(model, size);
+  const canary: Canary = await Canary.create(model, size);
   const inputs = canaryInputs(size * size);
-  const evaluation: Evaluation = model.evaluate(inputs.spatial, inputs.global, size);
+  const evaluation: Evaluation = await model.evaluate(inputs.spatial, inputs.global, size);
   post({
     stage: 'forward',
     ...verdict(true),
@@ -292,7 +292,7 @@ async function probe(request: ProbeRequest): Promise<void> {
       `heads at ${size}x${size} [win, loss, noResult, scoreMean, ` +
       `scoreStdev, lead, varTimeLeft, pass, policy sum]\n` +
       `${digits(canaryHeads(evaluation))}\n` +
-      `drift against itself: ${canary.drift().toExponential(3)}\n` +
+      `drift against itself: ${(await canary.drift()).toExponential(3)}\n` +
       // What a 15-block network and one pass cost to hold, which is the
       // question behind every worker a phone kills without a word.
       memoryLine(tf),
@@ -304,7 +304,7 @@ async function probe(request: ProbeRequest): Promise<void> {
    * numbers are the thing a failing one has to be compared against, and they
    * have to come from somewhere.
    */
-  const trace: TraceStage[] = model.traceForward(inputs.spatial, inputs.global, size);
+  const trace: TraceStage[] = await model.traceForward(inputs.spatial, inputs.global, size);
   post({
     stage: 'trace',
     ...verdict(true),
