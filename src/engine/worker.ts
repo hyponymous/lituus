@@ -20,7 +20,7 @@
  */
 
 import type * as TF from '@tensorflow/tfjs-core';
-import type { Verdict } from '../analysis.ts';
+import type { MemoryReading, Verdict } from '../analysis.ts';
 import type { Prompt } from '../evaluator.ts';
 import { readGame, type Game, type GameMove } from '../game.ts';
 import { describeDevice } from '../device.ts';
@@ -102,14 +102,7 @@ export type WorkerReply =
    * pushed out while the worker is alive and kept on the main thread, where it
    * survives to say how much was held when the lights went out.
    */
-  | {
-      readonly type: 'memory';
-      readonly prompts: number;
-      readonly tensors: number;
-      /** Live bytes in GPU buffers, and every byte ever allocated for one. */
-      readonly gpuBytes: number;
-      readonly gpuAllocated: number;
-    }
+  | ({ readonly type: 'memory' } & MemoryReading)
   | {
       /**
        * The answer to one `deepen`, always sent, so nothing is left waiting.
@@ -187,6 +180,30 @@ let backend: typeof TF | null = null;
 
 /** Prompts answered since this worker started, for the memory line. */
 let prompts = 0;
+
+/**
+ * `OffscreenCanvas`es created in this worker, counted at the constructor.
+ *
+ * tfjs's WebGPU `readSync` makes two per read (`aligned-read.ts`), and on iOS
+ * their memory is the suspect for workers killed while `tf.memory()` read
+ * flat. The engine reads through `data()`, which makes none, so the count
+ * should stay at zero; anything else is a synchronous read that crept back.
+ *
+ * Installed at module load, before TensorFlow.js is imported, so every canvas
+ * it ever makes goes through the subclass. Construction is all that changes:
+ * the instances are real canvases and `instanceof` still holds.
+ */
+let canvases = 0;
+if (typeof OffscreenCanvas !== 'undefined') {
+  const Native: typeof OffscreenCanvas = OffscreenCanvas;
+  (globalThis as { OffscreenCanvas: typeof OffscreenCanvas }).OffscreenCanvas =
+    class CountedOffscreenCanvas extends Native {
+      constructor(width: number, height: number) {
+        super(width, height);
+        canvases++;
+      }
+    };
+}
 
 let engine: Engine | null = null;
 /** Set once init fails, so every later request answers instead of hanging. */
@@ -427,6 +444,7 @@ function reportMemory(): void {
     tensors: info.numTensors,
     gpuBytes: info.numBytesInGPU ?? 0,
     gpuAllocated: info.numBytesAllocatedInGPU ?? 0,
+    canvases,
   });
 }
 

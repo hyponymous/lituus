@@ -251,6 +251,39 @@ export interface EngineIncident {
  */
 export const INCIDENT_LIMIT = 8;
 
+/**
+ * What the analysis worker said it was holding, at one moment.
+ *
+ * Sent after every prompt, because a worker the operating system kills says
+ * nothing at all on the way out (`worker.ts`, the `memory` reply).
+ */
+export interface MemoryReading {
+  /** Prompts this worker had answered. A replacement counts from zero again. */
+  readonly prompts: number;
+  readonly tensors: number;
+  /** Live bytes in GPU buffers, and every byte ever allocated for one. */
+  readonly gpuBytes: number;
+  readonly gpuAllocated: number;
+  /**
+   * `OffscreenCanvas`es this worker has created. tfjs's WebGPU `dataSync` makes
+   * two per read and the asynchronous read makes none, so on a healthy engine
+   * this stays at zero. Their memory is invisible to `tf.memory()`, which is
+   * why it is counted rather than inferred.
+   */
+  readonly canvases: number;
+}
+
+/**
+ * The first and the latest reading of the worker that is running.
+ *
+ * Both, because one reading cannot tell a leak from a ceiling: a worker still
+ * holding what it started with was not killed by its own appetite.
+ */
+export interface MemoryRecord {
+  readonly first: MemoryReading;
+  readonly last: MemoryReading;
+}
+
 export interface Analysis {
   readonly config: EngineConfig;
   readonly verdicts: ReadonlyMap<number, Verdict>;
@@ -263,10 +296,25 @@ export interface Analysis {
    * asked about at all. This counts the asking that failed.
    */
   readonly failures: number;
+  /** What the worker was holding, or null before it first said. */
+  readonly memory: MemoryRecord | null;
 }
 
 export function emptyAnalysis(config: EngineConfig): Analysis {
-  return { config, verdicts: new Map(), incidents: [], failures: 0 };
+  return { config, verdicts: new Map(), incidents: [], failures: 0, memory: null };
+}
+
+/**
+ * A new analysis holding this reading as the latest.
+ *
+ * A reading at zero prompts is a worker that has just come up — the first one,
+ * or a replacement after a death — and starts the record again, since the two
+ * readings are only comparable within one worker.
+ */
+export function withMemory(analysis: Analysis, reading: MemoryReading): Analysis {
+  const first: MemoryReading =
+    analysis.memory === null || reading.prompts === 0 ? reading : analysis.memory.first;
+  return { ...analysis, memory: { first, last: reading } };
 }
 
 /**
@@ -805,6 +853,8 @@ export interface AiResult {
   readonly incidents: readonly EngineIncident[];
   /** How many failed in all, which `incidents` may have truncated. */
   readonly failures: number;
+  /** What the worker was holding; see `Analysis.memory`. */
+  readonly memory: MemoryRecord | null;
   /**
    * How the session compared with the moves actually played. Null when no
    * prompt has both sides quotable, which is the only case where the
@@ -927,6 +977,7 @@ export function aiResult(
     config: analysis.config,
     incidents: analysis.incidents,
     failures: analysis.failures,
+    memory: analysis.memory,
     graded: losses.length,
     answered,
     medianLoss: median(losses),

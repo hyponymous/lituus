@@ -40,6 +40,7 @@ import {
   withDevice,
   withVerdict,
   type Analysis,
+  type MemoryReading,
   type MoveVerdict,
   type NaturalMove,
   type Verdict,
@@ -210,6 +211,18 @@ function restoreLine(board: Position, value: unknown): number[] {
  * so a change to how a median or a run is derived shows up as drift rather than
  * being read back unchallenged.
  */
+/** One exported memory reading. The record and all five fields arrived together. */
+function memoryReading(value: unknown, where: string): MemoryReading {
+  const row: Record<string, unknown> = asRecord(value, where);
+  return {
+    prompts: asNumber(row.prompts, `${where}.prompts`),
+    tensors: asNumber(row.tensors, `${where}.tensors`),
+    gpuBytes: asNumber(row.gpuBytes, `${where}.gpuBytes`),
+    gpuAllocated: asNumber(row.gpuAllocated, `${where}.gpuAllocated`),
+    canvases: asNumber(row.canvases, `${where}.canvases`),
+  };
+}
+
 export function restoreAnalysis(text: string, game: Game): Analysis | null {
   const result: Record<string, unknown> = asRecord(JSON.parse(text) as unknown, 'the result');
   const engine: unknown = result.engine;
@@ -255,6 +268,19 @@ export function restoreAnalysis(text: string, game: Game): Analysis | null {
    */
   if (config.failures !== undefined) {
     analysis = { ...analysis, failures: asNumber(config.failures, '"engine".failures') };
+  }
+  // Carried, like the count: a reading is what the worker said, not something
+  // the verdicts imply. Absent when the worker never reported, and in
+  // anything exported before the field existed.
+  if (config.memory !== undefined) {
+    const memory: Record<string, unknown> = asRecord(config.memory, '"engine".memory');
+    analysis = {
+      ...analysis,
+      memory: {
+        first: memoryReading(memory.first, '"engine".memory.first'),
+        last: memoryReading(memory.last, '"engine".memory.last'),
+      },
+    };
   }
 
   for (const [at, entry] of rows.entries()) {

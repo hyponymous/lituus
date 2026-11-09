@@ -13,6 +13,7 @@ import {
   emptyAnalysis,
   withDevice,
   withIncident,
+  withMemory,
   withRestart,
   INCIDENT_LIMIT,
   isTrusted,
@@ -25,6 +26,7 @@ import {
   withVerdict,
   type Analysis,
   type EngineConfig,
+  type MemoryReading,
   type DeepTarget,
   type MoveVerdict,
   type Verdict,
@@ -164,6 +166,35 @@ test('a restart is remembered in order but is not a failure', () => {
     { move: 7, reason: 'killed', fatal: false, restarted: true },
     { move: 9, reason: 'awkward', fatal: false },
   ]);
+});
+
+const reading = (prompts: number, gpuBytes: number, canvases = 0): MemoryReading => ({
+  prompts,
+  tensors: 120,
+  gpuBytes,
+  gpuAllocated: gpuBytes * 2,
+  canvases,
+});
+
+test('memory keeps the first reading and the latest one', () => {
+  // Both, because one reading cannot tell a leak from a ceiling.
+  let analysis: Analysis = emptyAnalysis(CONFIG);
+  assert.equal(analysis.memory, null);
+  analysis = withMemory(analysis, reading(0, 40e6));
+  analysis = withMemory(analysis, reading(1, 41e6));
+  analysis = withMemory(analysis, reading(2, 42e6, 4));
+
+  assert.deepEqual(analysis.memory, { first: reading(0, 40e6), last: reading(2, 42e6, 4) });
+});
+
+test('a replacement worker starts its own memory record', () => {
+  // A restart counts its prompts from zero, and comparing its readings with
+  // the dead worker's first one would read the death as growth.
+  let analysis: Analysis = withMemory(emptyAnalysis(CONFIG), reading(0, 40e6));
+  analysis = withMemory(analysis, reading(80, 300e6));
+  analysis = withMemory(analysis, reading(0, 40e6));
+
+  assert.deepEqual(analysis.memory, { first: reading(0, 40e6), last: reading(0, 40e6) });
 });
 
 test('recording an incident does not mutate the analysis it came from', () => {

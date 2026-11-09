@@ -28,6 +28,7 @@ import {
   withDeepLine,
   withDevice,
   withIncident,
+  withMemory,
   withRestart,
   withVerdict,
   type Analysis,
@@ -43,6 +44,7 @@ import {
   unscorableReason,
   type Deepened,
   type EngineHandle,
+  type EngineMemory,
   type EngineStatus,
 } from './engine-client.ts';
 import {
@@ -199,6 +201,11 @@ function startEngineFor(game: Game): void {
     // all, without the summary calling it a failure: nothing was lost.
     onRestart: (restart: { readonly move: number | null; readonly reason: string }): void => {
       if (analysis !== null) analysis = withRestart(analysis, restart);
+    },
+    // Kept for the export, so a clean run says what it held as well as one
+    // that died.
+    onMemory: (reading: EngineMemory): void => {
+      if (analysis !== null) analysis = withMemory(analysis, reading);
     },
     onStatus: (status: EngineStatus): void => {
       // The one place a failure with no prompt in flight becomes a record: a

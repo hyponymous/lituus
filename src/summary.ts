@@ -836,6 +836,11 @@ export function toJSON(summary: Summary): string {
                 // Only when set, so an export with no restart reads as before.
                 ...(incident.restarted ? { restarted: true } : {}),
               })),
+              // The running worker's first and latest memory readings, so a
+              // clean run says what it held too, not only one that died. Only
+              // when the worker reported, so a replayed or older result reads
+              // as before.
+              ...(summary.ai.memory ? { memory: summary.ai.memory } : {}),
             },
       ai:
         summary.ai === null

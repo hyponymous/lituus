@@ -26,6 +26,7 @@ import {
   emptyAnalysis,
   withDevice,
   withIncident,
+  withMemory,
   type Analysis,
 } from '../src/analysis.ts';
 import { RestoreError, driftFrom, restoreAnalysis, restoreSession } from '../src/dev.ts';
@@ -274,6 +275,31 @@ test('the device that produced a result survives the round trip', () => {
 
   const restored: Analysis | null = restoreAnalysis(text, readGame(parse(GAME)));
   assert.equal(restored?.config.device, 'apple / metal-3, mobile');
+});
+
+test('the memory readings survive the round trip, and recompute the same export', () => {
+  const played: Session = play(GAME, BLACK, new Set([1]));
+  let analysis: Analysis = emptyAnalysis(ENGINE);
+  analysis = withMemory(analysis, {
+    prompts: 0, tensors: 120, gpuBytes: 40e6, gpuAllocated: 40e6, canvases: 0,
+  });
+  analysis = withMemory(analysis, {
+    prompts: 9, tensors: 121, gpuBytes: 41e6, gpuAllocated: 80e6, canvases: 0,
+  });
+  const text: string = toJSON(summarize(played, analysis));
+
+  const restored: Analysis | null = restoreAnalysis(text, readGame(parse(GAME)));
+  assert.deepEqual(restored?.memory, analysis.memory);
+  assert.ok(restored);
+  assert.deepEqual(driftFrom(text, summarize(restoreSession(text), restored)), []);
+});
+
+test('a result from before the memory field restores as one that did not say', () => {
+  const older = JSON.parse(toJSON(broken())) as { engine: Record<string, unknown> };
+  delete older.engine.memory;
+
+  const restored: Analysis | null = restoreAnalysis(JSON.stringify(older), readGame(parse(GAME)));
+  assert.equal(restored?.memory, null);
 });
 
 test('a result from before the device field restores as one that did not say', () => {

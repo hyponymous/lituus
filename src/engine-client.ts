@@ -368,7 +368,8 @@ export function startEngine(game: Game, options: EngineOptions = {}): EngineHand
       ` It was holding ${mb(lastReading.gpuBytes)} in ${lastReading.tensors} ` +
       `tensors ${lastReading.prompts} moves in, against ` +
       `${mb(firstReading.gpuBytes)} in ${firstReading.tensors} at the start; ` +
-      `${mb(lastReading.gpuAllocated)} ever allocated.`
+      `${mb(lastReading.gpuAllocated)} ever allocated; ` +
+      `${lastReading.canvases} canvases made.`
     );
   };
 
